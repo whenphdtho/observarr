@@ -1,0 +1,83 @@
+[
+  {
+    "duration": "152h11m4.218373s",
+    "id": 4102,
+    "origin": "CAPI",
+    "scenario": "crowdsecurity/ssh-bf",
+    "scope": "Ip",
+    "type": "ban",
+    "uuid": "5b1f8a2e-3c41-4d0a-9f62-1e7c2b0d9a11",
+    "value": "198.51.100.23"
+  },
+  {
+    "duration": "152h11m4.218373s",
+    "id": 4103,
+    "origin": "CAPI",
+    "scenario": "crowdsecurity/http-probing",
+    "scope": "Ip",
+    "type": "ban",
+    "uuid": "8d2a6c10-7b5e-4f3a-a1c4-2f9e0b7d6c22",
+    "value": "198.51.100.77"
+  },
+  {
+    "duration": "23h40m2.5s",
+    "id": 4110,
+    "origin": "lists",
+    "scenario": "lists:firehol_cruzit_web_attacks",
+    "scope": "Ip",
+    "type": "ban",
+    "uuid": "0c7e4d91-2a68-4b1f-8e35-9d1a6f0b3e33",
+    "value": "203.0.113.200"
+  },
+  {
+    "duration": "3h12m40.10s",
+    "id": 5001,
+    "origin": "crowdsec",
+    "scenario": "crowdsecurity/ssh-bf",
+    "scope": "Ip",
+    "type": "ban",
+    "uuid": "a4e2f7b3-6d19-4c8e-b052-7f3d1c9e0a44",
+    "value": "203.0.113.45"
+  },
+  {
+    "duration": "3h55m1s",
+    "id": 5007,
+    "origin": "crowdsec",
+    "scenario": "crowdsecurity/http-crawl-non_statics",
+    "scope": "Ip",
+    "type": "captcha",
+    "uuid": "e91b3c56-0f27-4a6d-9c18-4b2e8d7f1a55",
+    "value": "192.0.2.14"
+  },
+  {
+    "duration": "3h58m30s",
+    "id": 5009,
+    "origin": "crowdsec",
+    "scenario": "crowdsecurity/ssh-bf",
+    "scope": "Ip",
+    "type": "ban",
+    "uuid": "3f6d0a82-9e14-4b7c-a2d5-6c1e9b8f0a66",
+    "value": "203.0.113.46"
+  },
+  {
+    "duration": "71h2m0s",
+    "id": 5003,
+    "origin": "cscli",
+    "scenario": "manual 'ban' from 'observarr-docs'",
+    "scope": "Range",
+    "type": "ban",
+    "uuid": "7a2c9e14-5b3f-4d08-8e61-0d4f2a7c9b77",
+    "value": "192.0.2.0/28"
+  },
+  {
+    "duration": "1h0m0s",
+    "id": 5011,
+    "origin": "crowdsec",
+    "scenario": "crowdsecurity/http-bad-user-agent",
+    "scope": "Ip",
+    "type": "ban",
+    "until": "2026-11-23T13:00:00Z",
+    "uuid": "c58e1b27-4a90-4f6d-b3c2-8e7d0a1f2b88",
+    "value": "203.0.113.9"
+  }
+]
