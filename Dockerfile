@@ -23,7 +23,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}"
 
 # Runtime: no shell, no package manager, non-root (65532 is distroless's nonroot user)
 # gcr.io/distroless/static-debian12:nonroot
-FROM gcr.io/distroless/static-debian12@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+FROM gcr.io/distroless/static-debian12@sha256:d75cdd72874d4790092fcb1b058493ecf6bb5bf2b2b897045b00ff01d91843f2
 COPY --from=build /observarr /usr/local/bin/observarr
 COPY --from=build --chown=65532:65532 /rootfs/ /
 VOLUME /data
