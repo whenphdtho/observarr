@@ -28,6 +28,9 @@ and its containers are doing — all from one small container. Status: early dev
   warnings, and every queued download with progress, ETA and import problems, pushed to the browser as they change.
 - **System view:** host CPU, memory, swap, load, uptime, disks and network, plus every container's state,
   health, CPU, memory, network, block I/O and restarts — and each app card shows its own container's line.
+- **Storage:** every disk's used, reserved and free space, and rclone's mounts through its remote-control API —
+  each mount's state, VFS cache use against its limit, uploads in progress and queued, files that failed to
+  upload, and the transfers running now. See [Connect rclone](docs/deploy.md#connect-rclone).
 - **Read-only by design:** host figures come from read-only mounts, container data from a Docker socket proxy
   that only answers GET requests.
 - **One container:** a Go binary with the Svelte UI embedded and SQLite for storage, running non-root on a

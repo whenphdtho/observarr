@@ -4,6 +4,7 @@
   import Network from './Network.svelte';
   import Apps from './Apps.svelte';
   import System from './System.svelte';
+  import Storage from './Storage.svelte';
   import Rail from './Rail.svelte';
   import Icon from './icons/Icon.svelte';
   import { live, serviceList, reconnecting, lastEvent } from './live.js';
@@ -18,6 +19,7 @@
     { id: 'overview', hash: '', label: 'Overview', icon: 'house', sub: 'Your apps and host at a glance' },
     { id: 'network', hash: '#/network', label: 'Network', icon: 'network', sub: 'Throughput, traffic by app and budget' },
     { id: 'apps', hash: '#/apps', label: 'Apps', icon: 'layout-grid', sub: 'Health and queue of every service' },
+    { id: 'storage', hash: '#/storage', label: 'Storage', icon: 'hard-drive', sub: 'Disks, mounts and caches' },
     { id: 'system', hash: '#/system', label: 'System', icon: 'server', sub: 'Host, disks and containers' },
   ];
 
@@ -156,6 +158,8 @@
         <Network />
       {:else if view === 'apps'}
         <Apps {services} filtered={query.trim() !== ''} />
+      {:else if view === 'storage'}
+        <Storage services={$serviceList} />
       {:else}
         <System {query} />
       {/if}

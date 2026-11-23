@@ -55,6 +55,9 @@
   });
   const info = $derived(adapters.find((a) => a.type === type) ?? null);
   const needsKey = $derived(info?.needsApiKey ?? false);
+  // An adapter that names its secret field (keyLabel) without needing it takes an optional one.
+  const showKey = $derived(needsKey || !!info?.keyLabel);
+  const keyLabel = $derived(info?.keyLabel || 'API key');
 
   // A suggestion whose host is unknown ("http://:8989/..." style) shows a Host field instead of
   // the URL field; effectiveUrl is what actually gets tested/submitted.
@@ -338,16 +341,18 @@
       {/if}
     {/if}
 
-    {#if needsKey && !skipTest}
+    {#if showKey && !skipTest}
       <label>
-        API key
+        {keyLabel}{needsKey ? '' : ' (optional)'}
         {#if mode === 'edit'}
           <span class="muted hint">
-            {addressChanged ? 'Enter the API key again when changing the address' : 'leave blank to keep the current key'}
+            {addressChanged ? `Enter the ${keyLabel.toLowerCase()} again when changing the address` : 'leave blank to keep the current one'}
           </span>
+        {:else if info?.keyHint}
+          <span class="muted hint">{info.keyHint}</span>
         {/if}
         <input type="password" bind:value={apiKey} autocomplete="off" maxlength="256"
-          required={mode === 'edit' && addressChanged} />
+          required={mode === 'edit' && addressChanged && needsKey} />
       </label>
     {/if}
 

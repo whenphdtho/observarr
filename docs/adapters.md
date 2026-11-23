@@ -287,3 +287,30 @@ places:
 
 Any adapter that wants to fill the new shape adds its `Kind` to `Info().Kinds` and a case in its
 `Probe` switch — nothing in `internal/state`, `internal/api`, or the UI shell needs to change.
+
+## rclone: mounts through a POST-only API
+
+`internal/adapters/rclone` reads rclone's remote-control API (`rclone rcd`, or a mount started with `--rc`). It
+fills `health` and `mounts`; deployment is in [deploy.md](deploy.md#connect-rclone).
+
+- **Read-only calls that are POSTs.** rclone's remote control takes every call as a POST with JSON parameters.
+  `adapter.PostJSON(ctx, t, path, body, authorize, read)` sends one through the shared client with the same
+  4 MiB answer bound, status mapping and error hygiene as `StreamJSON`; the request body is limited to 64 KiB.
+  Use it only for calls that change nothing. The rclone adapter keeps an allow-list of exactly the calls it
+  makes — `core/version`, `rc/noopauth`, `core/stats`, `mount/listmounts`, `vfs/list`, `vfs/stats` — and refuses
+  any other path before a request is built; its tests fail on any request outside that list.
+- **Credentials other than an API key.** `Info.KeyLabel` names the secret field ("Credentials") and
+  `Info.KeyHint` explains its form; with `NeedsAPIKey` false and a `KeyLabel`, the form shows the field as
+  optional. rclone's secret is `user:password` for HTTP basic auth (`--rc-user`/`--rc-pass`), stored sealed
+  like any key. `Detect` checks it with `rc/noopauth`, since `core/version` needs no authentication.
+- **Field names** are checked against rclone's source and recorded in the package comment: `vfs/stats` returns
+  the VFS options under `opt` with Go field names (`CacheMode` as its index 0–3, `CacheMaxSize` in bytes, -1 for
+  no limit) and a `diskCache` object only when the cache mode is above `off`.
+- **Mount points** come from `mount/listmounts`, which only lists mounts made through the remote control; every
+  VFS from `vfs/list` is reported, as `mounted` with its mount point when listed and `active` otherwise.
+
+The `mounts` shape (`shape.Mounts`) holds at most `shape.MaxMounts` (20) mounts — each with remote, mount
+point, state (`mounted`, `active`, or `unmounted` for apps that keep configured mounts), cache mode, cache used
+and limit, cached files, uploads in progress and queued, errored files and out-of-space — plus the transfer
+speed, totals and at most `shape.MaxTransfers` (20) transfers in progress; `Total` and `ActiveTransfers` keep
+the real counts. The Storage view and the `Mounts` widget render it.
