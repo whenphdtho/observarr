@@ -17,8 +17,9 @@ and its containers are doing — all from one small container. Status: early dev
 
 ## Features
 
-- **Discovery that asks first.** Suggests apps from a network scan, Prowlarr's linked apps, mounted config
-  folders or running Docker containers — nothing is added until you review a suggestion and click Add.
+- **Finds your apps, asks first.** Lists the apps it sees on the server — Docker containers and mounted config
+  folders — the moment you open it, without contacting any of them; on request it also scans your network or
+  asks Prowlarr for its linked apps. Nothing is added, and no app is contacted, until you click "Test & add".
 - **Overview at a glance:** live download and upload with the apps moving the most traffic, services up,
   active downloads, host CPU and memory, and one list of everything that needs attention — down services,
   health warnings, stuck downloads.
@@ -42,26 +43,26 @@ and its containers are doing — all from one small container. Status: early dev
 <table>
   <tr>
     <td width="50%"><img src="docs/images/network.png" alt="Network view: download, upload, today's total and top-now tiles, a mirrored stacked chart of where the traffic goes per container over the last five minutes, a By app table and a daily budget gauge"></td>
-    <td width="50%"><img src="docs/images/apps.png" alt="Apps view: cards for Lidarr, Prowlarr, Radarr and Sonarr, each with its container's state and usage, health and version, a Radarr health warning, and download queues led by Big Buck Bunny with progress, size left and ETA"></td>
+    <td width="50%"><img src="docs/images/apps.png" alt="Apps view: four equal-height collapsed cards for Lidarr, Prowlarr, Radarr and Sonarr, each with Up and version chips, a summary line such as 2 downloading, 2 queued, 1 warning, and its leading download with progress"></td>
   </tr>
   <tr>
     <td align="center"><sub>Network: where the traffic goes, by app</sub></td>
-    <td align="center"><sub>Apps: health, queue and container of every service</sub></td>
+    <td align="center"><sub>Apps: one collapsible card per service</sub></td>
   </tr>
   <tr>
     <td><img src="docs/images/system.png" alt="System view: CPU, memory, swap and uptime tiles, a live host activity chart, disk and network cards, and the start of the containers table"></td>
-    <td><img src="docs/images/discover-docker.png" alt="Discover services dialog with the Network, Linked apps, Config folders and Docker sources, and a Lidarr suggestion found in Docker"></td>
+    <td><img src="docs/images/add-apps-found.png" alt="First start: an Add your apps card listing Lidarr, Prowlarr, Radarr and Sonarr found as Docker containers on the server, with Sonarr's inline form open, its API key found in its config folder and a Test and add button"></td>
   </tr>
   <tr>
     <td align="center"><sub>System: host, disks, network and containers</sub></td>
-    <td align="center"><sub>Discover: suggestions from Docker and other sources</sub></td>
+    <td align="center"><sub>First start: the apps found on the server, added in one click each</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/images/add-from-suggestion.png" alt="Add service dialog filled from the Lidarr suggestion, with its container linked and a successful connection test"></td>
+    <td><img src="docs/images/apps-expanded.png" alt="Apps view with the Radarr card expanded across the row: container line, health with a warning, the full queue, and Edit and Remove buttons"></td>
     <td><img src="docs/images/network-24h.png" alt="Network view over the last 24 hours: the per-container traffic chart since the demo started, with the By app table and the daily budget gauge"></td>
   </tr>
   <tr>
-    <td align="center"><sub>Add from a suggestion: test, then add</sub></td>
+    <td align="center"><sub>A card expanded: full health, queue and container</sub></td>
     <td align="center"><sub>Network over 24 hours</sub></td>
   </tr>
 </table>
@@ -95,7 +96,7 @@ just to the page. The token and the file are both deleted once setup succeeds.
 
 ## Run with Docker Compose
 
-For the System view's host and container figures and Docker discovery, use
+For the System view's host and container figures and listing your app containers on the Add apps page, use
 [`deploy/docker-compose.yml`](deploy/docker-compose.yml) (Observarr plus a read-only socket proxy) — see
 [`docs/deploy.md`](docs/deploy.md) for what each source enables and the security notes. No image is published
 yet, so it builds from the repo; adjust the data disk mount first. Its data folder is `deploy/data`; `chown` it
@@ -109,7 +110,28 @@ docker compose -f deploy/docker-compose.yml up -d
 
 ## Adding your apps
 
-Add each app from the Apps view, directly or via **Discover**. You'll need:
+Open **Apps → Add apps** (or just start: with no apps yet, the Apps view lists what it found right away).
+
+- **Found on this server** lists, as soon as the page opens, every running Docker container Observarr
+  recognises and every app config folder it can read (see below). Listing them contacts no app. Click **Add** on
+  a row: name and URL are filled in; enter the API key, or tick "Use the API key found in …" when the app's
+  config folder had one (off by default — the key itself never reaches the browser and only goes to the address
+  where the app was found). **Test & add** checks the app now and adds it in one step; an error shows right in
+  the row. **Dismiss** hides a find for good.
+- **Look elsewhere** (folded away): **Scan my network** probes the hosts or private subnets you list, and
+  **Linked apps** asks the apps you added (Prowlarr) which apps they are connected to. Their finds are added
+  the same way.
+- **Add manually** takes app, name, URL and key; **Test**, then **Add**.
+
+<p align="center">
+  <img src="docs/images/add-apps.png" width="720" alt="Add apps page: Found on this server with a Lidarr container, Look elsewhere with the Scan my network and Linked apps sections, and the Add manually form">
+</p>
+
+Each app card shows its health, a one-line summary and its leading download or warning; **Show details**
+opens the full queue, all warnings, the linked container and Edit/Remove (**Expand all** opens every card; the
+browser remembers which cards are open).
+
+For any of these you'll need:
 
 - **Its API key.** In Sonarr, Radarr, Lidarr and Prowlarr: Settings → General → Security → API Key.
 - **A URL Observarr can reach:**
@@ -134,12 +156,15 @@ networks:
     external: true
 ```
 
-**Docker discovery** suggests every running container whose image is a known \*arr image (LinuxServer.io,
-hotio, or a bare `sonarr`/`radarr`/… repository) or that carries an `observarr.type` label (e.g.
-`observarr.type=sonarr`); an `observarr.url` label overrides the suggested URL.
+**Docker containers** (needs `OBSERVARR_DOCKER_HOST`) are listed when their image is a known \*arr image
+(LinuxServer.io, hotio, or a bare `sonarr`/`radarr`/… repository) or they carry an `observarr.type` label (e.g.
+`observarr.type=sonarr`); the suggested URL is `http://<container name>:<port>`, and an `observarr.url` label
+overrides it.
 
-**Config-folder discovery** reads an app's own `config.xml` to suggest it — including its API key, which never
-leaves the server unless you tick "Use the API key found in …" when adding it. Mount each app's config
+**Config folders** (needs `OBSERVARR_APP_CONFIGS`): Observarr reads an app's own `config.xml` to suggest it —
+including its API key, which never leaves the server unless you tick "Use the API key found in …" when adding
+it. When exactly one container of that app runs on the config's port, the folder's key is offered on that
+container's row (and only sent to that container's address). Mount each app's config
 directory read-only under one parent folder, one subfolder per app, and point `OBSERVARR_APP_CONFIGS` at it:
 
 ```yaml
