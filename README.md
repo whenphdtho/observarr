@@ -29,6 +29,10 @@ and its containers are doing — all from one small container. Status: early dev
   warnings, and every queued download with progress, ETA and import problems, pushed to the browser as they change.
 - **System view:** host CPU, memory, swap, load, uptime, disks and network, plus every container's state,
   health, CPU, memory, network, block I/O and restarts — and each app card shows its own container's line.
+- **Security view:** failed sign-ins by address, lockouts, active sessions (with a one-click "sign out all
+  other sessions"), recent sign-ins and a checklist of your access settings with plain-language warnings. Connect
+  CrowdSec with a read-only bouncer key to see what it blocks: active bans, local versus blocklist decisions,
+  top scenarios and the latest decisions made on your machine.
 - **Read-only by design:** host figures come from read-only mounts, container data from a Docker socket proxy
   that only answers GET requests.
 - **One container:** a Go binary with the Svelte UI embedded and SQLite for storage, running non-root on a
@@ -283,7 +287,7 @@ disables buffering; with nginx, add `proxy_buffering off;` to the matching `loca
 ## Docs
 
 - [`docs/deploy.md`](docs/deploy.md) — host and container figures: compose example, cgroup v1, System view
-  notes, memory and security notes.
+  notes, memory, connecting CrowdSec and security notes.
 - [`docs/adapters.md`](docs/adapters.md) — how adapters work and how to add an app.
 
 ## Development

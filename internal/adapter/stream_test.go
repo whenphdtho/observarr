@@ -111,3 +111,27 @@ func TestStreamJSONErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestStreamJSONLimit(t *testing.T) {
+	body := emptyObjects(6 << 20) // over StreamJSON's 4 MiB
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(body) }))
+	defer ts.Close()
+	base, _ := url.Parse(ts.URL)
+	tgt := Target{BaseURL: base, HTTP: ts.Client()}
+	var n int
+	count := func(d *json.Decoder) error {
+		n = 0
+		_, err := DecodeArray(d, 1<<30, func(struct{}) { n++ })
+		return err
+	}
+
+	if err := StreamJSON(context.Background(), tgt, "/x", "", count); !errors.Is(err, ErrTooLarge) || n == 0 {
+		t.Fatalf("StreamJSON on 6 MiB: n = %d, err = %v; want some counted, then ErrTooLarge", n, err)
+	}
+	if err := StreamJSONLimit(context.Background(), tgt, "/x", "", 8<<20, count); err != nil || n != (len(body)-2)/3+1 {
+		t.Fatalf("StreamJSONLimit(8 MiB) on 6 MiB: n = %d, err = %v", n, err)
+	}
+	if err := StreamJSONLimit(context.Background(), tgt, "/x", "", 1<<40, count); err != nil {
+		t.Fatalf("a limit above MaxStreamBytes is cut to it, not refused: %v", err)
+	}
+}

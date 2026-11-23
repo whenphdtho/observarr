@@ -154,6 +154,38 @@ It is a soft limit: Observarr does not fail when it is reached, it only collects
 password check briefly takes 19 MiB (one per CPU at most at the same time), so a hard limit (`mem_limit`) should
 leave room for that — 256 MiB is plenty.
 
+## Connect CrowdSec
+
+The Security view always shows how Observarr itself is protected. With CrowdSec connected it also shows what
+CrowdSec blocks: the active decisions (bans, captchas), how many were made on your machine and how many come
+from the community blocklist or subscribed lists, the top scenarios and the latest local decisions.
+
+Observarr reads CrowdSec's Local API (LAPI) the way a bouncer does, read-only:
+
+1. Create a bouncer key for Observarr on the CrowdSec host (or in its container):
+
+   ```sh
+   cscli bouncers add observarr
+   # in Docker: docker exec crowdsec cscli bouncers add observarr
+   ```
+
+   It prints the key once; copy it. `cscli bouncers delete observarr` revokes it again.
+2. Give Observarr network access to the LAPI (port 8080 by default). In Compose, put both on a shared network
+   and use the service name, e.g. `http://crowdsec:8080`. The LAPI only needs to be reachable by Observarr,
+   never from the internet.
+3. In Observarr, **Apps → Add service**, pick CrowdSec, enter the URL and the bouncer key, **Test**, then
+   **Add**.
+
+What Observarr does with the key: it calls `GET /v1/decisions` (every active decision, about once a minute
+while someone is watching) and `GET /v1/decisions?ip=127.0.0.1` as a quick health check. A bouncer key can only
+read decisions; it cannot add or remove any. Observarr keeps only counts and the 50 newest local decisions;
+community blocklists with tens of thousands of entries are counted while they are read, never stored. Past
+about 48 MiB of decisions counting stops and the totals are shown as a lower bound.
+
+CrowdSec's alerts (the events behind each decision, with source country and AS) need *machine* credentials,
+which can also write to the LAPI. Observarr does not ask for them, so alerts are out of scope. The LAPI does not
+tell a bouncer its version, so the card shows none.
+
 ## Security notes
 
 - **The socket proxy only ever answers GET requests.** Every other endpoint is refused because its own

@@ -92,3 +92,45 @@ func ClipTo(s string, n int) string {
 	}
 	return b
 }
+
+// KindSecurity is filled by apps that block addresses (an intrusion prevention system).
+const KindSecurity Kind = "security"
+
+// SecurityCount is one row of a breakdown: a name (a decision type, an origin, a scenario) and how many active
+// decisions carry it.
+type SecurityCount struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
+// SecurityDecision is one active decision against an address, as the app reports it.
+type SecurityDecision struct {
+	Value    string    `json:"value"`          // the address, range or other value, as given
+	Scope    string    `json:"scope"`          // what Value is: an IP, a range, a country, …
+	Type     string    `json:"type"`           // ban, captcha, …
+	Origin   string    `json:"origin"`         // where the decision came from
+	Scenario string    `json:"scenario"`       // the behaviour that triggered it
+	Until    time.Time `json:"until,omitzero"` // when it ends; zero (left out) if the app did not say
+}
+
+// Security sums up the decisions an app enforces: counts over all of them, and the most recent ones made on this
+// machine (by its own detections or by hand) rather than taken from shared blocklists.
+type Security struct {
+	Total     int  `json:"total"`     // active decisions counted
+	Local     int  `json:"local"`     // of them, made on this machine
+	Community int  `json:"community"` // of them, from shared blocklists
+	Capped    bool `json:"capped"`    // counting stopped early: the real totals are higher
+	// ByType, ByOrigin and ByScope count all decisions, TopScenarios only the local ones. Each is sorted by count,
+	// at most MaxSecurityCounts long, and never nil.
+	ByType       []SecurityCount    `json:"byType"`
+	ByOrigin     []SecurityCount    `json:"byOrigin"`
+	ByScope      []SecurityCount    `json:"byScope"`
+	TopScenarios []SecurityCount    `json:"topScenarios"`
+	Recent       []SecurityDecision `json:"recent"` // local decisions, newest first, at most MaxSecurityDecisions; never nil
+}
+
+// MaxSecurityDecisions bounds Security.Recent, MaxSecurityCounts each of its breakdowns.
+const (
+	MaxSecurityDecisions = 50
+	MaxSecurityCounts    = 10
+)

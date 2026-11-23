@@ -42,6 +42,19 @@ func GetJSON(ctx context.Context, t Target, path string, keyHeader string, v any
 // can stop early (see DecodeArray) instead of holding a whole oversized answer in memory. An error from read that
 // did not come from reading the body is reported as ErrNotJSON.
 func StreamJSON(ctx context.Context, t Target, path string, keyHeader string, read func(*json.Decoder) error) error {
+	return StreamJSONLimit(ctx, t, path, keyHeader, maxBodyBytes, read)
+}
+
+// MaxStreamBytes bounds the limit StreamJSONLimit accepts.
+const MaxStreamBytes = 64 << 20 // 64 MiB
+
+// StreamJSONLimit is StreamJSON with a body limit of limit bytes (at most MaxStreamBytes) instead of 4 MiB, for an
+// answer that can legitimately be larger (e.g. a long list an adapter only counts). read must keep a bounded amount
+// of what it decodes: the limit bounds what is read, not what read holds on to. A body over the limit is
+// ErrTooLarge, which read has seen as a failed read by then; whatever it gathered before that is still its own.
+func StreamJSONLimit(ctx context.Context, t Target, path string, keyHeader string, limit int64,
+	read func(*json.Decoder) error) error {
+	limit = min(max(limit, 1), MaxStreamBytes)
 	reqURL, err := joinPath(t.BaseURL, path)
 	if err != nil {
 		return err
@@ -75,7 +88,7 @@ func StreamJSON(ctx context.Context, t Target, path string, keyHeader string, re
 		return fmt.Errorf("adapter: %s: %w", reqURL.Path, StatusError(resp.StatusCode))
 	}
 
-	body := &bodyReader{r: http.MaxBytesReader(nil, resp.Body, maxBodyBytes)}
+	body := &bodyReader{r: http.MaxBytesReader(nil, resp.Body, limit)}
 	if err := read(json.NewDecoder(body)); err != nil {
 		var tooLarge *http.MaxBytesError
 		switch {

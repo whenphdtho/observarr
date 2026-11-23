@@ -5,6 +5,7 @@
   import Apps from './Apps.svelte';
   import AddApps from './AddApps.svelte';
   import System from './System.svelte';
+  import Security from './Security.svelte';
   import Rail from './Rail.svelte';
   import Icon from './icons/Icon.svelte';
   import { live, serviceList, reconnecting, lastEvent } from './live.js';
@@ -20,6 +21,7 @@
     { id: 'network', hash: '#/network', label: 'Network', icon: 'network', sub: 'Throughput, traffic by app and budget' },
     { id: 'apps', hash: '#/apps', label: 'Apps', icon: 'layout-grid', sub: 'Health and queue of every service' },
     { id: 'system', hash: '#/system', label: 'System', icon: 'server', sub: 'Host, disks and containers' },
+    { id: 'security', hash: '#/security', label: 'Security', icon: 'shield', sub: 'Sign-ins, sessions and blocked addresses' },
   ];
 
   // The view is remembered in the URL hash (#/network, #/apps, #/system), so a reload or a shared link keeps it.
@@ -180,6 +182,8 @@
         <AddApps onback={() => select('apps')} />
       {:else if view === 'apps'}
         <Apps {services} filtered={query.trim() !== ''} onadd={openAddApps} />
+      {:else if view === 'security'}
+        <Security />
       {:else}
         <System {query} />
       {/if}

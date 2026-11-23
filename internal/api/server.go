@@ -96,6 +96,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/system", s.requireSession(s.systemState))
 	mux.Handle("GET /api/system/history", s.requireSession(s.systemHistory))
 	mux.Handle("GET /api/network", s.requireSession(s.network))
+	mux.Handle("GET /api/security", s.requireSession(s.security))
+	mux.Handle("POST /api/security/sign-out-others", s.requireSession(s.signOutOthers))
 	mux.Handle("GET /api/discovery", s.requireSession(s.discoveryState))
 	mux.Handle("GET /api/discovery/local", s.requireSession(s.discoverLocal))
 	mux.Handle("POST /api/discovery/network", s.requireSession(s.discoverNetwork))

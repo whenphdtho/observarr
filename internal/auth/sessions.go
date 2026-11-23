@@ -81,6 +81,48 @@ func (m *Sessions) End(ctx context.Context, w http.ResponseWriter, r *http.Reque
 	return nil
 }
 
+// SessionInfo is a session as a list shows it: no token, and nothing that could stand in for one.
+type SessionInfo struct {
+	User    string    `json:"user"`
+	Created time.Time `json:"created"`
+	Expires time.Time `json:"expires"`
+	Current bool      `json:"current"` // the session of the request that asked
+}
+
+// List returns the unexpired sessions of every user, at most limit, newest first, marking r's own.
+func (m *Sessions) List(r *http.Request, limit int) ([]SessionInfo, error) {
+	rows, err := m.Store.ListSessions(r.Context(), m.Now(), limit)
+	if err != nil {
+		return nil, err
+	}
+	own := m.ownHash(r)
+	out := make([]SessionInfo, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, SessionInfo{User: row.UserName, Created: row.Expires.Add(-SessionTTL), Expires: row.Expires,
+			Current: own != nil && string(row.TokenHash) == string(own)})
+	}
+	return out, nil
+}
+
+// EndOthers ends every unexpired session but r's own, of every user, and returns how many it ended. r must have a
+// session.
+func (m *Sessions) EndOthers(r *http.Request) (int64, error) {
+	own := m.ownHash(r)
+	if own == nil {
+		return 0, store.ErrNotFound
+	}
+	return m.Store.DeleteSessionsExcept(r.Context(), own, m.Now())
+}
+
+// ownHash is the hash of r's session token, or nil if r carries none.
+func (m *Sessions) ownHash(r *http.Request) []byte {
+	c, err := r.Cookie(m.CookieName())
+	if err != nil || c.Value == "" {
+		return nil
+	}
+	return hashToken(c.Value)
+}
+
 func randomToken() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {

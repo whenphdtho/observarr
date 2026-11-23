@@ -26,6 +26,7 @@ import (
 	"observarr/internal/config"
 	"observarr/internal/poller"
 	"observarr/internal/secret"
+	"observarr/internal/shape"
 	"observarr/internal/state"
 	"observarr/internal/store"
 	"observarr/internal/system"
@@ -99,7 +100,9 @@ func run(cfg config.Config, log *slog.Logger) error {
 	catalog.Register(reg)
 	hub := state.NewHub()
 	httpc := adapter.NewHTTPClient()
-	pl := poller.New(poller.Config{Registry: reg, Hub: hub, HTTP: httpc, Log: log})
+	// The full list of decisions an intrusion prevention system enforces can be long: once a minute is enough.
+	pl := poller.New(poller.Config{Registry: reg, Hub: hub, HTTP: httpc, Log: log,
+		Intervals: map[shape.Kind]time.Duration{shape.KindSecurity: time.Minute}})
 	defer pl.Close() // deferred after st.Close, so it runs first: no probe outlives the store
 	coll, err := collector(cfg, log)
 	if err != nil {
