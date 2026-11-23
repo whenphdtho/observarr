@@ -19,6 +19,8 @@ and its containers are doing — all from one small container. Status: early dev
 
 - **Discovery that asks first.** Suggests apps from a network scan, Prowlarr's linked apps, mounted config
   folders or running Docker containers — nothing is added until you review a suggestion and click Add.
+- **Overview at a glance:** services up, active downloads, host CPU and memory, a live chart of CPU and
+  network, and one list of everything that needs attention — down services, health warnings, stuck downloads.
 - **Live health and queues** for Sonarr, Radarr, Lidarr and Prowlarr: version, response time, health
   warnings, and every queued download with progress, ETA and import problems, pushed to the browser as they change.
 - **System view:** host CPU, memory, swap, load, uptime, disks and network, plus every container's state,
@@ -243,4 +245,6 @@ disables buffering; with nginx, add `proxy_buffering off;` to the matching `loca
 
 ## License
 
-[GPL-3.0](LICENSE)
+[GPL-3.0](LICENSE). The UI ships the [Inter](https://github.com/rsms/inter) font (SIL Open Font License,
+[web/src/assets/fonts/LICENSE-Inter.txt](web/src/assets/fonts/LICENSE-Inter.txt)) and icons from
+[Lucide](https://lucide.dev) (ISC, [web/src/lib/icons/LICENSE-Lucide.txt](web/src/lib/icons/LICENSE-Lucide.txt)).

@@ -2,6 +2,8 @@
   import { api } from './api.js';
   import { widgets } from './shapes/index.js';
   import { formatPct, formatBytes, containerStatusClass } from './format.js';
+  import { serviceStatus } from './status.js';
+  import Icon from './icons/Icon.svelte';
 
   // ServiceCard renders one service: its identity (name, adapter, URL host) and a widget for
   // each shape its adapter declares. It never names an app type — `adapter` is just the matching
@@ -16,6 +18,7 @@
   let removing = $state(false);
 
   const host = $derived(hostOf(service.url));
+  const status = $derived(serviceStatus(service));
   const container = $derived(service.container);
   const containerDot = $derived(container ? containerStatusClass(container.state, container.health) : '');
   const containerTitle = $derived(
@@ -69,24 +72,37 @@
   }
 </script>
 
-<article class="card service">
+<article class="card service" id={`service-${service.id}`} tabindex="-1" aria-labelledby={`service-name-${service.id}`}>
   <header>
-    <h3 class="ellipsis" title={service.name}>{service.name}</h3>
-    <span class="muted type ellipsis" title={adapter?.name ?? service.type}>{adapter?.name ?? service.type}</span>
+    <span class="tile-icon" aria-hidden="true">
+      <Icon name={adapter?.icon} />
+      <span class="status-dot {status}"></span>
+    </span>
+    <div class="ident">
+      <h2 id={`service-name-${service.id}`} class="ellipsis" title={service.name}>{service.name}</h2>
+      <p class="muted ellipsis" title={`${adapter?.name ?? service.type} · ${service.url}`}>
+        {adapter?.name ?? service.type} · {host}
+      </p>
+    </div>
+    <button type="button" class="ibtn" aria-label={`Edit ${service.name}`} title="Edit" onclick={() => onedit?.(service)}>
+      <Icon name="pencil" size={16} />
+    </button>
+    <button type="button" class="ibtn danger" aria-label={`Remove ${service.name}`} title="Remove" onclick={openRemove}>
+      <Icon name="trash-2" size={16} />
+    </button>
   </header>
-  <p class="muted url ellipsis" title={service.url}>{host}</p>
 
   {#if container}
-    <p class="muted container-line" title={containerTitle}>
+    <p class="container-line" title={containerTitle}>
+      <Icon name="box" size={14} />
       {#if container.state === ''}
         <span class="ellipsis">container not found</span>
       {:else}
-        <span class="dot" class:ok={containerDot === 'ok'} class:warn={containerDot === 'warn'}
-          class:fail={containerDot === 'fail'} aria-hidden="true"></span>
+        <span class="dot {containerDot}" aria-hidden="true"></span>
         <span class="ellipsis state">{container.state}{container.health ? ` (${container.health})` : ''}</span>
-        <span>{container.state === 'running' ? formatPct(container.cpuPercent) : '—'}</span>
-        <span>{container.state === 'running' ? formatBytes(container.memBytes) : '—'}</span>
-        <span>{container.restarts} restart{container.restarts === 1 ? '' : 's'}</span>
+        <span class="num">{container.state === 'running' ? formatPct(container.cpuPercent) : '—'}</span>
+        <span class="num">{container.state === 'running' ? formatBytes(container.memBytes) : '—'}</span>
+        <span class="num">{container.restarts} restart{container.restarts === 1 ? '' : 's'}</span>
       {/if}
     </p>
   {/if}
@@ -97,11 +113,6 @@
       <Widget reading={service.readings?.[kind]} />
     {/if}
   {/each}
-
-  <div class="actions">
-    <button type="button" class="quiet" aria-label={`Edit ${service.name}`} onclick={() => onedit?.(service)}>Edit</button>
-    <button type="button" class="quiet" aria-label={`Remove ${service.name}`} onclick={openRemove}>Remove</button>
-  </div>
 </article>
 
 <dialog bind:this={dialogEl} aria-labelledby={`remove-title-${service.id}`}
@@ -116,25 +127,22 @@
 </dialog>
 
 <style>
-  .card.service { display: grid; gap: 10px; align-content: start; min-width: 0; }
-  header { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-  header h3 { margin: 0; font-size: 16px; min-width: 0; }
-  .type { margin-left: auto; flex-shrink: 0; }
-  .url { margin: 0; font-size: 13px; }
-  .container-line { margin: 0; font-size: 13px; display: flex; align-items: center; gap: 8px; min-width: 0; }
-  .container-line .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--muted); }
-  .container-line .dot.ok { background: var(--ok); }
-  .container-line .dot.warn { background: var(--warn); }
-  .container-line .dot.fail { background: var(--fail); }
-  .container-line .state { flex-shrink: 1; min-width: 0; }
-  .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .actions { display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
-  dialog {
-    background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 12px;
-    padding: 20px; max-width: min(420px, calc(100vw - 32px));
+  .service { display: grid; gap: 14px; align-content: start; scroll-margin-top: 16px; }
+  .service:focus { outline: none; }
+  .service:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  header { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  header .tile-icon { border: 1px solid var(--border); }
+  header .status-dot { border-color: var(--surface); }
+  .ident { display: grid; min-width: 0; flex: 1; line-height: 1.35; }
+  h2 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  .ident p { font-size: 12.5px; }
+  header .ibtn { border-color: transparent; }
+  .container-line {
+    display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 10px; border-radius: var(--r-sm);
+    background: var(--surface2); font-size: 12.5px; color: var(--text2);
   }
-  dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
-  dialog h2 { margin: 0 0 8px; font-size: 17px; }
-  dialog p { margin: 0 0 12px; }
-  dialog .actions { margin-top: 4px; }
+  .container-line :global(.icon) { color: var(--muted); }
+  .container-line .state { flex: 1 1 auto; }
+  .container-line .num { flex: none; color: var(--muted); }
+  dialog p { margin: 8px 0 14px; }
 </style>

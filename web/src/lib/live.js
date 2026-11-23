@@ -6,12 +6,15 @@ import { api } from './api.js';
 const servicesById = writable({});
 
 // systemSnapshot holds the latest "system" event (a system.Snapshot: host, containers, notices),
-// or null before the first one arrives. The server samples faster while this stream is open, so
-// the System view keeps it open via live.open() even when the Apps view isn't mounted.
+// or null before the first one arrives. The server samples faster while this stream is open; Shell
+// keeps it open for as long as someone is signed in.
 const systemSnapshot = writable(null);
 
 // reconnecting is true once the stream has been without an open connection for a few seconds.
 const reconnecting = writable(false);
+
+// lastEvent is when the stream last delivered an event (ms since epoch), 0 before the first.
+const lastEvent = writable(0);
 
 const RECONNECT_HINT_DELAY = 3000;
 // A browser EventSource retries on its own only while the connection merely drops; once the
@@ -40,6 +43,11 @@ function disarmReconnectHint() {
   clearTimeout(reconnectTimer);
   reconnectTimer = null;
   reconnecting.set(false);
+}
+
+function received() {
+  disarmReconnectHint();
+  lastEvent.set(Date.now());
 }
 
 function applySnapshot(list) {
@@ -112,19 +120,19 @@ function open() {
   source = new EventSource('/api/events');
   source.addEventListener('open', handleOpen);
   source.addEventListener('snapshot', (e) => {
-    disarmReconnectHint();
+    received();
     applySnapshot(JSON.parse(e.data));
   });
   source.addEventListener('service', (e) => {
-    disarmReconnectHint();
+    received();
     applyService(JSON.parse(e.data));
   });
   source.addEventListener('removed', (e) => {
-    disarmReconnectHint();
+    received();
     applyRemoved(JSON.parse(e.data).id);
   });
   source.addEventListener('system', (e) => {
-    disarmReconnectHint();
+    received();
     systemSnapshot.set(JSON.parse(e.data));
   });
   source.addEventListener('error', handleError);
@@ -142,6 +150,7 @@ function close() {
   retryTimer = null;
   retryDelay = RETRY_BASE;
   disarmReconnectHint();
+  lastEvent.set(0);
   servicesById.set({});
   systemSnapshot.set(null);
 }
@@ -158,6 +167,6 @@ export const serviceList = derived(servicesById, (byId) =>
   Object.values(byId).sort((a, b) => a.name.localeCompare(b.name)),
 );
 
-export { reconnecting, systemSnapshot };
+export { reconnecting, lastEvent, systemSnapshot };
 
 export const live = { open, close, setOnSignedOut };

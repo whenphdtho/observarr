@@ -1,94 +1,40 @@
 <script>
-  import { onMount, untrack } from 'svelte';
-  import { api } from './api.js';
-  import { systemSnapshot, reconnecting } from './live.js';
+  import HostChart from './HostChart.svelte';
+  import Icon from './icons/Icon.svelte';
+  import { snapshot, systemError } from './data.js';
+  import { matches } from './status.js';
   import { now } from './ticker.js';
   import {
     formatBytes, formatRate, formatPct, formatDuration, formatAge, splitNotice, containerStatusClass,
   } from './format.js';
 
   // System shows the host (CPU, memory, swap, load, uptime, disks, network) and every container
-  // Observarr can see, from the sampler's Snapshot (system.Snapshot). The initial paint comes from
-  // a GET of /api/system and /api/system/history; after that it tracks the live "system" SSE event
-  // (Shell keeps that stream open), which also keeps the sparkline's history current.
-  const HISTORY_WINDOW_MS = 5 * 60 * 1000;
-  const SPARK_W = 120;
-  const SPARK_H = 28;
+  // Observarr can see, from the sampler's Snapshot (system.Snapshot) that Shell loads and the live
+  // stream keeps current. query narrows the containers table.
+  let { query = '' } = $props();
 
-  let initialSnapshot = $state(null);
-  let initialError = $state('');
-  let history = $state([]); // system.HostView[], oldest first, covering the last 5 minutes
-
-  const snapshot = $derived($systemSnapshot ?? initialSnapshot);
-  const host = $derived(snapshot?.host ?? null);
+  const host = $derived($snapshot?.host ?? null);
   const disks = $derived(host?.disks ?? []);
   const net = $derived(host?.net ?? []);
-  const containers = $derived(snapshot?.containers ?? []);
-  const notices = $derived(snapshot?.notices ?? []);
+  const containers = $derived(($snapshot?.containers ?? []).filter((c) => matches(query, c.name, c.state)));
+  const allContainers = $derived($snapshot?.containers?.length ?? 0);
+  const notices = $derived($snapshot?.notices ?? []);
   // dockerNotConfigured: Docker discovery/figures were never set up at all (as opposed to being
   // set up but failing) — the empty container list then says so plainly instead of the generic
   // "No containers.", which reads as if Docker were configured and simply had none running.
   const dockerNotConfigured = $derived(notices.some((n) => n.includes('OBSERVARR_DOCKER_HOST')));
 
-  onMount(() => {
-    load();
-  });
-
-  async function load() {
-    try {
-      const [snap, hist] = await Promise.all([api('GET', '/api/system'), api('GET', '/api/system/history')]);
-      initialSnapshot = snap;
-      history = hist ?? [];
-    } catch (err) {
-      initialError = err.message;
-    }
-  }
-
-  // Each live snapshot's host reading is appended once (by its "at" timestamp), trimmed to the
-  // same 5-minute window the server's own history endpoint covers.
-  $effect(() => {
-    const h = host;
-    if (!h) return;
-    untrack(() => {
-      const last = history[history.length - 1];
-      if (last && last.at === h.at) return;
-      // Trimmed against the newest sample's own timestamp, not wall-clock time: the two can drift
-      // (a suspended tab, a slow clock) and Date.now() would then trim good history too eagerly.
-      const cutoff = new Date(h.at).getTime() - HISTORY_WINDOW_MS;
-      history = [...history.filter((x) => new Date(x.at).getTime() >= cutoff), h];
-    });
-  });
-
-  // sparklinePoints lays out CPU% history on a time-based x axis (samples can arrive faster than
-  // every 2 s while a live stream is open, and slower otherwise), y clamped to 0-100%.
-  function sparklinePoints(hist) {
-    if (hist.length < 2) return '';
-    const times = hist.map((x) => new Date(x.at).getTime());
-    const t0 = times[0];
-    const span = Math.max(1, times[times.length - 1] - t0);
-    return hist
-      .map((x, i) => {
-        const px = ((times[i] - t0) / span) * SPARK_W;
-        const py = SPARK_H - (Math.min(100, Math.max(0, x.cpuPercent)) / 100) * SPARK_H;
-        return `${px.toFixed(1)},${py.toFixed(1)}`;
-      })
-      .join(' ');
-  }
-
   function barPercent(used, total) {
     return total > 0 ? Math.round(Math.min(1, Math.max(0, used / total)) * 100) : 0;
   }
 
-  // diskUsed and diskPercent follow df's own convention: used space is total minus free (not
-  // "avail", which a filesystem can reserve below), and the percentage is used over used+avail
-  // (not over total), since avail is what's actually left for new writes.
-  function diskUsed(d) {
-    return d.total - d.free;
-  }
-
-  function diskPercent(d) {
-    const used = diskUsed(d);
-    return barPercent(used, used + d.avail);
+  // A disk's bar follows df's convention: used is total minus free, and what is left for new
+  // writes is "avail" (a file system can reserve part of its free space). Used + reserved +
+  // available is the whole disk.
+  function diskParts(d) {
+    const used = d.total - d.free;
+    const reserved = Math.max(0, d.free - d.avail);
+    return { used, reserved, avail: d.avail, pct: barPercent(used, used + d.avail) };
   }
 
   // ownNetwork mirrors collect.Container.OwnNetwork: a container sharing the host's network (or
@@ -155,329 +101,365 @@
   });
 </script>
 
-<section class="system">
-  <h2>System</h2>
-
-  {#if initialError && !snapshot}
-    <p class="error" role="alert">{initialError}</p>
-  {/if}
-
-  {#if $reconnecting}
-    <p class="muted" role="status">Reconnecting…</p>
+<div class="system">
+  {#if $systemError && !$snapshot}
+    <p class="error" role="alert">{$systemError}</p>
   {/if}
 
   {#if notices.length > 0}
-    <div class="card notices" role="status">
-      {#each notices as notice (notice)}
-        <p class="notice muted">
-          {#each splitNotice(notice) as part, i (i)}
-            {#if part.kind === 'code'}<code>{part.text}</code>{:else}{part.text}{/if}
-          {/each}
+    <div class="banner" role="status">
+      <Icon name="info" />
+      <div class="banner-text">
+        {#each notices as notice (notice)}
+          <p>
+            {#each splitNotice(notice) as part, i (i)}
+              {#if part.kind === 'code'}<code>{part.text}</code>{:else}{part.text}{/if}
+            {/each}
+          </p>
+        {/each}
+        <p>
+          How to set this up:
+          <a href="https://github.com/whenphdtho/observarr/blob/main/docs/deploy.md" target="_blank" rel="noopener noreferrer">
+            deploy guide
+          </a>
         </p>
-      {/each}
-      <p class="notice muted">
-        How to set this up:
-        <a href="https://github.com/whenphdtho/observarr/blob/main/docs/deploy.md" target="_blank" rel="noopener noreferrer">
-          deploy guide
-        </a>
-      </p>
+      </div>
     </div>
   {/if}
 
   {#if host}
     <div class="tiles">
       <div class="card tile">
-        <h3>CPU</h3>
-        <p class="value">{formatPct(host.cpuPercent)}</p>
-        <svg class="sparkline" viewBox={`0 0 ${SPARK_W} ${SPARK_H}`} preserveAspectRatio="none" role="img"
-          aria-label={`CPU usage over the last ${Math.round(HISTORY_WINDOW_MS / 60000)} minutes`}>
-          <polyline points={sparklinePoints(history)} />
-        </svg>
-        <p class="muted hint">{host.cpus} CPU{host.cpus === 1 ? '' : 's'}</p>
-      </div>
-
-      <div class="card tile">
-        <h3>Memory</h3>
-        <p class="value ellipsis compact-value" title={`${formatBytes(host.memUsed)} of ${formatBytes(host.memTotal)} used`}>
-          {formatBytes(host.memUsed)} / {formatBytes(host.memTotal)}
-        </p>
-        <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"
-          aria-valuenow={barPercent(host.memUsed, host.memTotal)}
-          aria-label={`Memory: ${formatBytes(host.memUsed)} of ${formatBytes(host.memTotal)} used`}>
-          <div class="bar-fill" style={`width:${barPercent(host.memUsed, host.memTotal)}%`}></div>
+        <span class="tile-icon" aria-hidden="true"><Icon name="cpu" /></span>
+        <div class="tile-text">
+          <h2 class="cap">CPU</h2>
+          <p class="v num">{formatPct(host.cpuPercent)}</p>
+          <p class="s ellipsis">{host.cpus} core{host.cpus === 1 ? '' : 's'}</p>
         </div>
       </div>
-
       <div class="card tile">
-        <h3>Swap</h3>
-        {#if host.swapTotal === 0}
-          <p class="muted">No swap.</p>
-        {:else}
-          <p class="value ellipsis compact-value" title={`${formatBytes(host.swapUsed)} of ${formatBytes(host.swapTotal)} used`}>
-            {formatBytes(host.swapUsed)} / {formatBytes(host.swapTotal)}
+        <span class="tile-icon" aria-hidden="true"><Icon name="memory-stick" /></span>
+        <div class="tile-text">
+          <h2 class="cap">Memory</h2>
+          <p class="v num ellipsis" title={`${formatBytes(host.memUsed)} of ${formatBytes(host.memTotal)} used`}>
+            {formatBytes(host.memUsed)}
           </p>
+          <p class="s ellipsis">of {formatBytes(host.memTotal)}</p>
           <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"
-            aria-valuenow={barPercent(host.swapUsed, host.swapTotal)}
-            aria-label={`Swap: ${formatBytes(host.swapUsed)} of ${formatBytes(host.swapTotal)} used`}>
-            <div class="bar-fill" style={`width:${barPercent(host.swapUsed, host.swapTotal)}%`}></div>
+            aria-valuenow={barPercent(host.memUsed, host.memTotal)}
+            aria-label={`Memory: ${formatBytes(host.memUsed)} of ${formatBytes(host.memTotal)} used`}>
+            <i style:width={`${barPercent(host.memUsed, host.memTotal)}%`}></i>
           </div>
+        </div>
+      </div>
+      <div class="card tile">
+        <span class="tile-icon" aria-hidden="true"><Icon name="database" /></span>
+        <div class="tile-text">
+          <h2 class="cap">Swap</h2>
+          {#if host.swapTotal === 0}
+            <p class="v">—</p>
+            <p class="s">No swap</p>
+          {:else}
+            <p class="v num ellipsis" title={`${formatBytes(host.swapUsed)} of ${formatBytes(host.swapTotal)} used`}>
+              {formatBytes(host.swapUsed)}
+            </p>
+            <p class="s ellipsis">of {formatBytes(host.swapTotal)}</p>
+            <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+              aria-valuenow={barPercent(host.swapUsed, host.swapTotal)}
+              aria-label={`Swap: ${formatBytes(host.swapUsed)} of ${formatBytes(host.swapTotal)} used`}>
+              <i style:width={`${barPercent(host.swapUsed, host.swapTotal)}%`}></i>
+            </div>
+          {/if}
+        </div>
+      </div>
+      <div class="card tile">
+        <span class="tile-icon" aria-hidden="true"><Icon name="clock" /></span>
+        <div class="tile-text">
+          <h2 class="cap">Uptime</h2>
+          <p class="v num ellipsis" title={formatDuration(host.uptimeNs)}>{formatDuration(host.uptimeNs)}</p>
+          <p class="s ellipsis" title={`load average (1 / 5 / 15 min): ${host.load.map((l) => l.toFixed(2)).join(' / ')}`}>
+            load {host.load[0].toFixed(2)}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <HostChart />
+
+    {#if disks.length > 0 || net.length > 0}
+      <div class="pair" class:single={disks.length === 0 || net.length === 0}>
+        {#if disks.length > 0}
+          <section class="card" aria-labelledby="disks-title">
+            <div class="card-head"><h2 id="disks-title"><Icon name="hard-drive" size={16} />Disks</h2></div>
+            {#each disks as d (d.path)}
+              {@const p = diskParts(d)}
+              <div class="disk">
+                <div class="disk-head">
+                  <span class="ellipsis path" title={d.path}>{d.path}</span>
+                  <span class="muted num figures" title={`${formatBytes(p.used)} used of ${formatBytes(d.total)}`}>
+                    {formatBytes(p.used)} used · <span class="free">{formatBytes(p.avail)} free</span>
+                  </span>
+                </div>
+                <div class="stack" role="img"
+                  aria-label={`${d.path}: ${formatBytes(p.used)} used, ${formatBytes(p.avail)} free of ${formatBytes(d.total)}, ${p.pct}% full`}>
+                  <i class="used" style:flex-grow={p.used}></i>
+                  {#if p.reserved > 0}<i class="reserved" style:flex-grow={p.reserved}></i>{/if}
+                  <i class="avail" style:flex-grow={p.avail}></i>
+                </div>
+              </div>
+            {/each}
+            <p class="legend">
+              <span><i class="sw used"></i>Used</span>
+              {#if disks.some((d) => d.free > d.avail)}<span><i class="sw reserved"></i>Reserved</span>{/if}
+              <span><i class="sw avail"></i>Free</span>
+            </p>
+          </section>
+        {/if}
+        {#if net.length > 0}
+          <section class="card" aria-labelledby="net-title">
+            <div class="card-head"><h2 id="net-title"><Icon name="arrow-down-up" size={16} />Network</h2></div>
+            <ul class="rows">
+              {#each net as n (n.name)}
+                <li>
+                  <span class="ellipsis name" title={n.name}>{n.name}</span>
+                  <span class="num rate" title={`down ${formatRate(n.rx)}, up ${formatRate(n.tx)}`}>
+                    <span class="down">↓</span> {formatRate(n.rx)} <span class="up">↑</span> {formatRate(n.tx)}
+                  </span>
+                </li>
+              {/each}
+            </ul>
+          </section>
         {/if}
       </div>
-
-      <div class="card tile">
-        <h3>Load</h3>
-        <p class="value ellipsis compact-value" title="1 / 5 / 15 minute load average">
-          {host.load[0].toFixed(2)} · {host.load[1].toFixed(2)} · {host.load[2].toFixed(2)}
-        </p>
-        <p class="muted hint">1 · 5 · 15 min</p>
-      </div>
-
-      <div class="card tile">
-        <h3>Uptime</h3>
-        <p class="value ellipsis" title={formatDuration(host.uptimeNs)}>{formatDuration(host.uptimeNs)}</p>
-      </div>
-
-      {#if disks.length > 0}
-        <div class="card tile disks">
-          <h3>Disks</h3>
-          {#each disks as d (d.path)}
-            <div class="meter-row">
-              <span class="ellipsis label" title={d.path}>{d.path}</span>
-              <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"
-                aria-valuenow={diskPercent(d)}
-                aria-label={`${d.path}: ${formatBytes(diskUsed(d))} of ${formatBytes(d.total)} used`}>
-                <div class="bar-fill" style={`width:${diskPercent(d)}%`}></div>
-              </div>
-              <span class="muted figures ellipsis" title={`${formatBytes(diskUsed(d))} of ${formatBytes(d.total)}`}>
-                {formatBytes(diskUsed(d))} / {formatBytes(d.total)}
-              </span>
-            </div>
-          {/each}
-        </div>
-      {/if}
-
-      {#if net.length > 0}
-        <div class="card tile net">
-          <h3>Network</h3>
-          {#each net as n (n.name)}
-            <div class="meter-row">
-              <span class="ellipsis label" title={n.name}>{n.name}</span>
-              <span class="muted figures ellipsis" title={`down ${formatRate(n.rx)}, up ${formatRate(n.tx)}`}>
-                ↓ {formatRate(n.rx)} ↑ {formatRate(n.tx)}
-              </span>
-            </div>
-          {/each}
-        </div>
-      {/if}
-    </div>
+    {/if}
   {/if}
 
-  <h3 class="containers-heading">Containers</h3>
-  {#if containers.length === 0}
-    <p class="muted">{dockerNotConfigured ? 'Docker is not configured.' : 'No containers.'}</p>
-  {:else}
-    <!-- Below 700px the header row (and its sort buttons) is hidden outright rather than merely
-         off-screen, so it can't be tabbed to while invisible; this select is the mobile
-         equivalent, and it stays a real, focusable control. -->
-    <div class="mobile-sort">
-      <label for="container-sort">Sort by</label>
-      <select id="container-sort" value={sortKey} onchange={(e) => selectSort(e.currentTarget.value)}>
-        {#each columns as col (col.key)}
-          <option value={col.key}>{col.label}</option>
-        {/each}
-      </select>
+  <section class="card containers" aria-labelledby="containers-title">
+    <div class="card-head">
+      <h2 id="containers-title"><Icon name="box" size={16} />Containers</h2>
+      {#if allContainers}
+        <span class="muted small num">{containers.length === allContainers ? allContainers : `${containers.length} of ${allContainers}`}</span>
+      {/if}
     </div>
-    <div class="table-wrap">
-      <!-- The explicit roles below are redundant by default, but table/thead/tbody/tr collapse to
-           display: block under 700px (to stack rows as cards); some screen readers then drop the
-           element's table semantics unless a matching role is still set explicitly. -->
-      <!-- svelte-ignore a11y_no_redundant_roles -->
-      <table role="table">
-        <caption class="visually-hidden">Containers</caption>
+    {#if containers.length === 0}
+      <p class="muted small">
+        {allContainers ? 'No container matches the search.' : dockerNotConfigured ? 'Docker is not configured.' : 'No containers.'}
+      </p>
+    {:else}
+      <!-- In a narrow layout the header row (and its sort buttons) is hidden outright rather than
+           merely off-screen, so it can't be tabbed to while invisible; this select is the narrow
+           equivalent, and it stays a real, focusable control. -->
+      <div class="mobile-sort">
+        <label for="container-sort">Sort by</label>
+        <select id="container-sort" value={sortKey} onchange={(e) => selectSort(e.currentTarget.value)}>
+          {#each columns as col (col.key)}
+            <option value={col.key}>{col.label}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="table-wrap">
+        <!-- The explicit roles below are redundant by default, but table/thead/tbody/tr collapse to
+             block or grid in a narrow layout (to stack rows as cards); some screen readers then drop
+             the element's table semantics unless a matching role is still set explicitly. -->
         <!-- svelte-ignore a11y_no_redundant_roles -->
-        <thead role="rowgroup">
+        <table role="table">
+          <caption class="visually-hidden">Containers</caption>
           <!-- svelte-ignore a11y_no_redundant_roles -->
-          <tr role="row">
-            {#each columns as col (col.key)}
-              <th role="columnheader" scope="col" aria-sort={ariaSort(col.key)}>
-                <button type="button" onclick={() => sortBy(col.key)}>
-                  {col.label}
-                  <span class="arrow" aria-hidden="true">
-                    {sortKey === col.key ? (sortDir === 'asc' ? '▲' : '▼') : ''}
-                  </span>
-                </button>
-              </th>
-            {/each}
-          </tr>
-        </thead>
-        <!-- svelte-ignore a11y_no_redundant_roles -->
-        <tbody role="rowgroup">
-          {#each sortedContainers as c (c.id)}
-            {@const status = containerStatusClass(c.state, c.health)}
+          <thead role="rowgroup">
             <!-- svelte-ignore a11y_no_redundant_roles -->
             <tr role="row">
-              <td role="cell" data-label="Name" title={c.name}>
-                <span class="ellipsis">{c.name}</span>
-              </td>
-              <td role="cell" data-label="State" title={c.state + (c.health ? ` (${c.health})` : '')}>
-                <span class="state-wrap">
-                  <span class="dot" class:ok={status === 'ok'} class:warn={status === 'warn'}
-                    class:fail={status === 'fail'} aria-hidden="true"></span>
-                  <span class="ellipsis">{c.state}{c.health ? ` (${c.health})` : ''}</span>
-                </span>
-              </td>
-              <td role="cell" data-label="CPU %">
-                <span class="ellipsis">{c.state === 'running' ? formatPct(c.cpuPercent) : '—'}</span>
-              </td>
-              <td role="cell" data-label="Memory"
-                title={c.state === 'running' ?
-                  `${formatBytes(c.memBytes)} of ${c.memLimit ? formatBytes(c.memLimit) : 'no limit'}` : ''}>
-                <span class="ellipsis">
+              {#each columns as col (col.key)}
+                <th role="columnheader" scope="col" aria-sort={ariaSort(col.key)}>
+                  <button type="button" onclick={() => sortBy(col.key)}>
+                    {col.label}
+                    <span class="arrow" aria-hidden="true">
+                      {sortKey === col.key ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                    </span>
+                  </button>
+                </th>
+              {/each}
+            </tr>
+          </thead>
+          <!-- svelte-ignore a11y_no_redundant_roles -->
+          <tbody role="rowgroup">
+            {#each sortedContainers as c (c.id)}
+              {@const status = containerStatusClass(c.state, c.health)}
+              <!-- svelte-ignore a11y_no_redundant_roles -->
+              <tr role="row">
+                <td role="cell" data-label="Name" title={c.name}>
+                  <span class="ellipsis">{c.name}</span>
+                </td>
+                <td role="cell" data-label="State" title={c.state + (c.health ? ` (${c.health})` : '')}>
+                  <span class="state-wrap">
+                    <span class="dot {status}" aria-hidden="true"></span>
+                    <span class="ellipsis">{c.state}{c.health ? ` (${c.health})` : ''}</span>
+                  </span>
+                </td>
+                <td role="cell" data-label="CPU %" class="num">
+                  <span class="ellipsis">{c.state === 'running' ? formatPct(c.cpuPercent) : '—'}</span>
+                </td>
+                <td role="cell" data-label="Memory" class="num"
+                  title={c.state === 'running' ?
+                    `${formatBytes(c.memBytes)} of ${c.memLimit ? formatBytes(c.memLimit) : 'no limit'}` : ''}>
                   {#if c.state === 'running'}
-                    {formatBytes(c.memBytes)} / {c.memLimit ? formatBytes(c.memLimit) : 'no limit'}
+                    <span class="two">
+                      <span>{formatBytes(c.memBytes)}</span>
+                      <span class="muted">{c.memLimit ? `of ${formatBytes(c.memLimit)}` : 'no limit'}</span>
+                    </span>
                   {:else}
                     —
                   {/if}
-                </span>
-              </td>
-              <td role="cell" data-label="Network">
-                <span class="ellipsis">
+                </td>
+                <td role="cell" data-label="Network" class="num"
+                  title={c.state === 'running' && ownNetwork(c.networkMode) ?
+                    `down ${formatRate(c.netRxRate)}, up ${formatRate(c.netTxRate)}` : ''}>
                   {#if c.state !== 'running'}
                     —
                   {:else if ownNetwork(c.networkMode)}
-                    <span title={`down ${formatRate(c.netRxRate)}, up ${formatRate(c.netTxRate)}`}>
-                      ↓ {formatRate(c.netRxRate)} ↑ {formatRate(c.netTxRate)}
+                    <span class="two">
+                      <span><span class="down" aria-hidden="true">↓</span> {formatRate(c.netRxRate)}</span>
+                      <span><span class="up" aria-hidden="true">↑</span> {formatRate(c.netTxRate)}</span>
                     </span>
                   {:else}
                     <span class="muted" title="no network of its own">—</span>
                   {/if}
-                </span>
-              </td>
-              <td role="cell" data-label="Block I/O"
-                title={c.state === 'running' ? `read ${formatRate(c.blkReadRate)}, write ${formatRate(c.blkWriteRate)}` : ''}>
-                <span class="ellipsis">
+                </td>
+                <td role="cell" data-label="Block I/O" class="num"
+                  title={c.state === 'running' ? `read ${formatRate(c.blkReadRate)}, write ${formatRate(c.blkWriteRate)}` : ''}>
                   {#if c.state === 'running'}
-                    R {formatRate(c.blkReadRate)} W {formatRate(c.blkWriteRate)}
+                    <span class="two">
+                      <span><span class="muted">R</span> {formatRate(c.blkReadRate)}</span>
+                      <span><span class="muted">W</span> {formatRate(c.blkWriteRate)}</span>
+                    </span>
                   {:else}
                     —
                   {/if}
-                </span>
-              </td>
-              <td role="cell" data-label="Restarts">{c.restartCount}</td>
-              <td role="cell" data-label="Up since" title={c.startedAt || ''}>
-                <span class="ellipsis">{c.startedAt ? formatAge(c.startedAt, $now) : '—'}</span>
-              </td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
-  {/if}
-</section>
+                </td>
+                <td role="cell" data-label="Restarts" class="num">{c.restartCount}</td>
+                <td role="cell" data-label="Up since" title={c.startedAt || ''}>
+                  <span class="ellipsis">{c.startedAt ? formatAge(c.startedAt, $now) : '—'}</span>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {/if}
+  </section>
+</div>
 
 <style>
   .system { display: grid; gap: 16px; }
-  .system h2 { margin: 0; font-size: 18px; }
-  .notices { display: grid; gap: 6px; }
-  .notice { margin: 0; }
-  .notice code {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.95em;
-    background: var(--bg); padding: 1px 5px; border-radius: 4px;
+  .small { font-size: 13px; }
+
+  .banner {
+    display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: var(--r-lg);
+    background: var(--warn-soft); border: 1px solid rgba(227, 166, 80, 0.28); color: var(--text2); font-size: 13px;
   }
-  .notice a { color: var(--accent); }
-
-  .tiles { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
-  .tile { display: grid; gap: 8px; align-content: start; min-width: 0; padding: 16px; }
-  .tile h3 { margin: 0; font-size: 13px; color: var(--muted); font-weight: 600; text-transform: uppercase; }
-  .value { margin: 0; font-size: 20px; font-weight: 600; }
-  /* Two-part live values (memory, swap, load) stay on one line at the tiles' 180px minimum: a
-     slightly smaller font, and .ellipsis plus a title for anything that still does not fit. */
-  .compact-value { font-size: 16px; }
-  .hint { margin: 0; font-size: 12px; }
-  .sparkline { width: 100%; max-width: 160px; height: 28px; display: block; }
-  .sparkline polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; }
-
-  .bar {
-    /* --field-border, not --border: the track needs the >=3:1 contrast against --surface that
-       --border (meant for quiet dividers) does not reliably clear. */
-    height: 6px; border-radius: 4px; background: var(--field-border); overflow: hidden;
+  .banner > :global(.icon) { color: var(--warn); margin-top: 1px; }
+  .banner-text { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+  .banner code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.95em; color: var(--text);
+    background: var(--surface2); padding: 1px 5px; border-radius: 4px;
   }
-  .bar-fill { height: 100%; background: var(--accent); }
 
-  .disks, .net { gap: 10px; }
-  .meter-row { display: grid; grid-template-columns: minmax(0, auto) minmax(40px, 1fr) minmax(0, auto); gap: 8px; align-items: center; }
-  .meter-row .label { font-size: 13px; }
-  .meter-row .figures { font-size: 12px; text-align: right; }
+  .tiles { display: grid; gap: 16px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .tile { display: flex; gap: 13px; align-items: flex-start; padding: 15px 16px; }
+  .tile-text { display: grid; min-width: 0; flex: 1; }
+  .cap { font-size: 12.5px; color: var(--muted); font-weight: 550; }
+  .v { font-size: 19px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.3; white-space: nowrap; }
+  .s { font-size: 12.5px; color: var(--muted); }
+  .tile .bar { margin-top: 8px; }
 
-  /* The disk's used/total figures need more room than a third grid column can spare without
-     clipping, so they sit on their own line under the bar instead. */
-  .disks .meter-row {
-    grid-template-columns: minmax(0, auto) minmax(40px, 1fr);
-    grid-template-areas: "label bar" "figures figures";
-    row-gap: 2px;
+  .pair { display: grid; gap: 16px; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; }
+  .pair.single { grid-template-columns: minmax(0, 1fr); }
+  .disk + .disk { margin-top: 14px; }
+  .disk-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; min-width: 0; font-size: 13px; }
+  .path { font-weight: 550; }
+  .figures { flex: none; font-size: 12.5px; white-space: nowrap; }
+  .free { color: var(--ok); }
+  .stack { display: flex; gap: 2px; height: 14px; border-radius: 7px; overflow: hidden; background: var(--surface3); }
+  .stack > i { display: block; flex-basis: 0; min-width: 2px; transition: flex-grow 200ms var(--ease); }
+  .used { background: var(--accent); }
+  .reserved { background: var(--dim); }
+  .avail { background: var(--surface3); }
+  .legend { display: flex; gap: 16px; margin-top: 14px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 10px; height: 10px; border-radius: 3px; }
+  .sw.avail { background: var(--surface3); box-shadow: inset 0 0 0 1px var(--border2); }
+
+  .rows { list-style: none; margin: 0; padding: 0; }
+  .rows li {
+    display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border);
+    font-size: 13px; min-width: 0;
   }
-  .disks .meter-row .label { grid-area: label; }
-  .disks .meter-row .bar { grid-area: bar; }
-  .disks .meter-row .figures { grid-area: figures; }
+  .rows li:last-child { border-bottom: 0; }
+  .rows .name { font-weight: 550; }
+  .rate { white-space: nowrap; color: var(--text2); }
+  .down { color: var(--down); }
+  .up { color: var(--up); }
 
-  /* The interface name sits on its own line above the rates, so the rates always get the tile's
-     full width instead of being squeezed into a shared row (mirrors the disks tile's layout). */
-  .net .meter-row { grid-template-columns: minmax(0, 1fr); row-gap: 2px; }
-  .net .meter-row .figures { text-align: left; }
-
-  .containers-heading { margin: 0; font-size: 16px; }
-  .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-  .visually-hidden {
-    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
-  }
   .mobile-sort { display: none; }
-
-  .table-wrap { overflow-x: auto; }
+  .table-wrap { overflow-x: auto; margin: 0 -8px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); min-width: 0; }
-  th { white-space: nowrap; }
+  th, td { padding: 9px 8px; text-align: left; border-bottom: 1px solid var(--border); min-width: 0; }
+  tbody tr:last-child td { border-bottom: 0; }
+  th { white-space: nowrap; color: var(--muted); font-weight: 500; font-size: 12px; padding-top: 4px; }
+  td.num { white-space: nowrap; }
   th button {
-    all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
-    font: inherit; color: inherit;
+    padding: 0; gap: 4px; border: 0; border-radius: 4px; background: transparent; color: inherit;
+    font: inherit; font-weight: inherit;
   }
-  th button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
-  .arrow { font-size: 10px; width: 1em; display: inline-block; }
-  .state-wrap { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
-  td .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--muted); }
-  td .dot.ok { background: var(--ok); }
-  td .dot.warn { background: var(--warn); }
-  td .dot.fail { background: var(--fail); }
+  th button:hover:not(:disabled) { background: transparent; border: 0; color: var(--text); }
+  .arrow { font-size: 9px; width: 1em; display: inline-block; }
+  .state-wrap { display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; }
+  /* Two figures of one cell (used/limit, down/up, read/write) sit one above the other. */
+  .two { display: grid; line-height: 1.4; }
 
-  @media (max-width: 699px) {
-    .mobile-sort { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 8px; }
-    .mobile-sort label { white-space: nowrap; flex-shrink: 0; }
-    .mobile-sort select { font: inherit; flex: 1; min-width: 0; }
-    table, tbody, tr, th, td { display: block; width: 100%; }
+  @container (max-width: 820px) {
+    .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .pair { grid-template-columns: minmax(0, 1fr); }
+  }
+  @container (max-width: 400px) {
+    .tiles { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  }
+
+  /* Narrow: each row becomes a card. A container query, not a media query, since the side
+     columns take a varying share of the window. */
+  @container (max-width: 759px) {
+    .mobile-sort { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 10px; }
+    .mobile-sort label { white-space: nowrap; flex-shrink: 0; color: var(--muted); }
+    .mobile-sort select { flex: 1; min-width: 0; }
+    .table-wrap { margin: 0; }
+    table, tr, th, td { display: block; width: 100%; }
+    tbody { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr)); }
     /* display: none, not just visually hidden: the sort buttons it holds must not be reachable by
        keyboard either. The select above does the same job and stays visible and focusable. */
     thead { display: none; }
 
-    /* Each row becomes a compact card: a name + state line; then CPU %, Restarts and Up since (all
-       short values) side by side; then Memory, Network and Block I/O each on their own full-width
-       line, since their figures are too long to share a row without truncating. */
+    /* Each row becomes a compact card: a name line and a state line; then CPU %, Restarts and Up
+       since (all short values) side by side; then Memory, Network and Block I/O each on their own
+       full-width line, since their figures are too long to share a row without truncating. */
     tbody tr {
-      display: grid; grid-template-columns: repeat(3, 1fr); column-gap: 10px; row-gap: 4px;
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 10px; row-gap: 4px;
       grid-template-areas:
-        "name name state"
+        "name name name"
+        "state state state"
         "cpu restarts up"
         "mem mem mem"
         "net net net"
         "blk blk blk";
-      margin-bottom: 12px; border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px;
+      border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; min-width: 0;
+      background: var(--surface2);
     }
     td {
       display: flex; justify-content: space-between; align-items: center; gap: 8px; border-bottom: 0;
-      padding: 4px 0; min-width: 0;
+      padding: 3px 0; min-width: 0;
     }
     td::before { content: attr(data-label); color: var(--muted); font-size: 12px; flex-shrink: 0; }
 
-    td[data-label='Name'] { grid-area: name; font-weight: 600; padding-bottom: 6px; }
-    td[data-label='State'] { grid-area: state; padding-bottom: 6px; }
+    td[data-label='Name'] { grid-area: name; font-weight: 600; }
+    td[data-label='State'] { grid-area: state; padding-bottom: 6px; justify-content: flex-start; color: var(--text2); }
     td[data-label='Name']::before, td[data-label='State']::before { display: none; }
 
     /* CPU %, Restarts and Up since are short values: the label stacks above the value instead of
@@ -495,5 +477,6 @@
     td[data-label='Memory'] { grid-area: mem; }
     td[data-label='Network'] { grid-area: net; }
     td[data-label='Block I/O'] { grid-area: blk; }
+    td .two { display: flex; gap: 10px; min-width: 0; }
   }
 </style>
