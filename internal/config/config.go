@@ -5,9 +5,12 @@ package config
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net/netip"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"observarr/internal/collect/docker"
@@ -29,6 +32,14 @@ type Config struct {
 	HostCgroup      string         // OBSERVARR_HOST_CGROUP: host /sys/fs/cgroup mounted read-only; empty = no container usage
 	HostDisks       []string       // OBSERVARR_HOST_DISKS: comma-separated paths whose file systems are measured
 	DockerHost      string         // OBSERVARR_DOCKER_HOST: socket proxy, tcp://host:port or unix:///path; empty = no Docker
+	TrafficBudget   Budget         // OBSERVARR_TRAFFIC_BUDGET, e.g. "1400GB/day" or "20TB/month"; zero = none
+}
+
+// Budget is a traffic allowance: Limit bytes (down and up together) per Period, "day" or "month". The zero
+// value means no budget.
+type Budget struct {
+	Period string
+	Limit  uint64
 }
 
 // FromEnv builds a Config using getenv (os.Getenv in production).
@@ -95,7 +106,34 @@ func FromEnv(getenv func(string) string) (Config, error) {
 			return Config{}, fmt.Errorf("OBSERVARR_DOCKER_HOST: %w", err)
 		}
 	}
+	if v := getenv("OBSERVARR_TRAFFIC_BUDGET"); v != "" {
+		b, err := parseBudget(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("OBSERVARR_TRAFFIC_BUDGET: %q is not an amount per day or month, e.g. 1400GB/day or 20TB/month", v)
+		}
+		c.TrafficBudget = b
+	}
 	return c, nil
+}
+
+// budgetRe is an amount in decimal gigabytes or terabytes per day or month, as providers count traffic.
+var budgetRe = regexp.MustCompile(`(?i)^(\d{1,7}(?:\.\d{1,3})?)\s*(GB|TB)\s*/\s*(day|month)$`)
+
+// parseBudget reads a budget such as "1400GB/day" or "20TB/month" (1 GB = 10^9 bytes).
+func parseBudget(s string) (Budget, error) {
+	m := budgetRe.FindStringSubmatch(strings.TrimSpace(s))
+	if m == nil {
+		return Budget{}, errors.New("invalid budget")
+	}
+	n, err := strconv.ParseFloat(m[1], 64)
+	if err != nil || n <= 0 {
+		return Budget{}, errors.New("invalid budget")
+	}
+	unit := 1e9
+	if strings.EqualFold(m[2], "TB") {
+		unit = 1e12
+	}
+	return Budget{Period: strings.ToLower(m[3]), Limit: uint64(math.Round(n * unit))}, nil
 }
 
 // parsePrefix accepts a CIDR or a single address (which becomes a /32 or /128).

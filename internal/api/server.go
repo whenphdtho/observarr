@@ -94,6 +94,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/events", s.requireSession(s.events))
 	mux.Handle("GET /api/system", s.requireSession(s.systemState))
 	mux.Handle("GET /api/system/history", s.requireSession(s.systemHistory))
+	mux.Handle("GET /api/network", s.requireSession(s.network))
 	mux.Handle("GET /api/discovery", s.requireSession(s.discoveryState))
 	mux.Handle("POST /api/discovery/network", s.requireSession(s.discoverNetwork))
 	mux.Handle("POST /api/discovery/linked", s.requireSession(s.discoverLinked))

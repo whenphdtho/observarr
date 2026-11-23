@@ -130,3 +130,24 @@ func TestSecretKeyFile(t *testing.T) {
 		t.Fatalf("key file = %q", c.SecretKeyFile)
 	}
 }
+
+func TestTrafficBudget(t *testing.T) {
+	for in, want := range map[string]Budget{
+		"":               {},
+		"1400GB/day":     {Period: "day", Limit: 1400e9},
+		" 20 tb / Month": {Period: "month", Limit: 20e12},
+		"0.5TB/day":      {Period: "day", Limit: 5e11},
+		"1.25GB/month":   {Period: "month", Limit: 1.25e9},
+	} {
+		c, err := FromEnv(env(map[string]string{"OBSERVARR_TRAFFIC_BUDGET": in}))
+		if err != nil || c.TrafficBudget != want {
+			t.Errorf("%q: %+v %v, want %+v", in, c.TrafficBudget, err, want)
+		}
+	}
+	for _, in := range []string{"1400", "1400GiB/day", "0GB/day", "0.0001GB/day", "-5GB/day", "5GB/week", "5 MB/day",
+		"1e3GB/day", "GB/day", "99999999GB/day"} {
+		if _, err := FromEnv(env(map[string]string{"OBSERVARR_TRAFFIC_BUDGET": in})); err == nil {
+			t.Errorf("%q accepted", in)
+		}
+	}
+}
