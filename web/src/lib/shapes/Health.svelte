@@ -33,7 +33,9 @@
     <p class="row">
       <span class="chip dotted state" class:ok={up} class:fail={!up}>{up ? 'Up' : 'Down'}</span>
       {#if data}
-        <span class="chip num ellipsis" title={`version ${data.version}`}>v{data.version}</span>
+        {#if data.version}
+          <span class="chip num ellipsis" title={`version ${data.version}`}>v{data.version}</span>
+        {/if}
         <span class="chip num">{data.latencyMs} ms</span>
       {/if}
       <span class="muted age" title={reading.at}>{age}</span>
