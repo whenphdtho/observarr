@@ -138,10 +138,10 @@
     <nav aria-label="Views">
       <p class="cap" aria-hidden="true">Views</p>
       {#each VIEWS as v (v.id)}
-        <a class="vbtn" href={v.hash || '#/'} aria-current={view === v.id ? 'page' : undefined}
+        <a class="vbtn" href={v.hash || '#/'} aria-current={view === v.id ? 'page' : undefined} title={v.label}
           onclick={(e) => { e.preventDefault(); select(v.id); }}>
           <Icon name={v.icon} />
-          {v.label}
+          <span class="vlabel">{v.label}</span>
         </a>
       {/each}
     </nav>
@@ -285,7 +285,11 @@
       padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); background: var(--rail); border-top: 1px solid var(--border);
     }
     nav .cap { display: none; }
-    .vbtn { flex: 1 1 0; min-width: 0; flex-direction: column; gap: 3px; padding: 7px 2px; margin: 0; font-size: 11px; }
+    .vbtn {
+      flex: 1 1 0; min-width: 0; min-height: 48px; flex-direction: column; justify-content: center; gap: 3px;
+      padding: 7px 2px; margin: 0; font-size: 11px;
+    }
+    .vlabel { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
     .vbtn[aria-current='page'] { background: var(--accent-soft); color: var(--accent-text); }
     .vbtn[aria-current='page'] :global(.icon) { color: var(--accent-text); }
     .top { margin: 10px 0 18px; }
@@ -293,5 +297,11 @@
   }
   @media (max-width: 400px) {
     .live .ago { display: none; }
+  }
+  /* Six labels no longer fit below 390px: the dock shows icons only, the label stays the link's name. */
+  @media (max-width: 389px) {
+    .vlabel {
+      position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+    }
   }
 </style>
