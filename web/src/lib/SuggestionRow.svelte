@@ -163,7 +163,7 @@
       {/if}
       {#if showKey && !useFoundKey}
         <label>
-          <span>{keyLabel}{#if !needsKey} <span class="muted hint">· optional</span>{/if}</span>
+          <span>{keyLabel}{#if !needsKey}{' '}<span class="muted hint">· optional</span>{/if}</span>
           <input type="password" bind:value={apiKey} autocomplete="off" maxlength="256"
             aria-describedby={adapter?.keyHint ? `${uid}-keyhint` : undefined} />
           {#if adapter?.keyHint}<span id={`${uid}-keyhint`} class="muted hint">{adapter.keyHint}</span>{/if}

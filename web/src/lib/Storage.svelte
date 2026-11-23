@@ -3,6 +3,7 @@
   import Icon from './icons/Icon.svelte';
   import { snapshot, systemError, adapters, adapterFor } from './data.js';
   import { now } from './ticker.js';
+  import { connectDocs } from './urls.js';
   import { formatBytes, formatRate, formatPercent, formatAge } from './format.js';
   import { serviceStatus } from './status.js';
   import { diskParts, diskTotals, mountServices, mountSummary, mountProblem, percentOf } from './storage.js';
@@ -12,14 +13,13 @@
   let { services = [] } = $props();
 
   const TOP_TRANSFERS = 5;
-  const DEPLOY_DOCS = 'https://github.com/whenphdtho/observarr/blob/main/docs/deploy.md#storage';
 
   const disks = $derived($snapshot?.host?.disks ?? []);
   const totals = $derived(diskTotals(disks));
   const sources = $derived(mountServices(services));
   const sum = $derived(mountSummary(sources));
   // The apps that can report mounts, by name, as the adapters list gives them.
-  const mountApps = $derived($adapters.filter((a) => a.kinds?.includes('mounts')).map((a) => a.name));
+  const mountApps = $derived($adapters.filter((a) => a.kinds?.includes('mounts')));
 
   function cacheText(m) {
     if (!m.cache) return m.cacheMode ? `cache ${m.cacheMode}` : 'no cache';
@@ -112,15 +112,20 @@
     <div class="empty">
       <Icon name="cloud" size={28} />
       <b>No mounts monitored yet</b>
-      <p>
-        Mounts and their caches show here once a service that reports them is added
-        {#if mountApps.length}({mountApps.join(', ')}){/if}.
-        Point it at the app's remote-control address on the Apps view.
-      </p>
-      <p>
-        <a href="#/apps">Add a service</a> ·
-        <a href={DEPLOY_DOCS} target="_blank" rel="noopener noreferrer">How to connect one</a>
-      </p>
+      {#if mountApps.length}
+        <span>
+          Add {mountApps.map((a) => a.name).join(' or ')} on the Apps view to see its mounts, caches and uploads.
+          Observarr only makes read-only calls to it.
+        </span>
+        <span class="links">
+          {#each mountApps as a (a.type)}
+            <a href={connectDocs(a.name)} target="_blank" rel="noopener noreferrer">How to connect {a.name}</a>
+          {/each}
+          <a href="#/apps">Go to Apps</a>
+        </span>
+      {:else}
+        <span>Connect a service that mounts remote storage to see its mounts and caches.</span>
+      {/if}
     </div>
   {/if}
 
@@ -257,7 +262,6 @@
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
   .sw.avail { box-shadow: inset 0 0 0 1px var(--border2); }
 
-  .empty p { max-width: 52ch; font-size: 13px; overflow-wrap: anywhere; }
 
   .svc-icon { position: relative; display: inline-grid; color: var(--muted); flex: none; }
   .svc-icon .status-dot { width: 9px; height: 9px; right: -4px; bottom: -3px; border-width: 2px; border-color: var(--surface); }

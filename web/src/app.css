@@ -223,6 +223,8 @@ table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
 .empty .icon { color: var(--dim); margin-bottom: 4px; }
 .empty b { color: var(--text); font-size: 14.5px; font-weight: 600; }
 .empty button { margin-top: 10px; }
+.empty > span { max-width: 60ch; font-size: 13px; overflow-wrap: anywhere; }
+.empty .links { display: flex; gap: 6px 16px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }

@@ -3,6 +3,7 @@
   import Kpi from './Kpi.svelte';
   import Icon from './icons/Icon.svelte';
   import { api } from './api.js';
+  import { connectDocs } from './urls.js';
   import { adapters } from './data.js';
   import { serviceList } from './live.js';
   import { now } from './ticker.js';
@@ -14,7 +15,6 @@
   // Security shows how Observarr itself is protected (GET /api/security: failed sign-ins, lockouts,
   // sessions, access settings) and, for every service filling the "security" shape, what it blocks.
   const RELOAD_MS = 30 * 1000;
-  const DOCS = 'https://github.com/whenphdtho/observarr/blob/main/docs/deploy.md';
   const RECENT_SHOWN = 10;
 
   let view = $state(null);
@@ -91,9 +91,6 @@
     return total > 0 ? Math.max(2, Math.round((count / total) * 100)) : 0;
   }
 
-  function sourceDocs(a) {
-    return `${DOCS}#connect-${a.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
-  }
 </script>
 
 <div class="security">
@@ -202,7 +199,7 @@
         </span>
         <span class="links">
           {#each sources as a (a.type)}
-            <a href={sourceDocs(a)} target="_blank" rel="noopener noreferrer">How to connect {a.name}</a>
+            <a href={connectDocs(a.name)} target="_blank" rel="noopener noreferrer">How to connect {a.name}</a>
           {/each}
           <a href="#/apps">Go to Apps</a>
         </span>
@@ -446,8 +443,6 @@
   .note { font-size: 12.5px; margin-top: 10px; }
   .mono { font-variant-numeric: tabular-nums; }
   h3 { font-size: 12.5px; font-weight: 600; color: var(--text2); margin: 16px 0 8px; }
-
-  .empty .links { display: flex; gap: 6px 16px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
 
   .figures { display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .fig {

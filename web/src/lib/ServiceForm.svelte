@@ -150,7 +150,7 @@
 
     {#if showKey}
       <label>
-        <span>{keyLabel}{#if !needsKey} <span class="muted hint">· optional</span>{/if}</span>
+        <span>{keyLabel}{#if !needsKey}{' '}<span class="muted hint">· optional</span>{/if}</span>
         <input type="password" bind:value={apiKey} autocomplete="off" maxlength="256"
           required={mode === 'edit' && addressChanged && needsKey}
           aria-describedby={mode === 'edit' || info?.keyHint ? `${uid}-keyhint` : undefined} />
