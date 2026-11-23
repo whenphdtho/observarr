@@ -43,13 +43,14 @@ type Server struct {
 	SetupToken     string
 	SetupTokenFile string
 
-	hashSlots   chan struct{}     // bounds concurrent password hashing; see withHashSlot
-	servicesMu  sync.Mutex        // serializes changes to services, so store, hub and poller always agree
-	streams     atomic.Int32      // open live event streams; changed only under streamsMu
-	pingEvery   time.Duration     // interval of keep-alive comments and session checks on live event streams
-	systemEvery time.Duration     // least interval between "system" events on one live event stream
-	discovery   *discovery.Engine // suggestions; keys found stay in here
-	discovering atomic.Bool       // a discovery run is in progress
+	hashSlots    chan struct{}     // bounds concurrent password hashing; see withHashSlot
+	servicesMu   sync.Mutex        // serializes changes to services, so store, hub and poller always agree
+	streams      atomic.Int32      // open live event streams; changed only under streamsMu
+	pingEvery    time.Duration     // interval of keep-alive comments and session checks on live event streams
+	systemEvery  time.Duration     // least interval between "system" events on one live event stream
+	discovery    *discovery.Engine // suggestions; keys found stay in here
+	discovering  atomic.Bool       // a discovery run is in progress
+	listingLocal atomic.Bool       // the apps on this server are being listed (GET /api/discovery/local)
 
 	streamsMu      sync.Mutex
 	sessionStreams map[string]int // open live event streams per session, keyed by its CSRF token
@@ -96,6 +97,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/system/history", s.requireSession(s.systemHistory))
 	mux.Handle("GET /api/network", s.requireSession(s.network))
 	mux.Handle("GET /api/discovery", s.requireSession(s.discoveryState))
+	mux.Handle("GET /api/discovery/local", s.requireSession(s.discoverLocal))
 	mux.Handle("POST /api/discovery/network", s.requireSession(s.discoverNetwork))
 	mux.Handle("POST /api/discovery/linked", s.requireSession(s.discoverLinked))
 	mux.Handle("POST /api/discovery/config", s.requireSession(s.discoverConfig))

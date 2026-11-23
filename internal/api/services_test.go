@@ -38,6 +38,7 @@ type fakeApp struct {
 	info    adapter.Info
 	detects atomic.Int32
 	probes  atomic.Int32
+	prints  atomic.Int32 // Fingerprint calls
 
 	mu       sync.Mutex
 	probeKey string // the key of the latest probe
@@ -68,6 +69,7 @@ func (f *fakeApp) Probe(_ context.Context, t adapter.Target, kind shape.Kind) (a
 
 // Fingerprint recognises the app server (newAppServer) without a key.
 func (f *fakeApp) Fingerprint(ctx context.Context, t adapter.Target) (bool, string, error) {
+	f.prints.Add(1)
 	var v struct{ App string }
 	if err := adapter.GetJSON(ctx, t, "/fingerprint", "", &v); err != nil {
 		return false, "", err

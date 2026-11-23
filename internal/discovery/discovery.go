@@ -51,7 +51,7 @@ type Suggestion struct {
 	Version   string `json:"version,omitempty"`
 	KeyFound  bool   `json:"keyFound"`
 	KeySource string `json:"keySource,omitempty"`
-	Source    string `json:"source"` // "network" | "linked" | "config" | "docker"
+	Source    string `json:"source"` // "network" | "linked" | "config" | "docker" (Local reports the last two)
 	// Verified is false for a Docker find whose app could not be recognised at its URL; Reason says why.
 	Verified  bool   `json:"verified"`
 	Reason    string `json:"reason,omitempty"`
@@ -118,6 +118,7 @@ type find struct {
 	c          adapter.Candidate
 	version    string
 	unverified string // why the app could not be recognised; "" when it was, or the source read it from the app
+	source     string // the source that found it, when a run combines several; "" = the run's own
 }
 
 // Reasons a Docker find is not verified.
@@ -125,6 +126,7 @@ const (
 	reasonUnreachable = "not reachable from Observarr (different Docker network?)"
 	reasonOtherApp    = "something else answers at this address"
 	reasonUnchecked   = "not checked: this app cannot be recognised without its key"
+	reasonNotYet      = "not contacted yet: Observarr checks it when you add it"
 )
 
 // ScanNetwork probes http://host:<DefaultPort> of every adapter that implements
@@ -177,7 +179,7 @@ scan:
 	if ctx.Err() != nil {
 		errs = append(errs, SourceError{Target: "network", Message: "time limit (120 s) reached — scan a smaller range or list hosts"})
 	}
-	return e.keep(ctx, "network", finds, errs)
+	return e.keep(ctx, "network", finds, errs, false)
 }
 
 // probe fingerprints hostPort with each of adapters in turn until one recognises the app. When
@@ -251,13 +253,23 @@ func (e *Engine) Linked(ctx context.Context, sources []LinkedSource) (Result, er
 			}
 		}
 	}
-	return e.keep(ctx, "linked", finds, errs)
+	return e.keep(ctx, "linked", finds, errs, false)
 }
 
 // ConfigFolders reads every immediate subdirectory of the folder root (at most 50, in name order) with each
 // adapter that implements adapter.ConfigReader; the first that recognises a folder wins. A folder that does not
 // answer before ctx ends (a hung network mount, say) ends the run with an error for it.
 func (e *Engine) ConfigFolders(ctx context.Context, root string) (Result, error) {
+	finds, errs, err := e.configFinds(ctx, root)
+	if err != nil {
+		return Result{}, err
+	}
+	return e.keep(ctx, "config", finds, errs, false)
+}
+
+// configFinds reads the config folders under root for ConfigFolders and Local. It only reads files: no app is
+// contacted.
+func (e *Engine) configFinds(ctx context.Context, root string) ([]find, []SourceError, error) {
 	type listing struct {
 		dirents []fs.DirEntry
 		err     error
@@ -267,10 +279,10 @@ func (e *Engine) ConfigFolders(ctx context.Context, root string) (Result, error)
 		return listing{dirents, err}
 	})
 	if !ok {
-		return e.keep(ctx, "config", nil, []SourceError{{Target: filepath.Base(root), Message: errNoAnswer}})
+		return nil, []SourceError{{Target: filepath.Base(root), Message: errNoAnswer}}, nil
 	}
 	if list.err != nil {
-		return Result{}, list.err
+		return nil, nil, list.err
 	}
 	var readers []adapter.ConfigReader
 	for _, a := range e.adapters() {
@@ -329,7 +341,7 @@ func (e *Engine) ConfigFolders(ctx context.Context, root string) (Result, error)
 			errs = append(errs, SourceError{Target: d.Name(), Message: r.err.Error()})
 		}
 	}
-	return e.keep(ctx, "config", finds, errs)
+	return finds, errs, nil
 }
 
 const errNoAnswer = "the folder did not answer in time"
@@ -356,19 +368,53 @@ func await[T any](ctx context.Context, f func() T) (v T, ok bool) {
 func (e *Engine) Docker(ctx context.Context, cs []collect.Container) (Result, error) {
 	ctx, cancel := context.WithTimeout(ctx, e.scanTimeout)
 	defer cancel()
+	apps, errs := e.containerApps(cs)
+
+	var (
+		mu    sync.Mutex
+		finds []find
+		wg    sync.WaitGroup
+		slots = make(chan struct{}, maxProbes)
+	)
+	for _, ca := range apps {
+		select {
+		case slots <- struct{}{}:
+		case <-ctx.Done():
+		}
+		if ctx.Err() != nil {
+			errs = append(errs, SourceError{Target: "docker", Message: "the run stopped before every container was checked"})
+			break
+		}
+		wg.Go(func() {
+			defer func() { <-slots }()
+			f := e.verify(ctx, ca.a, ca.c)
+			mu.Lock()
+			finds = append(finds, f)
+			mu.Unlock()
+		})
+	}
+	wg.Wait()
+	return e.keep(ctx, "docker", finds, errs, false)
+}
+
+// containerApp is a running container an adapter recognises, with the candidate it stands for.
+type containerApp struct {
+	a     adapter.Adapter
+	c     adapter.Candidate
+	label bool // the URL comes from the container's "observarr.url" label
+}
+
+// containerApps returns the recognised running containers of cs, in order, without contacting any of them.
+func (e *Engine) containerApps(cs []collect.Container) ([]containerApp, []SourceError) {
 	var matchers []adapter.Adapter
 	for _, a := range e.adapters() {
 		if _, ok := a.(adapter.ImageMatcher); ok {
 			matchers = append(matchers, a)
 		}
 	}
-
 	var (
-		mu    sync.Mutex
-		finds []find
-		errs  []SourceError
-		wg    sync.WaitGroup
-		slots = make(chan struct{}, maxProbes)
+		out  []containerApp
+		errs []SourceError
 	)
 	for _, c := range cs {
 		if c.State != "running" {
@@ -387,25 +433,67 @@ func (e *Engine) Docker(ctx context.Context, cs []collect.Container) (Result, er
 			errs = append(errs, SourceError{Target: c.Name, Message: err.Error()})
 			continue
 		}
-		select {
-		case slots <- struct{}{}:
-		case <-ctx.Done():
-		}
-		if ctx.Err() != nil {
-			errs = append(errs, SourceError{Target: "docker", Message: "the run stopped before every container was checked"})
-			break
-		}
-		wg.Go(func() {
-			defer func() { <-slots }()
-			f := e.verify(ctx, a, adapter.Candidate{Type: a.Info().Type, Name: a.Info().Name, BaseURL: base,
-				Container: c.Name})
-			mu.Lock()
-			finds = append(finds, f)
-			mu.Unlock()
-		})
+		_, label := c.Labels["observarr.url"]
+		out = append(out, containerApp{a: a, label: label,
+			c: adapter.Candidate{Type: a.Info().Type, Name: a.Info().Name, BaseURL: base, Container: c.Name}})
 	}
-	wg.Wait()
-	return e.keep(ctx, "docker", finds, errs)
+	return out, errs
+}
+
+// Local lists the apps found on this server without contacting any of them: every running container of cs an
+// adapter recognises (as Docker does, but not fingerprinted, so each is unverified) and every config folder under
+// root (as ConfigFolders; root "" skips them). A host-less config find with a key is joined to the container of its
+// type when each is the only one of that type and the ports agree: the suggestion then has the container's address
+// and the folder's key, and the API sends that key to that address only. Earlier suggestions for the same app keep
+// their id, so a list the UI already shows stays valid when it lists again.
+func (e *Engine) Local(ctx context.Context, cs []collect.Container, root string) (Result, error) {
+	apps, errs := e.containerApps(cs)
+	var cfinds []find
+	if root != "" {
+		found, cerrs, err := e.configFinds(ctx, root)
+		if err != nil {
+			cerrs = append([]SourceError{{Target: filepath.Base(root), Message: "the config folder cannot be read"}}, cerrs...)
+		}
+		cfinds = found
+		errs = append(errs, cerrs...)
+	}
+
+	containers := make(map[string][]int) // per type, the containers found with a computed address
+	for i, ca := range apps {
+		if !ca.label {
+			containers[ca.c.Type] = append(containers[ca.c.Type], i)
+		}
+	}
+	hostless := make(map[string]int) // per type, the host-less config finds
+	for _, f := range cfinds {
+		if f.c.BaseURL.Hostname() == "" {
+			hostless[f.c.Type]++
+		}
+	}
+	finds := make([]find, 0, len(apps)+len(cfinds))
+	joined := make(map[int]bool)
+	for _, f := range cfinds {
+		is := containers[f.c.Type]
+		if f.c.BaseURL.Hostname() != "" || f.c.APIKey == "" || len(is) != 1 || hostless[f.c.Type] != 1 ||
+			apps[is[0]].c.BaseURL.Port() != f.c.BaseURL.Port() {
+			f.source = "config"
+			finds = append(finds, f)
+			continue
+		}
+		c := apps[is[0]].c
+		c.BaseURL = cloneURL(c.BaseURL)
+		c.BaseURL.Path = cmp.Or(f.c.BaseURL.Path, "/")
+		c.Name = cmp.Or(f.c.Name, c.Name)
+		c.APIKey, c.KeySource = f.c.APIKey, f.c.KeySource
+		finds = append(finds, find{c: c, unverified: reasonNotYet, source: "docker"})
+		joined[is[0]] = true
+	}
+	for i, ca := range apps {
+		if !joined[i] {
+			finds = append(finds, find{c: ca.c, unverified: reasonNotYet, source: "docker"})
+		}
+	}
+	return e.keep(ctx, "local", finds, errs, true)
 }
 
 // containerName matches the names Docker gives containers, at most 63 characters (a DNS label). Anything else
@@ -494,8 +582,9 @@ func (e *Engine) adapters() []adapter.Adapter {
 }
 
 // keep drops finds that are already registered services, dismissed, or duplicates, stores the
-// rest as suggestions and returns them sorted by type, then URL.
-func (e *Engine) keep(ctx context.Context, source string, finds []find, errs []SourceError) (Result, error) {
+// rest as suggestions and returns them sorted by type, then URL. A fresh find replaces an earlier
+// suggestion for the same app; with reuse it keeps that suggestion's id.
+func (e *Engine) keep(ctx context.Context, source string, finds []find, errs []SourceError, reuse bool) (Result, error) {
 	// The run's own context may have ended (a timed-out scan still returns what it found).
 	ctx = context.WithoutCancel(ctx)
 	svcs, err := e.st.Services(ctx)
@@ -532,16 +621,23 @@ func (e *Engine) keep(ctx context.Context, source string, finds []find, errs []S
 			continue
 		}
 		skip[key] = true // once per run
-		for id, old := range e.entries {
+		id := ""
+		for oldID, old := range e.entries {
 			if old.key == key {
-				delete(e.entries, id) // a fresh find replaces an earlier one
+				if reuse && id == "" {
+					id = oldID
+				}
+				delete(e.entries, oldID) // a fresh find replaces an earlier one
 			}
+		}
+		if id == "" {
+			id = newID()
 		}
 		ent := &entry{c: f.c, key: key, expires: e.now().Add(suggestionTTL)}
 		ent.c.BaseURL = cloneURL(f.c.BaseURL)
-		ent.s = Suggestion{ID: newID(), Type: f.c.Type, Name: f.c.Name, URL: f.c.BaseURL.String(),
-			HostKnown: f.c.BaseURL.Hostname() != "", Version: f.version, KeyFound: f.c.APIKey != "", Source: source,
-			Verified: f.unverified == "", Reason: f.unverified, Container: f.c.Container}
+		ent.s = Suggestion{ID: id, Type: f.c.Type, Name: f.c.Name, URL: f.c.BaseURL.String(),
+			HostKnown: f.c.BaseURL.Hostname() != "", Version: f.version, KeyFound: f.c.APIKey != "",
+			Source: cmp.Or(f.source, source), Verified: f.unverified == "", Reason: f.unverified, Container: f.c.Container}
 		if ent.s.Name == "" {
 			if a, ok := e.reg.Get(f.c.Type); ok {
 				ent.s.Name = a.Info().Name
