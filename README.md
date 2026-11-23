@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/whenphdtho/observarr/actions/workflows/ci.yml/badge.svg)](https://github.com/whenphdtho/observarr/actions/workflows/ci.yml)
 
-<img src="docs/images/demo.webp" width="880" alt="Observarr demo: signing in, Sonarr, Radarr and Prowlarr cards with live queue progress, adding Lidarr from a Docker suggestion, the System view with host figures and containers, and the same views on a phone">
+<img src="docs/images/demo.webp" width="880" alt="Observarr demo: signing in to the Overview with its live host chart, the Apps view with queues advancing, adding Lidarr from a Docker suggestion, the System view, and the same views on a phone">
 
 <sub>▶ [Watch in full quality (MP4)](docs/images/demo.mp4)</sub>
 
@@ -30,14 +30,20 @@ and its containers are doing — all from one small container. Status: early dev
 - **One container:** a Go binary with the Svelte UI embedded and SQLite for storage, running non-root on a
   distroless image. Saved API keys are encrypted at rest. Works on a phone, too.
 
+<p align="center">
+  <img src="docs/images/overview.png" alt="Overview: sidebar with the views, four key figures (services up, downloads, host CPU, memory), a live CPU chart, a Needs attention list with a Radarr health warning and an import problem, and a rail listing every app and the host's figures">
+  <br>
+  <sub>Overview: key figures, a live host chart and everything that needs attention</sub>
+</p>
+
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/apps.png" alt="Apps view: cards for Lidarr, Prowlarr, Radarr and Sonarr with container state, health, a Radarr health warning and download queues with progress bars"></td>
-    <td width="50%"><img src="docs/images/system.png" alt="System view: CPU with a sparkline, memory, swap, load, uptime, disk and network tiles above a table of containers with state, CPU, memory, network, block I/O, restarts and uptime"></td>
+    <td width="50%"><img src="docs/images/apps.png" alt="Apps view: cards for Lidarr, Prowlarr, Radarr and Sonarr, each with its container's state and usage, health and version, a Radarr health warning, and download queues with progress, size left and ETA"></td>
+    <td width="50%"><img src="docs/images/system.png" alt="System view: CPU, memory, swap and uptime tiles, a live host activity chart, disk and network cards, and the start of the containers table"></td>
   </tr>
   <tr>
-    <td align="center"><sub>Apps: health, queues and each app's container</sub></td>
-    <td align="center"><sub>System: host figures and every container</sub></td>
+    <td align="center"><sub>Apps: health, queue and container of every service</sub></td>
+    <td align="center"><sub>System: host, disks, network and containers</sub></td>
   </tr>
   <tr>
     <td><img src="docs/images/discover-docker.png" alt="Discover services dialog with the Network, Linked apps, Config folders and Docker sources, and a Lidarr suggestion found in Docker"></td>
@@ -50,9 +56,9 @@ and its containers are doing — all from one small container. Status: early dev
 </table>
 
 <p align="center">
-  <img src="docs/images/phone-apps.png" width="260" alt="Apps view on a phone-width screen">
+  <img src="docs/images/phone-overview.png" width="260" alt="Overview on a phone-width screen: the four key figures as a two-by-two grid above the host chart, with the views in a dock at the bottom">
   &nbsp;
-  <img src="docs/images/phone-system.png" width="260" alt="System view on a phone-width screen">
+  <img src="docs/images/phone-system.png" width="260" alt="System view on a phone-width screen, with the views in a dock at the bottom">
 </p>
 
 ## Quick start
