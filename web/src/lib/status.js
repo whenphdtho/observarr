@@ -39,6 +39,40 @@ export function serviceLine(svc) {
   return { text: 'Up', detail: version ? `v${version}` : '', tone: '' };
 }
 
+// cardSummary is what a collapsed service card shows: one summary line ({ text, tone }) and one
+// lead row — the first queue item, else the first warning, else a placeholder — so every
+// collapsed card has the same rows whatever the service reports.
+export function cardSummary(svc) {
+  const health = svc.readings?.health;
+  const queue = svc.readings?.queue;
+  const hasQueue = (svc.kinds ?? []).includes('queue');
+  const items = queueItems(svc);
+  const warns = warnings(svc).filter((w) => w.level !== 'info');
+
+  let summary;
+  if (!health) summary = { text: 'Waiting for the first check…', tone: '' };
+  else if (!svc.up) summary = { text: health.error || 'Not answering', tone: 'fail' };
+  else {
+    const parts = [];
+    const n = downloading(svc);
+    const waiting = items.length - n;
+    if (n > 0) parts.push(`${n} downloading`);
+    if (waiting > 0) parts.push(`${waiting} queued`);
+    if (warns.length > 0) parts.push(`${warns.length} warning${warns.length === 1 ? '' : 's'}`);
+    if (parts.length) summary = { text: parts.join(' · '), tone: warns.length || items.some((it) => it.problem) ? 'warn' : '' };
+    else summary = { text: hasQueue ? 'No downloads' : 'No warnings', tone: '' };
+  }
+
+  let lead;
+  if (items.length > 0) lead = { kind: 'item', item: items[0] };
+  else if (warns.length > 0) lead = { kind: 'warning', warning: warns[0] };
+  else if (hasQueue && queue?.error) lead = { kind: 'note', text: queue.error, tone: 'fail' };
+  else if (hasQueue) lead = { kind: 'note', text: 'Queue is empty', tone: '' };
+  else if (health?.data) lead = { kind: 'note', text: `Answers in ${health.data.latencyMs} ms`, tone: '' };
+  else lead = { kind: 'note', text: 'Nothing to report', tone: '' };
+  return { summary, lead };
+}
+
 // attention lists what needs a look, worst first: services down, health warnings and errors,
 // stuck queue items, and containers that are unhealthy, restarting or dead. Each entry is
 // { key, tone, title, detail, href }.

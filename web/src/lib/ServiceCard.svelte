@@ -1,15 +1,17 @@
 <script>
   import { api } from './api.js';
   import { widgets } from './shapes/index.js';
-  import { formatPct, formatBytes, containerStatusClass } from './format.js';
-  import { serviceStatus } from './status.js';
+  import { formatPct, formatBytes, formatPercent, containerStatusClass } from './format.js';
+  import { serviceStatus, cardSummary } from './status.js';
   import Icon from './icons/Icon.svelte';
 
-  // ServiceCard renders one service: its identity (name, adapter, URL host) and a widget for
-  // each shape its adapter declares. It never names an app type — `adapter` is just the matching
-  // entry from GET /api/adapters, looked up by the caller. `onremoved` is called once the
-  // service is actually gone, so the caller can move focus somewhere that outlives this card.
-  let { service, adapter, onedit, onremoved } = $props();
+  // ServiceCard renders one service. Collapsed, it always has the same rows — header, one summary
+  // line and one lead row — so the cards of a grid row line up. Expanded, it shows a widget for
+  // each shape its adapter declares, the linked container, and Edit/Remove. It never names an app
+  // type — `adapter` is just the matching entry from GET /api/adapters, looked up by the caller.
+  // `onremoved` is called once the service is actually gone, so the caller can move focus somewhere
+  // that outlives this card.
+  let { service, adapter, expanded = false, ontoggle, onedit, onremoved } = $props();
 
   let dialogEl;
   let opener = null;
@@ -19,6 +21,11 @@
 
   const host = $derived(hostOf(service.url));
   const status = $derived(serviceStatus(service));
+  const health = $derived(service.readings?.health ?? null);
+  const version = $derived(health?.data?.version ?? '');
+  const card = $derived(cardSummary(service));
+  const lead = $derived(card.lead);
+  const detailsId = $derived(`service-details-${service.id}`);
   const container = $derived(service.container);
   const containerDot = $derived(container ? containerStatusClass(container.state, container.health) : '');
   const containerTitle = $derived(
@@ -26,6 +33,7 @@
       container.state === '' ? `${container.name}: container not found` :
       `${container.name}: ${container.state}${container.health ? ` (${container.health})` : ''}`,
   );
+  const pill = $derived(!health ? { text: 'Checking', tone: '' } : service.up ? { text: 'Up', tone: 'ok' } : { text: 'Down', tone: 'fail' });
 
   function hostOf(url) {
     try {
@@ -33,6 +41,10 @@
     } catch {
       return url;
     }
+  }
+
+  function warningText(w) {
+    return w.source ? `${w.source}: ${w.message}` : w.message;
   }
 
   function openRemove() {
@@ -72,7 +84,8 @@
   }
 </script>
 
-<article class="card service" id={`service-${service.id}`} tabindex="-1" aria-labelledby={`service-name-${service.id}`}>
+<article class="card service" class:open={expanded} id={`service-${service.id}`} tabindex="-1"
+  aria-labelledby={`service-name-${service.id}`}>
   <header>
     <span class="tile-icon" aria-hidden="true">
       <Icon name={adapter?.icon} />
@@ -84,35 +97,83 @@
         {adapter?.name ?? service.type} · {host}
       </p>
     </div>
-    <button type="button" class="ibtn" aria-label={`Edit ${service.name}`} title="Edit" onclick={() => onedit?.(service)}>
-      <Icon name="pencil" size={16} />
-    </button>
-    <button type="button" class="ibtn danger" aria-label={`Remove ${service.name}`} title="Remove" onclick={openRemove}>
-      <Icon name="trash-2" size={16} />
-    </button>
+    <div class="badges">
+      <span class="chip dotted state {pill.tone}">{pill.text}</span>
+      {#if version}<span class="chip num version" title={`version ${version}`}>v{version}</span>{/if}
+    </div>
   </header>
 
-  {#if container}
-    <p class="container-line" title={containerTitle}>
-      <Icon name="box" size={14} />
-      {#if container.state === ''}
-        <span class="ellipsis">container not found</span>
+  <p class="summary ellipsis {card.summary.tone}" title={card.summary.text}>{card.summary.text}</p>
+
+  {#if !expanded}
+    <div class="lead">
+      {#if lead.kind === 'item'}
+        <div class="lead-head">
+          <span class="ellipsis lead-title" title={lead.item.title}>{lead.item.title}</span>
+          <span class="num pct">{formatPercent(lead.item.progress)}</span>
+        </div>
+        <div class="bar" class:warn={!!lead.item.problem} role="progressbar" aria-valuemin="0" aria-valuemax="100"
+          aria-valuenow={Math.round(lead.item.progress * 100)}
+          aria-label={`${lead.item.title}: ${formatPercent(lead.item.progress)} done`}>
+          <i style:width={formatPercent(lead.item.progress)}></i>
+        </div>
+      {:else if lead.kind === 'warning'}
+        <p class="lead-warning level-{lead.warning.level}" title={warningText(lead.warning)}>
+          <Icon name="triangle-alert" size={14} />
+          <span class="visually-hidden">{lead.warning.level === 'error' ? 'Error' : 'Warning'}: </span>
+          <span class="ellipsis">{warningText(lead.warning)}</span>
+        </p>
       {:else}
-        <span class="dot {containerDot}" aria-hidden="true"></span>
-        <span class="ellipsis state">{container.state}{container.health ? ` (${container.health})` : ''}</span>
-        <span class="num">{container.state === 'running' ? formatPct(container.cpuPercent) : '—'}</span>
-        <span class="num">{container.state === 'running' ? formatBytes(container.memBytes) : '—'}</span>
-        <span class="num">{container.restarts} restart{container.restarts === 1 ? '' : 's'}</span>
+        <p class="lead-note ellipsis" class:fail={lead.tone === 'fail'} title={lead.text}>{lead.text}</p>
       {/if}
-    </p>
+    </div>
   {/if}
 
-  {#each service.kinds as kind (kind)}
-    {#if widgets[kind]}
-      {@const Widget = widgets[kind]}
-      <Widget reading={service.readings?.[kind]} />
+  {#if expanded}
+    <div class="details" id={detailsId}>
+      {#if container}
+        <p class="container-line" title={containerTitle}>
+          <Icon name="box" size={14} />
+          {#if container.state === ''}
+            <span class="ellipsis">{container.name}: container not found</span>
+          {:else}
+            <span class="dot {containerDot}" aria-hidden="true"></span>
+            <span class="ellipsis state">{container.name} · {container.state}{container.health ? ` (${container.health})` : ''}</span>
+            <span class="num">{container.state === 'running' ? formatPct(container.cpuPercent) : '—'}</span>
+            <span class="num">{container.state === 'running' ? formatBytes(container.memBytes) : '—'}</span>
+            <span class="num">{container.restarts} restart{container.restarts === 1 ? '' : 's'}</span>
+          {/if}
+        </p>
+      {/if}
+      <div class="widgets">
+        {#each service.kinds as kind (kind)}
+          {#if widgets[kind]}
+            {@const Widget = widgets[kind]}
+            <div class="widget"><Widget reading={service.readings?.[kind]} /></div>
+          {/if}
+        {/each}
+      </div>
+    </div>
+  {/if}
+
+  <footer>
+    <button type="button" class="toggle" aria-expanded={expanded} aria-controls={expanded ? detailsId : undefined}
+      onclick={() => ontoggle?.(service.id)}>
+      <Icon name="chevron-right" size={15} />
+      {expanded ? 'Hide details' : 'Show details'}
+      <span class="visually-hidden">of {service.name}</span>
+    </button>
+    {#if expanded}
+      <span class="manage">
+        <button type="button" class="quiet" onclick={() => onedit?.(service)}>
+          <Icon name="pencil" size={14} />Edit<span class="visually-hidden"> {service.name}</span>
+        </button>
+        <button type="button" class="quiet danger" onclick={openRemove}>
+          <Icon name="trash-2" size={14} />Remove<span class="visually-hidden"> {service.name}</span>
+        </button>
+      </span>
     {/if}
-  {/each}
+  </footer>
 </article>
 
 <dialog bind:this={dialogEl} aria-labelledby={`remove-title-${service.id}`}
@@ -127,7 +188,10 @@
 </dialog>
 
 <style>
-  .service { display: grid; gap: 14px; align-content: start; scroll-margin-top: 16px; }
+  .service {
+    display: grid; grid-template-rows: auto auto 1fr auto; gap: 12px; scroll-margin-top: 16px; padding: 16px 18px 12px;
+  }
+  .service.open { grid-column: 1 / -1; grid-template-rows: none; }
   .service:focus { outline: none; }
   .service:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   header { display: flex; align-items: center; gap: 12px; min-width: 0; }
@@ -136,7 +200,32 @@
   .ident { display: grid; min-width: 0; flex: 1; line-height: 1.35; }
   h2 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
   .ident p { font-size: 12.5px; }
-  header .ibtn { border-color: transparent; }
+  .badges { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 0 1 auto; }
+  .badges .state { flex: none; font-weight: 550; }
+  .badges .version { flex: 0 1 auto; max-width: 110px; }
+
+  .summary { font-size: 13px; color: var(--text2); }
+  .summary.warn { color: var(--warn); }
+  .summary.fail { color: var(--fail); }
+
+  /* The lead row has one fixed height, whatever it holds, so collapsed cards line up. */
+  .lead {
+    height: 46px; display: grid; align-content: center; gap: 8px; min-width: 0; padding: 0 12px;
+    border-radius: var(--r-sm); background: var(--surface2);
+  }
+  .lead-head { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+  .lead-title { flex: 1; font-size: 13px; font-weight: 550; }
+  .pct { flex: none; font-size: 12.5px; color: var(--text2); }
+  .lead .bar { background: var(--surface3); }
+  .lead-warning { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12.5px; color: var(--text2); }
+  .lead-warning :global(.icon) { color: var(--warn); }
+  .lead-warning.level-error :global(.icon) { color: var(--fail); }
+  .lead-note { font-size: 12.5px; color: var(--muted); }
+  .lead-note.fail { color: var(--fail); }
+
+  .details { display: grid; gap: 14px; min-width: 0; }
+  .widgets { display: grid; gap: 4px 28px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); align-items: start; }
+  .widget { min-width: 0; }
   .container-line {
     display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 10px; border-radius: var(--r-sm);
     background: var(--surface2); font-size: 12.5px; color: var(--text2);
@@ -144,5 +233,23 @@
   .container-line :global(.icon) { color: var(--muted); }
   .container-line .state { flex: 1 1 auto; }
   .container-line .num { flex: none; color: var(--muted); }
+
+  footer {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; margin: 0 -6px;
+    padding-top: 8px; border-top: 1px solid var(--border);
+  }
+  .toggle {
+    padding: 5px 8px; gap: 6px; color: var(--text2); background: transparent; border-color: transparent; font-weight: 500;
+  }
+  .toggle:hover:not(:disabled) { color: var(--text); background: var(--surface2); border-color: transparent; }
+  .toggle :global(.icon) { transition: transform 160ms var(--ease); }
+  .toggle[aria-expanded='true'] :global(.icon) { transform: rotate(90deg); }
+  .manage { display: flex; gap: 8px; margin-left: auto; }
+  .manage button { padding: 5px 11px; }
+  .manage .danger:hover:not(:disabled) { color: var(--fail); }
   dialog p { margin: 8px 0 14px; }
+
+  @container (max-width: 400px) {
+    .badges .version { display: none; }
+  }
 </style>

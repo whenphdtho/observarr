@@ -3,6 +3,7 @@
   import Overview from './Overview.svelte';
   import Network from './Network.svelte';
   import Apps from './Apps.svelte';
+  import AddApps from './AddApps.svelte';
   import System from './System.svelte';
   import Rail from './Rail.svelte';
   import Icon from './icons/Icon.svelte';
@@ -22,11 +23,16 @@
   ];
 
   // The view is remembered in the URL hash (#/network, #/apps, #/system), so a reload or a shared link keeps it.
+  // A view's own pages extend its hash (#/apps/add).
   function viewFromHash() {
-    return VIEWS.find((v) => v.hash && v.hash === window.location.hash)?.id ?? 'overview';
+    const h = window.location.hash;
+    return VIEWS.find((v) => v.hash && (h === v.hash || h.startsWith(v.hash + '/')))?.id ?? 'overview';
   }
 
+  const ADD_APPS = '#/apps/add';
   let view = $state(viewFromHash());
+  let hash = $state(window.location.hash);
+  const addingApps = $derived(view === 'apps' && hash === ADD_APPS);
   let query = $state('');
   let searchEl;
   let mainEl;
@@ -36,10 +42,19 @@
   const age = $derived($lastEvent ? ($now - $lastEvent < 10000 ? 'just now' : formatAge($lastEvent, $now)) : '');
 
   function select(id) {
-    if (view === id) return;
+    const target = VIEWS.find((v) => v.id === id).hash;
+    if (view === id && hash === target) return;
     view = id;
-    const hash = VIEWS.find((v) => v.id === id).hash;
-    history.replaceState(null, '', window.location.pathname + window.location.search + hash);
+    hash = target;
+    history.replaceState(null, '', window.location.pathname + window.location.search + target);
+    mainEl?.scrollTo(0, 0);
+    window.scrollTo(0, 0);
+  }
+
+  // openAddApps opens the Add apps page as a history entry of its own, so Back returns to the cards.
+  const ADD_SUB = 'Found on this server, on your network, or by hand';
+  function openAddApps() {
+    window.location.hash = ADD_APPS;
     mainEl?.scrollTo(0, 0);
     window.scrollTo(0, 0);
   }
@@ -85,7 +100,10 @@
     live.open();
     loadAdapters();
     loadSystem();
-    const onHashChange = () => { view = viewFromHash(); };
+    const onHashChange = () => {
+      view = viewFromHash();
+      hash = window.location.hash;
+    };
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
   });
@@ -140,8 +158,12 @@
     <div class="wrap">
       <header class="top">
         <div class="titles">
-          <h1>{current.label}</h1>
-          <p class="sub ellipsis" title={current.sub}>{current.sub}</p>
+          <h1>{addingApps ? 'Add apps' : current.label}</h1>
+          {#if addingApps}
+            <p class="sub ellipsis" title={ADD_SUB}>{ADD_SUB}</p>
+          {:else}
+            <p class="sub ellipsis" title={current.sub}>{current.sub}</p>
+          {/if}
         </div>
         <p class="live" class:stale={$reconnecting} role="status">
           <i aria-hidden="true"></i>
@@ -154,8 +176,10 @@
         <Overview {services} onjump={jumpTo} />
       {:else if view === 'network'}
         <Network />
+      {:else if view === 'apps' && addingApps}
+        <AddApps onback={() => select('apps')} />
       {:else if view === 'apps'}
-        <Apps {services} filtered={query.trim() !== ''} />
+        <Apps {services} filtered={query.trim() !== ''} onadd={openAddApps} />
       {:else}
         <System {query} />
       {/if}
