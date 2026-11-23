@@ -139,4 +139,16 @@
   @container (max-width: 400px) {
     .kpis { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   }
+  /* Phones: a 2×2 grid from 360px up, with the icon above the figures so every value keeps one
+     line; a single column below 360px. These come after the container queries so they win. */
+  @media (max-width: 720px) and (min-width: 360px) {
+    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .kpi { flex-direction: column; align-items: stretch; gap: 10px; padding: 13px 14px; }
+    .kpi .tile-icon { width: 32px; height: 32px; }
+    .v small { display: block; margin-left: 0; overflow: hidden; text-overflow: ellipsis; }
+    .s { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  }
+  @media (max-width: 359px) {
+    .kpis { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  }
 </style>
