@@ -459,3 +459,109 @@ func TestDiscoverDockerThenAddLinksTheContainer(t *testing.T) {
 		t.Fatalf("rerun = %d %+v", code, res)
 	}
 }
+
+// localList lists the apps on this server, by container.
+func (e *servicesEnv) localList() (sources map[string]any, byContainer map[string]discovery.Suggestion, errs []discovery.SourceError) {
+	e.t.Helper()
+	code, raw, _ := e.raw("GET", "/api/discovery/local", "", nil)
+	var res struct {
+		Sources     map[string]any
+		Suggestions []discovery.Suggestion
+		Errors      []discovery.SourceError
+	}
+	if code != 200 || json.Unmarshal(raw, &res) != nil {
+		e.t.Fatalf("GET /api/discovery/local = %d %s", code, raw)
+	}
+	byContainer = map[string]discovery.Suggestion{}
+	for _, s := range res.Suggestions {
+		byContainer[s.Container] = s
+	}
+	return res.Sources, byContainer, res.Errors
+}
+
+func TestDiscoverLocalNeedsASession(t *testing.T) {
+	e := newServicesEnv(t)
+	if code, _, _ := newClientFor(e.client).raw("GET", "/api/discovery/local", "", nil); code != 401 {
+		t.Fatalf("without a session = %d, want 401", code)
+	}
+	sources, found, errs := e.localList()
+	if sources["docker"] != false || sources["config"] != false || len(found) != 0 || len(errs) != 0 {
+		t.Fatalf("nothing set up: %v %v %v", sources, found, errs)
+	}
+}
+
+func TestDiscoverLocalListsWithoutContactingThenAdds(t *testing.T) {
+	f := &fakeCollector{}
+	docker := withDocker(f)
+	f.cs[0].Labels = map[string]string{"observarr.type": "fake"} // "app", at http://app:<port>/: nowhere
+	e := newServicesEnv(t, docker, withAppConfigs(t))
+	appURL := e.appURL
+	f.mu.Lock()
+	f.cs = append(f.cs, collect.Container{ID: "b2", Name: "found", State: "running", PID: 43,
+		Labels: map[string]string{"observarr.type": "fake", "observarr.url": appURL}})
+	f.mu.Unlock()
+	f.events <- collect.Event{Name: "found", Action: "start"}
+	eventuallyWithin(t, 10*time.Second, "both containers in the list", func() bool {
+		return len(e.srv.System.Snapshot().Containers) == 2
+	})
+	audits := len(e.auditRows())
+
+	sources, found, errs := e.localList()
+	if sources["docker"] != true || sources["config"] != true || len(errs) != 0 || len(found) != 2 {
+		t.Fatalf("local = %v %+v %v", sources, found, errs)
+	}
+	if n := e.app.prints.Load() + e.app.detects.Load() + e.keyless.prints.Load() + e.keyless.detects.Load(); n != 0 {
+		t.Fatalf("listing contacted an app %d times", n)
+	}
+	if len(e.auditRows()) != audits {
+		t.Fatalf("listing was audited: %v", e.auditRows())
+	}
+	// The config folder's key joins the one container whose address Observarr worked out itself.
+	app, labelled := found["app"], found["found"]
+	if want := "http://app:" + strconv.Itoa(e.appPort) + "/"; app.URL != want || !app.KeyFound ||
+		app.KeySource != "fake.key in apps" || app.Verified || app.Source != "docker" {
+		t.Fatalf("app = %+v", app)
+	}
+	if labelled.URL != appURL || labelled.KeyFound || labelled.Verified {
+		t.Fatalf("found = %+v", labelled)
+	}
+	if _, again, _ := e.localList(); again["app"].ID != app.ID || again["found"].ID != labelled.ID {
+		t.Fatal("a second listing changed the ids")
+	}
+
+	// The found key only goes to the container's address.
+	code, data := e.send("POST", "/api/services", fmt.Sprintf(
+		`{"type":"fake","name":"App","url":%q,"suggestion":%q,"useFoundKey":true}`, appURL, app.ID))
+	if code != 400 || data["error"] != "url: the found key is only sent to the address where the app was found" {
+		t.Fatalf("found key to another address = %d %v", code, data)
+	}
+	if e.app.detects.Load() != 0 {
+		t.Fatal("the found key was offered to another address")
+	}
+
+	// Test & add: the app is checked only now, on the user's click.
+	code, data = e.send("POST", "/api/services", fmt.Sprintf(
+		`{"type":"fake","name":"Found","url":%q,"suggestion":%q,"apiKey":%q}`, appURL, labelled.ID, testKey))
+	if code != 201 || e.app.detects.Load() != 1 {
+		t.Fatalf("add = %d %v", code, data)
+	}
+	id := int64(data["id"].(float64))
+	if svc, _ := e.srv.Store.ServiceByID(context.Background(), id); svc.Container != "found" {
+		t.Fatalf("stored link = %q", svc.Container)
+	}
+	if !e.hasAudit("added service: Found (fake)") {
+		t.Fatalf("audit = %v", e.auditRows())
+	}
+	if code, _ := e.send("POST", "/api/services", fmt.Sprintf(
+		`{"type":"fake","name":"Again","url":%q,"suggestion":%q,"apiKey":%q}`, appURL, labelled.ID, testKey)); code != 410 {
+		t.Fatalf("second add = %d, want 410", code)
+	}
+
+	// Linked now, so no longer listed; a dismissed find is gone for good.
+	if code, _ := e.send("POST", "/api/discovery/"+app.ID+"/dismiss", ""); code != 204 {
+		t.Fatalf("dismiss = %d", code)
+	}
+	if _, found, _ := e.localList(); len(found) != 0 {
+		t.Fatalf("after add and dismiss: %+v", found)
+	}
+}

@@ -9,7 +9,7 @@ you leave out, Observarr says so in the System view instead of failing.
 | The host's `/proc`, read-only | CPU %, memory, swap, load average, uptime, the host's traffic | `OBSERVARR_HOST_PROC` |
 | Disk paths | Disk usage bars | `OBSERVARR_HOST_DISKS` (comma-separated) |
 | The host's `/sys/fs/cgroup`, read-only | Per-container CPU %, memory, block I/O and traffic | `OBSERVARR_HOST_PROC` + `OBSERVARR_HOST_CGROUP` + `cgroup: host` on the Observarr container (below) |
-| A Docker socket proxy | Container list, state, health, restarts, lifecycle events, and the "Docker" discovery source | `OBSERVARR_DOCKER_HOST` |
+| A Docker socket proxy | Container list, state, health, restarts, lifecycle events, and listing your app containers on the Add apps page | `OBSERVARR_DOCKER_HOST` |
 
 None of this needs a privileged container or write access to anything: every mount below is `:ro`, and the
 socket proxy only ever answers GET requests (Observarr's own Docker client issues no other kind). Read
@@ -59,8 +59,8 @@ services:
       - TZ=Europe/Berlin   # daily traffic totals begin at local midnight
       # - OBSERVARR_TRAFFIC_BUDGET=20TB/month   # optional: show how much of a traffic budget is used
       # - OBSERVARR_INSECURE_COOKIES=1   # only for plain HTTP on a trusted LAN; leave unset behind an HTTPS reverse proxy
-      # Optional: suggests apps from their own config files (see README's "Discovering apps from their config
-      # folders"). Needs one read-only mount per app below.
+      # Optional: lists apps on the Add apps page from their own config files (see README's "Adding your apps").
+      # Needs one read-only mount per app below.
       # - OBSERVARR_APP_CONFIGS=/appconfig
     volumes:
       - ./data:/data

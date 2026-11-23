@@ -139,6 +139,48 @@ func (s *Server) discoverDocker(w http.ResponseWriter, r *http.Request, sess sto
 	})
 }
 
+// localTimeout bounds one listing of the apps on this server; only a hung config-folder mount takes that long.
+const localTimeout = 10 * time.Second
+
+// discoverLocal lists what this server shows of its apps without contacting any of them: the containers in the
+// sampler's list an adapter recognises, and the config folders. It is what the Add apps view shows as soon as it
+// opens, so it runs on its own, beside any discovery run, and is not audited: it reads, sends nothing anywhere and
+// shows no key. A second listing while one is running answers 409.
+func (s *Server) discoverLocal(w http.ResponseWriter, r *http.Request, _ store.Session) {
+	if !s.listingLocal.CompareAndSwap(false, true) {
+		writeError(w, http.StatusConflict, "the apps on this server are being listed already")
+		return
+	}
+	defer s.listingLocal.Store(false)
+	ctx, cancel := context.WithTimeout(r.Context(), localTimeout)
+	defer cancel()
+	var cs []collect.Container
+	var errs []discovery.SourceError
+	if s.Config.DockerHost != "" {
+		snap := s.systemSnapshot()
+		cs = make([]collect.Container, len(snap.Containers))
+		for i, v := range snap.Containers {
+			cs[i] = v.Container
+		}
+		for _, n := range snap.Notices { // Docker could not be read: say why no container is listed
+			if n == system.NoticeDocker || n == system.NoticeDockerError {
+				errs = append(errs, discovery.SourceError{Target: "docker", Message: n})
+			}
+		}
+	}
+	res, err := s.discovery.Local(ctx, cs, s.Config.AppConfigs)
+	if err != nil {
+		s.internal(w, r, err)
+		return
+	}
+	res.Errors = append(errs, res.Errors...)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"sources":     discoverySources{Network: true, Config: s.Config.AppConfigs != "", Docker: s.Config.DockerHost != ""},
+		"suggestions": res.Suggestions,
+		"errors":      res.Errors,
+	})
+}
+
 // discover runs one discovery source, one run at a time server-wide, under its own deadline: a
 // scan the client walks away from still ends on time, and ends with the server.
 func (s *Server) discover(w http.ResponseWriter, r *http.Request, sess store.Session, action, detail string,

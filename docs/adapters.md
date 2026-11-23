@@ -206,6 +206,12 @@ package finds them with a type assertion, so an adapter with no unauthenticated 
 to link, or no config file worth reading) simply implements none of them. Nothing in
 `internal/discovery` names an app type.
 
+The Add apps page lists the apps on the server as soon as it opens (`GET /api/discovery/local`,
+`Engine.Local`): it only uses `ImageMatcher` on the sampler's container list and `ConfigReader` on
+the config folders — never `Fingerprint`, `Detect` or any other request to an app. An app is first
+contacted when the user clicks "Test & add" on its row, which is `POST /api/services` with the
+suggestion's id (Detect runs there, as for any add).
+
 ```go
 // Fingerprinter recognises the app without credentials (used by the network scan).
 type Fingerprinter interface {
