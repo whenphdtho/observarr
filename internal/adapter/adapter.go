@@ -20,6 +20,7 @@ type Info struct {
 	DefaultPort int          `json:"defaultPort"` // suggested in the form
 	NeedsAPIKey bool         `json:"needsApiKey"`
 	Kinds       []shape.Kind `json:"kinds"` // shapes this adapter can fill; the UI shows only these
+	Icon        string       `json:"icon"`  // icon name hint, e.g. "tv"; the UI falls back to a generic icon
 }
 
 // Target is one configured service as the adapter sees it.

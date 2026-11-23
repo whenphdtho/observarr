@@ -497,6 +497,14 @@ func TestProbeHealthBoundsOversizedMessage(t *testing.T) {
 	}
 }
 
+func TestInfoIcon(t *testing.T) {
+	for typ, want := range map[string]string{"sonarr": "tv", "radarr": "film", "lidarr": "music", "prowlarr": "search"} {
+		if got := arr.New(definitionFor(t, typ)).Info().Icon; got != want {
+			t.Errorf("%s Info().Icon = %q, want %q", typ, got, want)
+		}
+	}
+}
+
 func TestProwlarrInfoHasNoQueueKindAndProbeQueueIsUnknownKind(t *testing.T) {
 	a := arr.New(definitionFor(t, "prowlarr"))
 	info := a.Info()

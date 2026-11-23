@@ -38,6 +38,7 @@ type Info struct {
 	DefaultPort int          `json:"defaultPort"` // suggested in the form
 	NeedsAPIKey bool         `json:"needsApiKey"`
 	Kinds       []shape.Kind `json:"kinds"` // shapes this adapter can fill; the UI shows only these
+	Icon        string       `json:"icon"`  // icon name hint, e.g. "tv"; the UI falls back to a generic icon
 }
 
 // Target is one configured service as the adapter sees it.
@@ -121,6 +122,7 @@ type Definition struct {
 	MinMajor    int    // oldest supported major version
 	HasQueue    bool
 	QueueQuery  string // extra query parameters for /queue, e.g. "&includeUnknownSeriesItems=true"
+	Icon        string // icon name hint for the UI, e.g. "tv"
 }
 
 var Definitions = []Definition{ /* one entry per app */ }
@@ -129,8 +131,8 @@ var Definitions = []Definition{ /* one entry per app */ }
 If a new app speaks the same *arr API shape, adding it is:
 
 1. One more entry in `arr.Definitions` (type id, display name, the app's own `appName`, API
-   version, default port, minimum supported major version, whether it has a queue, and any extra
-   query parameters its `/queue` endpoint needs).
+   version, default port, minimum supported major version, whether it has a queue, any extra
+   query parameters its `/queue` endpoint needs, and an icon name hint).
 2. Fixtures under `internal/adapters/arr/testdata/` for its `/system/status` response (and
    `/health`, `/queue` if it differs meaningfully from the existing ones).
 3. A test asserting `Detect` succeeds against its fixture and that another family member's
