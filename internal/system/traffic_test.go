@@ -87,8 +87,8 @@ func TestTrafficSpreadsBytesOverMinutes(t *testing.T) {
 	tr.observe(at("2026-11-23", "10:01:30"), eth(6000, 600), nil)
 
 	s := tr.Summary()
-	if s.TodayRx != 6000 || s.TodayTx != 600 || s.PeakRx != 50 || s.PeakTx != 5 {
-		t.Fatalf("summary = %+v, want 6000/600 today and a peak of 50/5 B/s", s)
+	if s.TodayRx != 6000 || s.TodayTx != 600 || s.PeakRx != 100 || s.PeakTx != 10 {
+		t.Fatalf("summary = %+v, want 6000/600 today and a peak of 100/10 B/s (the reading)", s)
 	}
 	if s.Budget == nil || *s.Budget != (Budget{Period: "day", Limit: 1e9, Used: 6600}) {
 		t.Fatalf("budget = %+v", s.Budget)
@@ -101,6 +101,24 @@ func TestTrafficSpreadsBytesOverMinutes(t *testing.T) {
 	live := tr.View("5m")
 	if live.Range != "5m" || len(live.Times) != 2 || live.Host.Series.Rx[1] != 100 {
 		t.Fatalf("5m view = %+v %+v", live.Times, live.Host.Series)
+	}
+}
+
+func TestTrafficPeakRightAfterStart(t *testing.T) {
+	tr := NewTraffic(zone, "", 0)
+	tr.observe(at("2026-11-23", "10:00:00"), eth(0, 0), nil)
+	tr.observe(at("2026-11-23", "10:00:02"), eth(1_550_000, 20_000), nil) // 6.2 Mbit/s down, no minute closed yet
+	if s := tr.Summary(); s.PeakRx != 775_000 || s.PeakTx != 10_000 {
+		t.Fatalf("peak = %v/%v, want the reading's 775000/10000 B/s", s.PeakRx, s.PeakTx)
+	}
+	tr.observe(at("2026-11-23", "10:00:04"), eth(1_560_000, 20_000), nil) // slower now: the peak stays
+	if s := tr.Summary(); s.PeakRx != 775_000 {
+		t.Fatalf("peak after a slower reading = %v", s.PeakRx)
+	}
+	tr.observe(at("2026-11-24", "00:00:01"), eth(1_560_000, 20_000), nil) // too long after to count
+	tr.observe(at("2026-11-24", "00:00:03"), eth(1_560_200, 20_000), nil)
+	if s := tr.Summary(); s.PeakRx != 100 {
+		t.Fatalf("peak on a new day = %v, want only its own 100 B/s", s.PeakRx)
 	}
 }
 

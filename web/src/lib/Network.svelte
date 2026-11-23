@@ -113,9 +113,9 @@
   {:else}
     <div class="kpis">
       <Kpi icon="arrow-down" label="Download" value={formatMbit(nowRx)} unit="Mbit/s"
-        sub={`peak ${formatMbit(summary?.peakRx ?? 0)} today`} />
+        sub={`peak ${formatMbit(Math.max(summary?.peakRx ?? 0, nowRx))} Mbit/s today`} />
       <Kpi icon="arrow-up" label="Upload" value={formatMbit(nowTx)} unit="Mbit/s"
-        sub={`peak ${formatMbit(summary?.peakTx ?? 0)} today`} />
+        sub={`peak ${formatMbit(Math.max(summary?.peakTx ?? 0, nowTx))} Mbit/s today`} />
       <Kpi icon="gauge" label="Today" value={totalParts(todayTotal)[0]} unit={totalParts(todayTotal)[1]}
         sub={budget?.period === 'day' ? `limit ${formatTotal(budget.limitBytes)}` :
           `↓ ${formatTotal(today.rx)} · ↑ ${formatTotal(today.tx)}`}

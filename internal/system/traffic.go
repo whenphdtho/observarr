@@ -74,13 +74,13 @@ type Traffic struct {
 	last     time.Time                  // latest reading
 	open     int64                      // the minute (since epoch) being collected; 0 before the first reading
 	day      string                     // the local day of open
-	dayStart int64                      // the first minute of day
 	month    uint64                     // host bytes of the month's days before day
+	peak     pair[float32]              // the host's highest rates in a reading of day (since the start, on the first day)
 	pending  map[[2]string]pair[uint64] // bytes by day and scope, not yet written
 }
 
-// TrafficSummary is the host's traffic today in bytes, its highest 1-minute rates today in bytes per second,
-// and the budget.
+// TrafficSummary is the host's traffic today in bytes, its highest rates today in bytes per second (of one
+// reading, every 2 s while someone watches), and the budget.
 type TrafficSummary struct {
 	TodayRx uint64  `json:"todayRx"`
 	TodayTx uint64  `json:"todayTx"`
@@ -183,8 +183,8 @@ func (t *Traffic) startDay(day string) {
 	for _, f := range t.flows {
 		f.today = pair[uint64]{}
 	}
-	start, _ := time.ParseInLocation(time.DateOnly, day, t.loc)
-	t.day, t.dayStart = day, minuteOf(start)
+	t.peak = pair[float32]{}
+	t.day = day
 }
 
 // openMinute makes m the minute being collected, starting a new day when m is in another one.
@@ -263,6 +263,9 @@ func (t *Traffic) observe(now time.Time, ifs []collect.NetIf, ctrs []netCounters
 		f.live[t.nextLive] = pair[float32]{}
 		if f.at.Equal(now) {
 			f.live[t.nextLive] = f.rate
+			if key == hostScope {
+				t.peak = pair[float32]{max(t.peak[0], f.rate[0]), max(t.peak[1], f.rate[1])}
+			}
 		}
 		if key != hostScope && now.Sub(f.seen) > trackedFor {
 			delete(t.flows, key)
@@ -371,13 +374,7 @@ func (t *Traffic) Summary() TrafficSummary {
 func (t *Traffic) summary() TrafficSummary {
 	host := t.flows[hostScope]
 	rx, tx := host.today[0]+uint64(host.open[0]), host.today[1]+uint64(host.open[1])
-	s := TrafficSummary{TodayRx: rx, TodayTx: tx}
-	for i, m := range t.minuteAt {
-		if m >= t.dayStart && m > 0 {
-			s.PeakRx = max(s.PeakRx, float64(host.minutes[i][0]))
-			s.PeakTx = max(s.PeakTx, float64(host.minutes[i][1]))
-		}
-	}
+	s := TrafficSummary{TodayRx: rx, TodayTx: tx, PeakRx: float64(t.peak[0]), PeakTx: float64(t.peak[1])}
 	if t.period != "" {
 		s.Budget = &Budget{Period: t.period, Limit: t.limit, Used: rx + tx}
 		if t.period == "month" {

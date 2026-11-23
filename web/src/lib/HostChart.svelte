@@ -53,7 +53,7 @@
       {#if traffic}
         <div class="peak">
           <span class="muted">peak today</span>
-          <span class="num">↓ {formatMbit(traffic.peakRx)} · ↑ {formatMbit(traffic.peakTx)}<small>Mbit/s</small></span>
+          <span class="num">↓ {formatMbit(Math.max(traffic.peakRx, rx))} · ↑ {formatMbit(Math.max(traffic.peakTx, tx))}<small>Mbit/s</small></span>
         </div>
       {/if}
     </div>
