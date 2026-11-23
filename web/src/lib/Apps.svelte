@@ -126,6 +126,8 @@
   .grid {
     display: grid; gap: 16px;
     grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    /* Each card keeps its own height instead of stretching to the tallest card in its row. */
+    align-items: start;
   }
   @media (max-width: 699px) {
     .grid { grid-template-columns: 1fr; }

@@ -116,7 +116,7 @@
 </dialog>
 
 <style>
-  .card.service { display: grid; gap: 10px; min-width: 0; }
+  .card.service { display: grid; gap: 10px; align-content: start; min-width: 0; }
   header { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
   header h3 { margin: 0; font-size: 16px; min-width: 0; }
   .type { margin-left: auto; flex-shrink: 0; }
@@ -128,7 +128,7 @@
   .container-line .dot.fail { background: var(--fail); }
   .container-line .state { flex-shrink: 1; min-width: 0; }
   .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .actions { display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
   dialog {
     background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 12px;
     padding: 20px; max-width: min(420px, calc(100vw - 32px));

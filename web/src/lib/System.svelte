@@ -198,7 +198,9 @@
 
       <div class="card tile">
         <h3>Memory</h3>
-        <p class="value">{formatBytes(host.memUsed)} / {formatBytes(host.memTotal)}</p>
+        <p class="value ellipsis compact-value" title={`${formatBytes(host.memUsed)} of ${formatBytes(host.memTotal)} used`}>
+          {formatBytes(host.memUsed)} / {formatBytes(host.memTotal)}
+        </p>
         <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"
           aria-valuenow={barPercent(host.memUsed, host.memTotal)}
           aria-label={`Memory: ${formatBytes(host.memUsed)} of ${formatBytes(host.memTotal)} used`}>
@@ -211,7 +213,9 @@
         {#if host.swapTotal === 0}
           <p class="muted">No swap.</p>
         {:else}
-          <p class="value">{formatBytes(host.swapUsed)} / {formatBytes(host.swapTotal)}</p>
+          <p class="value ellipsis compact-value" title={`${formatBytes(host.swapUsed)} of ${formatBytes(host.swapTotal)} used`}>
+            {formatBytes(host.swapUsed)} / {formatBytes(host.swapTotal)}
+          </p>
           <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"
             aria-valuenow={barPercent(host.swapUsed, host.swapTotal)}
             aria-label={`Swap: ${formatBytes(host.swapUsed)} of ${formatBytes(host.swapTotal)} used`}>
@@ -222,7 +226,7 @@
 
       <div class="card tile">
         <h3>Load</h3>
-        <p class="value ellipsis load-value" title="1 / 5 / 15 minute load average">
+        <p class="value ellipsis compact-value" title="1 / 5 / 15 minute load average">
           {host.load[0].toFixed(2)} · {host.load[1].toFixed(2)} · {host.load[2].toFixed(2)}
         </p>
         <p class="muted hint">1 · 5 · 15 min</p>
@@ -230,7 +234,7 @@
 
       <div class="card tile">
         <h3>Uptime</h3>
-        <p class="value">{formatDuration(host.uptimeNs)}</p>
+        <p class="value ellipsis" title={formatDuration(host.uptimeNs)}>{formatDuration(host.uptimeNs)}</p>
       </div>
 
       {#if disks.length > 0}
@@ -386,7 +390,9 @@
   .tile { display: grid; gap: 8px; align-content: start; min-width: 0; padding: 16px; }
   .tile h3 { margin: 0; font-size: 13px; color: var(--muted); font-weight: 600; text-transform: uppercase; }
   .value { margin: 0; font-size: 20px; font-weight: 600; }
-  .load-value { font-size: 17px; }
+  /* Two-part live values (memory, swap, load) stay on one line at the tiles' 180px minimum: a
+     slightly smaller font, and .ellipsis plus a title for anything that still does not fit. */
+  .compact-value { font-size: 16px; }
   .hint { margin: 0; font-size: 12px; }
   .sparkline { width: 100%; max-width: 160px; height: 28px; display: block; }
   .sparkline polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; }
