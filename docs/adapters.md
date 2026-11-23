@@ -196,6 +196,32 @@ For an app with its own API shape:
   `shape.Health.Warnings` at `shape.MaxWarnings` (both 50); `Queue.Total` still reports the app's
   real count even when `Items` is capped.
 
+## Example: the CrowdSec adapter
+
+`internal/adapters/crowdsec` is a small adapter with its own API shape, and the one that fills the
+`security` shape (`shape.Security`: counts by type, origin and scope, the top local scenarios, and at most
+`shape.MaxSecurityDecisions` recent local decisions).
+
+- **Type** `crowdsec`, **icon** `shield`, default port 8080, kinds `health` and `security`. The key is a
+  CrowdSec *bouncer* key, sent as `X-Api-Key`; it can only read decisions.
+- **Detect** asks the LAPI about one address (`GET /v1/decisions?ip=127.0.0.1`). Any decision list — `null`,
+  `[]` or entries — confirms it; 401/403 is `ErrUnauthorized`; a 404 or anything that is not a JSON array is
+  `ErrWrongApp`. The LAPI does not tell a bouncer its version, so `Identity.Version` stays empty (the health
+  widget then shows no version chip). The same quick call is the health probe.
+- **Probe(security)** reads `GET /v1/decisions`, every active decision. A community blocklist can hold tens of
+  thousands of entries, so the adapter uses `adapter.StreamJSONLimit` with a 48 MiB limit instead of the usual
+  4 MiB, and `adapter.DecodeArray` hands it one decision at a time: each is counted, only the newest local ones
+  (origins other than `CAPI` and `lists`) are kept, every breakdown tracks at most 256 distinct names, and
+  every kept text is clipped. If the answer is still over the limit, the counts so far are reported with
+  `Capped` set rather than failing the probe.
+- The security kind is polled once a minute (`cmd/observarr`: `poller.Config.Intervals`), not every 10 s.
+- **Out of scope:** alerts (`/v1/alerts`) need machine credentials, which can also write to the LAPI, so the
+  adapter never asks for them; nothing is ever added to or removed from CrowdSec.
+
+`adapter.StreamJSONLimit(ctx, t, path, keyHeader, limit, read)` is `StreamJSON` with a body limit of your own
+(at most `adapter.MaxStreamBytes`, 64 MiB). Use it only when `read` keeps a bounded amount of what it decodes:
+the limit bounds what is read from the network, not what your callback holds on to.
+
 ## Discovery (optional)
 
 Discovery (`internal/discovery`) *suggests* services — from a user-started network scan, from apps
