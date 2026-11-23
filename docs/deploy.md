@@ -78,8 +78,9 @@ services:
       # - /srv/sonarr/config:/appconfig/sonarr:ro   # one such mount per app, only with OBSERVARR_APP_CONFIGS
 
   socket-proxy:
-    # 3.4, pinned by digest: this image reads the Docker socket, so a re-pushed tag must not change it unseen
-    image: tecnativa/docker-socket-proxy@sha256:027f9fa5ee70be5836eeaa10ce889d7a83f34a8db16a7f412818b92997e0beab
+    # latest (v0.6.0 deprecated the versioned tags in favor of latest/lts/3.4), pinned by digest:
+    # this image reads the Docker socket, so a re-pushed tag must not change it unseen
+    image: tecnativa/docker-socket-proxy@sha256:be1ac64f33bd82043beb504822a17ba6b71668ea1ad7cf51a9a01d27bb7ab047
     restart: unless-stopped
     environment:
       - CONTAINERS=1   # container list, inspect and (see below) more than that
