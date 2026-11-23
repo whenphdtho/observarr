@@ -1,0 +1,77 @@
+# Observarr with the host and container figures turned on. See ../docs/deploy.md for what each
+# source enables, the cgroup v1 caveat and the security notes (socket proxy, host /proc, uid
+# 65532 data directory). No image is published yet, so this builds from the repo root (run
+# `docker compose -f deploy/docker-compose.yml build` once, or on every `up`); adjust the data
+# disk(s) and (if you use it) the app config mounts.
+services:
+  observarr:
+    build: ..
+    image: observarr:local
+    restart: unless-stopped
+    # Hardening that costs nothing here: Observarr never writes outside /data (a volume, unaffected
+    # by read_only) and needs no Linux capability or privilege escalation.
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp   # some of SQLite's own temp files still want a writable /tmp even with read_only above
+    # A dedicated uid, not the default 65532 every distroless "nonroot" image shares — see
+    # ../docs/deploy.md's Security notes. chown ./data (and any host mount uid 64000 needs to read)
+    # before uncommenting.
+    # user: "64000:64000"
+    # The container's own cgroup namespace must be the host's: a container's cgroup path (read from its
+    # /proc/<pid>/cgroup) is then the same path the mounted /host/sys/fs/cgroup uses, so Observarr can find it.
+    # Without this, container CPU/memory/I/O stay unavailable even with the mounts below.
+    cgroup: host
+    ports:
+      - "9898:9898"
+    networks:
+      - default    # Compose's own network for this file — join your apps' existing network too (see
+                   # the README's "Adding your apps") if you want to reach them from here
+      - internal    # reach the socket proxy, and nothing else
+    environment:
+      - OBSERVARR_HOST_PROC=/host/proc
+      - OBSERVARR_HOST_CGROUP=/host/sys/fs/cgroup
+      - OBSERVARR_HOST_DISKS=/host/media
+      - OBSERVARR_DOCKER_HOST=tcp://socket-proxy:2375
+      # - OBSERVARR_INSECURE_COOKIES=1   # only for plain HTTP on a trusted LAN; leave unset behind an HTTPS reverse proxy
+      # Optional: suggests apps from their own config files (see README's "Discovering apps from their config
+      # folders"). Needs one read-only mount per app below.
+      # - OBSERVARR_APP_CONFIGS=/appconfig
+    volumes:
+      - ./data:/data
+      # Read-only, but every process's environment variables and open files are visible under here for
+      # every process on the host (e.g. /host/proc/<pid>/environ, /host/proc/<pid>/root), not just the
+      # handful of aggregate files Observarr's own code reads — see ../docs/deploy.md's Security notes
+      # for a narrower alternative if you only want host figures, not per-container ones.
+      - /proc:/host/proc:ro
+      - /sys/fs/cgroup:/host/sys/fs/cgroup:ro
+      # One or more data disks to show in the System view; list each one here and in
+      # OBSERVARR_HOST_DISKS above.
+      - /mnt/media:/host/media:ro
+      # /:/host/root:ro covers the whole root filesystem read-only instead — every other app's data on
+      # it, and the path the Docker socket itself lives at, not just a disk's usage. Avoid it; see
+      # ../docs/deploy.md's Security notes.
+      # - /:/host/root:ro
+      # - /srv/sonarr/config:/appconfig/sonarr:ro   # one such mount per app, only with OBSERVARR_APP_CONFIGS
+
+  socket-proxy:
+    # 3.4, pinned by digest: this image reads the Docker socket, so a re-pushed tag must not change it unseen
+    image: tecnativa/docker-socket-proxy@sha256:027f9fa5ee70be5836eeaa10ce889d7a83f34a8db16a7f412818b92997e0beab
+    restart: unless-stopped
+    environment:
+      - CONTAINERS=1   # container list, inspect and (see ../docs/deploy.md's Security notes) more than that
+      - EVENTS=1       # the lifecycle event stream (start/stop/health changes refresh the list promptly)
+      - VERSION=1      # one call at startup to negotiate the API version
+      # Other endpoints are refused because their own variables default to 0 when unset; POST=0 is
+      # listed anyway, for emphasis, since it's the one a write would need.
+      - POST=0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - internal    # no other network, and no published port: nothing outside this pair can reach it
+
+networks:
+  internal:
+    internal: true   # Docker refuses this network any route to the outside world, published ports included

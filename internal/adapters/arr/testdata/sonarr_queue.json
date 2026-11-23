@@ -1,0 +1,58 @@
+{
+  "page": 1,
+  "pageSize": 50,
+  "sortKey": "timeleft",
+  "sortDirection": "ascending",
+  "totalRecords": 3,
+  "records": [
+    {
+      "seriesId": 1,
+      "episodeId": 10,
+      "title": "Example.Show.S01E01.1080p.WEB",
+      "status": "downloading",
+      "size": 2000000000,
+      "sizeleft": 500000000,
+      "timeleft": "00:45:00",
+      "trackedDownloadStatus": "ok",
+      "trackedDownloadState": "downloading",
+      "statusMessages": [],
+      "errorMessage": "",
+      "downloadId": "EXAMPLE0000000001"
+    },
+    {
+      "seriesId": 2,
+      "episodeId": 20,
+      "title": "Example.Show.S02E05.1080p.WEB",
+      "status": "downloading",
+      "size": 1500000000,
+      "sizeleft": 1500000000,
+      "timeleft": "01:30:00",
+      "trackedDownloadStatus": "warning",
+      "trackedDownloadState": "importPending",
+      "statusMessages": [
+        {
+          "title": "Example.Show.S02E05.1080p.WEB",
+          "messages": [
+            "One or more episodes expected in this release were not imported or missing from the release"
+          ]
+        }
+      ],
+      "errorMessage": "",
+      "downloadId": "EXAMPLE0000000002"
+    },
+    {
+      "seriesId": 3,
+      "episodeId": 30,
+      "title": "Example.Show.S03E12.1080p.WEB",
+      "status": "queued",
+      "size": 0,
+      "sizeleft": 0,
+      "timeleft": "",
+      "trackedDownloadStatus": "ok",
+      "trackedDownloadState": "queued",
+      "statusMessages": [],
+      "errorMessage": "",
+      "downloadId": "EXAMPLE0000000003"
+    }
+  ]
+}

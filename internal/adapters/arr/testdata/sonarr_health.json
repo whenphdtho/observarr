@@ -1,0 +1,14 @@
+[
+  {
+    "source": "AppIndexerStatusCheck",
+    "type": "warning",
+    "message": "Indexers unavailable due to failures: Example Indexer",
+    "wikiUrl": "https://wiki.servarr.com/sonarr/system#indexers-are-unavailable-due-to-failures"
+  },
+  {
+    "source": "ImportMechanismCheck",
+    "type": "error",
+    "message": "Unable to write to import location: /data/media",
+    "wikiUrl": "https://wiki.servarr.com/sonarr/system#unable-to-write-to-import-locations"
+  }
+]
