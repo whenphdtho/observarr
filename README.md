@@ -19,8 +19,11 @@ and its containers are doing — all from one small container. Status: early dev
 
 - **Discovery that asks first.** Suggests apps from a network scan, Prowlarr's linked apps, mounted config
   folders or running Docker containers — nothing is added until you review a suggestion and click Add.
-- **Overview at a glance:** services up, active downloads, host CPU and memory, a live chart of CPU and
-  network, and one list of everything that needs attention — down services, health warnings, stuck downloads.
+- **Overview at a glance:** live download and upload with the apps moving the most traffic, services up,
+  active downloads, host CPU and memory, and one list of everything that needs attention — down services,
+  health warnings, stuck downloads.
+- **Network view:** where the traffic goes — every app's share over the last five minutes or day, in and out,
+  today's totals per app, today's peak and an optional daily or monthly traffic budget.
 - **Live health and queues** for Sonarr, Radarr, Lidarr and Prowlarr: version, response time, health
   warnings, and every queued download with progress, ETA and import problems, pushed to the browser as they change.
 - **System view:** host CPU, memory, swap, load, uptime, disks and network, plus every container's state,
@@ -164,6 +167,8 @@ All settings are environment variables.
 | `OBSERVARR_HOST_CGROUP` | unset | The host's `/sys/fs/cgroup`, mounted read-only (e.g. `/host/sys/fs/cgroup`): per-container CPU, memory, I/O and network. Needs cgroup v2, `OBSERVARR_HOST_PROC` and `cgroup: host`. Must exist if set. |
 | `OBSERVARR_HOST_DISKS` | empty | Comma-separated paths inside the container whose disks are measured (e.g. `/host/media`). Each must exist at startup. |
 | `OBSERVARR_DOCKER_HOST` | unset | Docker socket proxy, `tcp://host:port` or `unix:///path`: container state, health and events (Observarr only issues GET requests). |
+| `OBSERVARR_TRAFFIC_BUDGET` | unset | A traffic budget, down and up together, e.g. `1400GB/day` or `20TB/month` (decimal GB and TB, as providers count). The Network view and the rail then show how much of it is used. |
+| `TZ` | `UTC` | Time zone of the day boundary for daily traffic totals and budgets, e.g. `Europe/Berlin`. |
 | `OBSERVARR_RESET_DB` | unset | `1` moves a corrupt database aside and starts empty — use once, then unset; setup then needs a fresh setup token. |
 | `OBSERVARR_RESET_KEYS` | unset | `1` drops every saved API key when `secret.key` is missing, so they can be re-entered — use once, then unset. |
 
@@ -178,7 +183,8 @@ local filesystem and Docker volumes do). Go's `GOMEMLIMIT` is honoured too — s
 Everything Observarr keeps lives under `OBSERVARR_DATA`:
 
 - `observarr.db` (plus `observarr.db-wal` and `observarr.db-shm` while running) — the SQLite database,
-  including the audit log (pruned to the newest 90 days or 100,000 entries, whichever is hit first).
+  including the audit log (pruned to the newest 90 days or 100,000 entries, whichever is hit first) and daily
+  traffic totals (kept 35 days).
 - `secret.key` — the key that seals every saved API key.
 - `setup-token` — the one-time setup token, present only until setup completes.
 - `observarr.lock` — held while Observarr runs, so a second instance pointed at the same folder exits instead
