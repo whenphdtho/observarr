@@ -26,16 +26,17 @@ type Definition struct {
 	HasQueue    bool
 	QueueQuery  string // extra query parameters for /queue, e.g. "&includeUnknownSeriesItems=true"
 	Links       bool   // true if this app reports other apps it is configured against (adapter.Linker); only Prowlarr does
+	Icon        string // icon name hint for the UI (adapter.Info.Icon)
 }
 
 // Definitions lists the supported family members. Readarr is not included: it was retired
 // upstream in 2025 and is not part of the supported app list.
 var Definitions = []Definition{
 	{Type: "sonarr", Name: "Sonarr", AppName: "Sonarr", APIVersion: "v3", DefaultPort: 8989, MinMajor: 3, HasQueue: true,
-		QueueQuery: "&includeUnknownSeriesItems=true"},
-	{Type: "radarr", Name: "Radarr", AppName: "Radarr", APIVersion: "v3", DefaultPort: 7878, MinMajor: 3, HasQueue: true},
-	{Type: "lidarr", Name: "Lidarr", AppName: "Lidarr", APIVersion: "v1", DefaultPort: 8686, MinMajor: 1, HasQueue: true},
-	{Type: "prowlarr", Name: "Prowlarr", AppName: "Prowlarr", APIVersion: "v1", DefaultPort: 9696, MinMajor: 1, Links: true},
+		QueueQuery: "&includeUnknownSeriesItems=true", Icon: "tv"},
+	{Type: "radarr", Name: "Radarr", AppName: "Radarr", APIVersion: "v3", DefaultPort: 7878, MinMajor: 3, HasQueue: true, Icon: "film"},
+	{Type: "lidarr", Name: "Lidarr", AppName: "Lidarr", APIVersion: "v1", DefaultPort: 8686, MinMajor: 1, HasQueue: true, Icon: "music"},
+	{Type: "prowlarr", Name: "Prowlarr", AppName: "Prowlarr", APIVersion: "v1", DefaultPort: 9696, MinMajor: 1, Links: true, Icon: "search"},
 }
 
 // apiKeyHeader is the header every *arr app expects its API key on.
@@ -69,6 +70,7 @@ func (a arrAdapter) Info() adapter.Info {
 		DefaultPort: a.def.DefaultPort,
 		NeedsAPIKey: true,
 		Kinds:       kinds,
+		Icon:        a.def.Icon,
 	}
 }
 

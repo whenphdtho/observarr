@@ -282,22 +282,13 @@
   onadded={handleAdded} ongone={loadState} />
 
 <style>
-  dialog {
-    background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 12px;
-    padding: 20px; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto;
-  }
-  dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
-  h2 { margin: 0 0 14px; font-size: 17px; }
-  h3 { margin: 0 0 8px; font-size: 14px; }
-  .source { margin-bottom: 16px; }
-  .source:last-of-type { margin-bottom: 0; }
-  .field { display: grid; gap: 6px; font-size: 13px; margin-bottom: 8px; }
+  dialog { width: min(560px, calc(100vw - 32px)); }
+  h2 { margin-bottom: 16px; }
+  h3 { margin: 0 0 8px; font-size: 13.5px; font-weight: 600; }
+  .source { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+  .field { margin-bottom: 8px; }
   .field-hint { margin: 0 0 8px; font-size: 13px; }
-  .field-hint a { color: var(--accent); }
-  textarea {
-    font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--field-border);
-    border-radius: 8px; padding: 8px 10px; width: 100%; resize: vertical; min-height: 44px;
-  }
+  textarea { resize: vertical; min-height: 44px; }
   .source-actions { display: flex; align-items: center; gap: 10px; }
   .spinner {
     width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0;
@@ -305,24 +296,16 @@
     animation: spin 0.8s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-  @media (prefers-reduced-motion: reduce) {
-    .spinner { animation: none; }
-  }
-  .visually-hidden {
-    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
-  }
-  .results { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .results { margin-top: 18px; }
   .suggestions, .source-errors { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-  .source-errors { margin-top: 10px; }
+  .source-errors { margin-top: 10px; font-size: 13px; overflow-wrap: anywhere; }
   .suggestion {
-    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
-    border-top: 1px solid var(--border); padding-top: 10px; min-width: 0;
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; min-width: 0;
+    padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface);
   }
-  .suggestion:first-child { border-top: 0; padding-top: 0; }
-  .info { display: grid; gap: 4px; min-width: 0; flex: 1 1 220px; }
+  .info { display: grid; gap: 2px; min-width: 0; flex: 1 1 220px; font-size: 13px; }
+  .info > :first-child { font-weight: 600; font-size: 13.5px; }
   .unverified { color: var(--warn); overflow-wrap: anywhere; }
-  .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-  p { margin: 0; }
-  .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+  p { font-size: 13px; }
   dialog > .actions { margin-top: 18px; }
 </style>

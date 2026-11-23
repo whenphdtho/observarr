@@ -106,6 +106,7 @@ func run(cfg config.Config, log *slog.Logger) error {
 		return err
 	}
 	sampler := system.New(coll, hub.Watchers, log)
+	sampler.KeepTraffic(st, system.NewTraffic(time.Local, cfg.TrafficBudget.Period, cfg.TrafficBudget.Limit))
 	sampled := make(chan struct{})
 	go func() { sampler.Run(ctx); close(sampled) }()
 	defer func() { // ctx ends with stop, and with it the sampler; one stuck in a host call is not waited for
@@ -331,8 +332,8 @@ func collector(cfg config.Config, log *slog.Logger) (*local.Local, error) {
 	return local.New(lc), nil
 }
 
-// upkeep removes expired sessions, old audit rows and login addresses older than auth.KnownFor, now and then
-// hourly, until ctx ends.
+// upkeep removes expired sessions, old audit rows, login addresses older than auth.KnownFor and old daily
+// traffic totals, now and then hourly, until ctx ends.
 func upkeep(ctx context.Context, st *store.Store, log *slog.Logger) {
 	tick := time.NewTicker(time.Hour)
 	defer tick.Stop()
@@ -345,6 +346,9 @@ func upkeep(ctx context.Context, st *store.Store, log *slog.Logger) {
 		}
 		if err := st.PruneKnownLogins(ctx, now.Add(-auth.KnownFor)); err != nil && ctx.Err() == nil {
 			log.Warn("removing old login addresses failed", "err", err)
+		}
+		if err := st.PruneTraffic(ctx, now); err != nil && ctx.Err() == nil {
+			log.Warn("removing old traffic totals failed", "err", err)
 		}
 		select {
 		case <-ctx.Done():

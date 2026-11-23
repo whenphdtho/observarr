@@ -28,14 +28,13 @@
 
 <div class="health">
   {#if !reading}
-    <p class="muted">Waiting for the first check…</p>
+    <p class="waiting">Waiting for the first check…</p>
   {:else}
     <p class="row">
-      <span class="dot" class:ok={up} class:fail={!up} aria-hidden="true"></span>
-      <span class="state">{up ? 'Up' : 'Down'}</span>
+      <span class="chip dotted state" class:ok={up} class:fail={!up}>{up ? 'Up' : 'Down'}</span>
       {#if data}
-        <span class="muted ellipsis" title={`version ${data.version}`}>v{data.version}</span>
-        <span class="muted">{data.latencyMs} ms</span>
+        <span class="chip num ellipsis" title={`version ${data.version}`}>v{data.version}</span>
+        <span class="chip num">{data.latencyMs} ms</span>
       {/if}
       <span class="muted age" title={reading.at}>{age}</span>
     </p>
@@ -57,22 +56,23 @@
 </div>
 
 <style>
-  .health { display: grid; gap: 6px; }
-  .row { display: flex; align-items: center; gap: 8px; margin: 0; min-width: 0; }
-  .state { flex-shrink: 0; }
-  .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-  .dot.ok { background: var(--ok); }
-  .dot.fail { background: var(--fail); }
-  .age { margin-left: auto; }
-  .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-  .msg { overflow-wrap: anywhere; min-width: 0; }
-  .warnings { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-  .warnings li { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
-  .icon { flex-shrink: 0; width: 1.2em; text-align: center; }
-  .level-error .icon { color: var(--fail); }
-  .level-warning .icon { color: var(--warn); }
-  .level-info .icon { color: var(--muted); }
-  .visually-hidden {
-    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  .health { display: grid; gap: 10px; }
+  .row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .state { flex: none; font-weight: 550; }
+  .chip { flex: 0 1 auto; }
+  .age { margin-left: auto; padding-left: 6px; font-size: 12px; white-space: nowrap; }
+  .error { font-size: 13px; }
+  .warnings { list-style: none; margin: 0; padding: 0; display: grid; }
+  .warnings li {
+    display: flex; align-items: baseline; gap: 9px; min-width: 0; padding: 8px 0; border-top: 1px solid var(--border);
+    font-size: 12.5px; color: var(--text2);
   }
+  .icon {
+    flex: none; width: 16px; height: 16px; border-radius: 50%; display: inline-grid; place-items: center;
+    font-size: 10px; font-weight: 700; transform: translateY(2px);
+  }
+  .level-error .icon { color: var(--fail); background: var(--fail-soft); }
+  .level-warning .icon { color: var(--warn); background: var(--warn-soft); }
+  .level-info .icon { color: var(--text2); background: var(--surface2); }
+  .msg { overflow-wrap: anywhere; min-width: 0; }
 </style>

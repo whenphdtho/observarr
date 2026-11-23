@@ -27,7 +27,9 @@ const (
 	minBackoff    = time.Second      // first wait before reconnecting the Docker events stream
 	maxBackoff    = time.Minute      // longest wait; a stream that lasted this long resets the wait
 	historyWindow = 5 * time.Minute
-	maxHistory    = 300 // host readings kept at most; event-driven samples can come faster than every 2 s
+	maxHistory    = 300         // host readings kept at most; event-driven samples can come faster than every 2 s
+	persistEvery  = time.Minute // daily traffic totals are written this often
+	persistWait   = time.Second // longest wait for the last write when stopping
 )
 
 // Notices shown instead of figures a source cannot provide. Error text is never shown: it goes to the log.
@@ -87,6 +89,7 @@ type Snapshot struct {
 	Host       *HostView       `json:"host"`
 	Containers []ContainerView `json:"containers"` // sorted by name
 	Notices    []string        `json:"notices"`
+	Traffic    *TrafficSummary `json:"traffic"` // nil when the host cannot be read
 	At         time.Time       `json:"at"`
 }
 
@@ -108,8 +111,10 @@ type Sampler struct {
 	watchers func() int
 	log      *slog.Logger
 	now      func() time.Time
+	traffic  *Traffic
+	store    TrafficStore // where daily traffic totals are kept; nil = nowhere
 
-	watchedEvery, idleEvery, listEvery, minList, settle, minBackoff, maxBackoff time.Duration // the constants; tests shorten them
+	watchedEvery, idleEvery, listEvery, minList, settle, minBackoff, maxBackoff, persistEvery time.Duration // the constants; tests shorten them
 
 	changed      chan struct{} // a Docker event arrived
 	eventsDenied atomic.Bool   // the socket proxy refused the events stream at the last attempt
@@ -131,13 +136,19 @@ type Sampler struct {
 	subs    map[chan Snapshot]struct{}
 }
 
-// New returns a Sampler over c. watchers reports how many clients watch live (the hub's Watchers).
+// New returns a Sampler over c. watchers reports how many clients watch live (the hub's Watchers). It counts
+// traffic in memory only, with days in the local time zone and no budget; see KeepTraffic.
 func New(c collect.Collector, watchers func() int, log *slog.Logger) *Sampler {
-	return &Sampler{c: c, watchers: watchers, log: log, now: time.Now,
+	return &Sampler{c: c, watchers: watchers, log: log, now: time.Now, traffic: NewTraffic(time.Local, "", 0),
 		watchedEvery: watchedEvery, idleEvery: idleEvery, listEvery: listEvery, minList: minList, settle: settle,
-		minBackoff: minBackoff, maxBackoff: maxBackoff,
+		minBackoff: minBackoff, maxBackoff: maxBackoff, persistEvery: persistEvery,
 		changed: make(chan struct{}, 1), prevUsage: map[string]usageReading{}, logged: map[string]string{},
 		snap: Snapshot{Containers: []ContainerView{}, Notices: []string{}}, subs: map[chan Snapshot]struct{}{}}
+}
+
+// KeepTraffic makes the sampler count traffic into t and keep its daily totals in st. Call it before Run.
+func (s *Sampler) KeepTraffic(st TrafficStore, t *Traffic) {
+	s.store, s.traffic = st, t
 }
 
 // Run samples until ctx ends. Call it once.
@@ -147,6 +158,12 @@ func (s *Sampler) Run(ctx context.Context) {
 	listed := make(chan struct{}, 1)
 	wg.Go(func() { s.follow(ctx) })
 	wg.Go(func() { s.lists(ctx, listed) })
+	if s.store != nil {
+		if err := s.traffic.load(ctx, s.store, s.now()); err != nil && ctx.Err() == nil {
+			s.log.Warn("reading today's traffic failed; today counts from now", "err", err)
+		}
+		wg.Go(func() { s.persist(ctx) })
+	}
 
 	tick := time.NewTicker(s.watchedEvery)
 	defer tick.Stop()
@@ -245,6 +262,25 @@ func (s *Sampler) lists(ctx context.Context, listed chan<- struct{}) {
 	}
 }
 
+// persist writes daily traffic totals every minute, and once more when ctx ends.
+func (s *Sampler) persist(ctx context.Context) {
+	tick := time.NewTicker(s.persistEvery)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			final, cancel := context.WithTimeout(context.WithoutCancel(ctx), persistWait)
+			defer cancel()
+			if err := s.traffic.persist(final, s.store, true); err != nil {
+				s.log.Warn("writing traffic totals failed", "err", err)
+			}
+			return
+		case <-tick.C:
+		}
+		s.report(ctx, "traffic totals", s.traffic.persist(ctx, s.store, false))
+	}
+}
+
 // recovered recovers a panic, logging the first one, so one bad reading never stops sampling.
 func (s *Sampler) recovered() {
 	if r := recover(); r != nil && !s.panicked.Swap(true) {
@@ -267,10 +303,20 @@ func (s *Sampler) step(ctx context.Context) {
 		snap.Notices = append(snap.Notices, noticeEvents)
 	}
 	var notices []string
-	snap.Containers, notices = s.usage(ctx, now, containers)
+	var counters []netCounters
+	snap.Containers, notices, counters = s.usage(ctx, now, containers)
 	snap.Notices = append(snap.Notices, notices...)
 	if ctx.Err() != nil {
 		return // a sample cut short would show sources as failing
+	}
+	var ifs []collect.NetIf
+	if snap.Host != nil {
+		ifs = s.prevHost.h.Net // the reading host just took
+	}
+	s.traffic.observe(now, ifs, counters)
+	if snap.Host != nil {
+		sum := s.traffic.Summary()
+		snap.Traffic = &sum
 	}
 	s.publish(snap)
 }
@@ -342,8 +388,9 @@ func (s *Sampler) host(ctx context.Context, now time.Time) (*HostView, []string)
 	return v, notices
 }
 
-// usage reads the listed containers' usage and computes rates against the previous readings.
-func (s *Sampler) usage(ctx context.Context, now time.Time, cs []collect.Container) ([]ContainerView, []string) {
+// usage reads the listed containers' usage and computes rates against the previous readings. It also returns
+// the network counters of the containers with a network of their own.
+func (s *Sampler) usage(ctx context.Context, now time.Time, cs []collect.Container) ([]ContainerView, []string, []netCounters) {
 	views := make([]ContainerView, len(cs))
 	running := false
 	for i, c := range cs {
@@ -352,7 +399,7 @@ func (s *Sampler) usage(ctx context.Context, now time.Time, cs []collect.Contain
 	}
 	if !running {
 		s.prevUsage = map[string]usageReading{}
-		return views, nil
+		return views, nil, nil
 	}
 	us, err := s.c.Usage(ctx, cs)
 	var notices []string
@@ -377,11 +424,15 @@ func (s *Sampler) usage(ctx context.Context, now time.Time, cs []collect.Contain
 		byID[u.ID] = u
 	}
 	next := make(map[string]usageReading, len(us))
+	var counters []netCounters
 	for i := range views {
 		v := &views[i]
 		u, ok := byID[v.ID]
 		if !ok {
 			continue
+		}
+		if v.OwnNetwork() && v.PID > 0 {
+			counters = append(counters, netCounters{name: v.Name, pid: v.PID, rx: u.NetRx, tx: u.NetTx})
 		}
 		v.MemBytes, v.MemLimit = u.MemBytes, u.MemLimit
 		if p, ok := s.prevUsage[v.ID]; ok && p.pid == v.PID { // another PID: restarted, the counters began anew
@@ -395,7 +446,7 @@ func (s *Sampler) usage(ctx context.Context, now time.Time, cs []collect.Contain
 		next[v.ID] = usageReading{u: u, pid: v.PID, at: now}
 	}
 	s.prevUsage = next
-	return views, notices
+	return views, notices, counters
 }
 
 // rate is the per-second increase of a counter; none when the counter went back (reset) or no time passed.
@@ -464,6 +515,9 @@ func (s *Sampler) History() []HostView {
 	}
 	return out
 }
+
+// Network returns the traffic over rng, "5m" or "24h".
+func (s *Sampler) Network(rng string) TrafficView { return s.traffic.View(rng) }
 
 // Subscribe returns a channel that holds the latest snapshot not yet received, and a cancel function (idempotent).
 func (s *Sampler) Subscribe() (<-chan Snapshot, func()) {

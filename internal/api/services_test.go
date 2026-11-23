@@ -161,7 +161,7 @@ func newServicesEnv(t *testing.T, options ...func(*Server)) *servicesEnv {
 	appPort, _ := strconv.Atoi(appURL[strings.LastIndex(appURL, ":")+1:])
 	e := &servicesEnv{
 		app: &fakeApp{info: adapter.Info{Type: "fake", Name: "Fake", DefaultPort: appPort, NeedsAPIKey: true,
-			Kinds: []shape.Kind{shape.KindHealth}}},
+			Kinds: []shape.Kind{shape.KindHealth}, Icon: "box"}},
 		keyless: &fakeApp{info: adapter.Info{Type: "keyless", Name: "Keyless", DefaultPort: appPort,
 			Kinds: []shape.Kind{shape.KindHealth}}},
 		appURL:  appURL,
@@ -257,7 +257,7 @@ func TestAdaptersList(t *testing.T) {
 		t.Fatalf("adapters = %d %s", code, body)
 	}
 	if len(infos) != 2 || infos[0].Type != "fake" || !infos[0].NeedsAPIKey || infos[1].Type != "keyless" ||
-		infos[0].DefaultPort != e.appPort || len(infos[0].Kinds) != 1 {
+		infos[0].DefaultPort != e.appPort || len(infos[0].Kinds) != 1 || infos[0].Icon != "box" || infos[1].Icon != "" {
 		t.Fatalf("adapters = %+v", infos)
 	}
 }

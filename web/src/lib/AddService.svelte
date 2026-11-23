@@ -383,19 +383,10 @@
 </dialog>
 
 <style>
-  dialog {
-    background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 12px;
-    padding: 20px; width: min(420px, calc(100vw - 32px));
-  }
-  dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
   form { display: grid; gap: 14px; }
-  h2 { margin: 0; font-size: 17px; }
-  label { display: grid; gap: 6px; font-size: 13px; }
-  label.checkbox { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-  label.checkbox input { width: auto; }
+  label.checkbox { display: flex; align-items: center; gap: 8px; }
   .hint { font-size: 12px; }
-  .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-  .ok-text { color: var(--ok); margin: 0; }
-  p { margin: 0; }
-  .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+  .ok-text { color: var(--ok); }
+  p { font-size: 13px; }
+  .actions { margin-top: 4px; }
 </style>

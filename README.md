@@ -1,11 +1,78 @@
+<div align="center">
+
 # Observarr
 
-Self-hosted ops dashboard for *arr and media-server stacks: finds the *arr apps you run (nothing is added without
-your explicit approval), shows their health and queues live, and shows host and container figures. Status: early
-development.
+**A self-hosted ops cockpit for your \*arr and media stack.**
 
-Licence: GPL-3.0. Writing an adapter: [`docs/adapters.md`](docs/adapters.md). Host and container figures
-(the System view), with a socket proxy and host mounts: [`docs/deploy.md`](docs/deploy.md).
+[![CI](https://github.com/whenphdtho/observarr/actions/workflows/ci.yml/badge.svg)](https://github.com/whenphdtho/observarr/actions/workflows/ci.yml)
+
+<img src="docs/images/demo.webp" width="880" alt="Observarr demo: signing in to the Overview with live throughput, the Network view live and over 24 hours, the Apps view with Big Buck Bunny downloading, adding Lidarr from a Docker suggestion, the System view, and the same views on a phone">
+
+<sub>▶ [Watch in full quality (MP4)](docs/images/demo.mp4)</sub>
+
+</div>
+
+Observarr finds the \*arr apps you run, shows their health and download queues live, and shows what the host
+and its containers are doing — all from one small container. Status: early development.
+
+## Features
+
+- **Discovery that asks first.** Suggests apps from a network scan, Prowlarr's linked apps, mounted config
+  folders or running Docker containers — nothing is added until you review a suggestion and click Add.
+- **Overview at a glance:** live download and upload with the apps moving the most traffic, services up,
+  active downloads, host CPU and memory, and one list of everything that needs attention — down services,
+  health warnings, stuck downloads.
+- **Network:** where your traffic goes, by app, live and over 24 h — in and out, today's totals per app, and an
+  optional daily or monthly budget.
+- **Live health and queues** for Sonarr, Radarr, Lidarr and Prowlarr: version, response time, health
+  warnings, and every queued download with progress, ETA and import problems, pushed to the browser as they change.
+- **System view:** host CPU, memory, swap, load, uptime, disks and network, plus every container's state,
+  health, CPU, memory, network, block I/O and restarts — and each app card shows its own container's line.
+- **Read-only by design:** host figures come from read-only mounts, container data from a Docker socket proxy
+  that only answers GET requests.
+- **One container:** a Go binary with the Svelte UI embedded and SQLite for storage, running non-root on a
+  distroless image. Saved API keys are encrypted at rest. Works on a phone, too.
+
+<p align="center">
+  <img src="docs/images/overview.png" alt="Overview: a Throughput card with live download and upload, the containers moving the most traffic and a network chart, four key figures (services up, downloads, CPU, memory), a Needs attention list with a Radarr health warning and an import problem, and a rail with every app, the host's figures and today's traffic against the budget">
+  <br>
+  <sub>Overview: throughput, key figures and everything that needs attention</sub>
+</p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/network.png" alt="Network view: download, upload, today's total and top-now tiles, a mirrored stacked chart of where the traffic goes per container over the last five minutes, a By app table and a daily budget gauge"></td>
+    <td width="50%"><img src="docs/images/apps.png" alt="Apps view: cards for Lidarr, Prowlarr, Radarr and Sonarr, each with its container's state and usage, health and version, a Radarr health warning, and download queues led by Big Buck Bunny with progress, size left and ETA"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Network: where the traffic goes, by app</sub></td>
+    <td align="center"><sub>Apps: health, queue and container of every service</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/system.png" alt="System view: CPU, memory, swap and uptime tiles, a live host activity chart, disk and network cards, and the start of the containers table"></td>
+    <td><img src="docs/images/discover-docker.png" alt="Discover services dialog with the Network, Linked apps, Config folders and Docker sources, and a Lidarr suggestion found in Docker"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>System: host, disks, network and containers</sub></td>
+    <td align="center"><sub>Discover: suggestions from Docker and other sources</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/add-from-suggestion.png" alt="Add service dialog filled from the Lidarr suggestion, with its container linked and a successful connection test"></td>
+    <td><img src="docs/images/network-24h.png" alt="Network view over the last 24 hours: the per-container traffic chart since the demo started, with the By app table and the daily budget gauge"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Add from a suggestion: test, then add</sub></td>
+    <td align="center"><sub>Network over 24 hours</sub></td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="docs/images/phone-overview.png" width="240" alt="Overview on a phone-width screen: the Throughput card above the key figures, with the views in a dock at the bottom">
+  &nbsp;
+  <img src="docs/images/phone-network.png" width="240" alt="Network view on a phone-width screen: traffic tiles and the where-the-traffic-goes chart, with the views in a dock at the bottom">
+  &nbsp;
+  <img src="docs/images/phone-system.png" width="240" alt="System view on a phone-width screen, with the views in a dock at the bottom">
+</p>
 
 ## Quick start
 
@@ -16,33 +83,43 @@ docker run -d --name observarr -p 9898:9898 -v "$PWD/data:/data" -e OBSERVARR_IN
 docker logs observarr   # shows: setup token: <token> (also in data/setup-token)
 ```
 
-Open `http://<host>:9898` and create the admin account, entering the setup token the log line (or the
-`setup-token` file in the data folder) showed — it proves whoever is creating the account has access to the
-host, not just to the page. The token and the file are both deleted once setup succeeds.
+Open `http://<host>:9898` and create the admin account, entering the setup token from the log line (or the
+`setup-token` file in the data folder) — it proves whoever creates the account has access to the host, not
+just to the page. The token and the file are both deleted once setup succeeds.
 
-Logging in needs HTTPS, and Observarr itself serves plain HTTP only. Pick one: put a reverse proxy in front of
-it over HTTPS and set `OBSERVARR_TRUSTED_PROXIES` to the proxy's address (see "Reverse proxy" below); or, on a
-plain-HTTP LAN with no proxy at all, set `OBSERVARR_INSECURE_COOKIES=1` as above, which allows the login
-cookie over plain HTTP. Drop `OBSERVARR_INSECURE_COOKIES` as soon as a proxy serves Observarr over HTTPS.
+> [!NOTE]
+> Logging in needs HTTPS, and Observarr itself serves plain HTTP only. Either put a reverse proxy in front of
+> it over HTTPS and set `OBSERVARR_TRUSTED_PROXIES` to the proxy's address (see [Reverse proxy](#reverse-proxy)),
+> or, on a plain-HTTP LAN with no proxy at all, set `OBSERVARR_INSECURE_COOKIES=1` as above, which allows the
+> login cookie over plain HTTP. Drop `OBSERVARR_INSECURE_COOKIES` as soon as a proxy serves Observarr over HTTPS.
+
+## Run with Docker Compose
 
 For the System view's host and container figures and Docker discovery, use
-[`deploy/docker-compose.yml`](deploy/docker-compose.yml) instead — see [`docs/deploy.md`](docs/deploy.md). Its
-data folder is `deploy/data`; `chown` that one the same way before the first start:
-`mkdir -p deploy/data && sudo chown 65532 deploy/data`.
+[`deploy/docker-compose.yml`](deploy/docker-compose.yml) (Observarr plus a read-only socket proxy) — see
+[`docs/deploy.md`](docs/deploy.md) for what each source enables and the security notes. No image is published
+yet, so it builds from the repo; adjust the data disk mount first. Its data folder is `deploy/data`; `chown` it
+before the first start:
+
+```sh
+mkdir -p deploy/data && sudo chown 65532 deploy/data
+docker compose -f deploy/docker-compose.yml build
+docker compose -f deploy/docker-compose.yml up -d
+```
 
 ## Adding your apps
 
-Add each app from the Apps view (directly, or via Discover). You'll need:
+Add each app from the Apps view, directly or via **Discover**. You'll need:
 
 - **Its API key.** In Sonarr, Radarr, Lidarr and Prowlarr: Settings → General → Security → API Key.
 - **A URL Observarr can reach:**
   - If Observarr and the app share a Docker network, use the app's **container name** as the host, e.g.
-    `http://sonarr:8989` — see the compose snippet below for joining that network.
+    `http://sonarr:8989`.
   - Otherwise, use the app's **LAN IP address and published port**, e.g. `http://192.168.1.20:8989`.
   - `127.0.0.1` / `localhost` is Observarr's own container — never the app you're adding.
 
-Compose's own `default` network only connects containers started from the *same* compose file, so it won't
-reach apps started by a different stack. Join their existing network instead:
+Compose's own `default` network only connects containers started from the *same* compose file. To reach apps
+started by another stack, join their existing network:
 
 ```yaml
 services:
@@ -57,55 +134,18 @@ networks:
     external: true
 ```
 
-## Configuration (environment)
+**Docker discovery** suggests every running container whose image is a known \*arr image (LinuxServer.io,
+hotio, or a bare `sonarr`/`radarr`/… repository) or that carries an `observarr.type` label (e.g.
+`observarr.type=sonarr`); an `observarr.url` label overrides the suggested URL.
 
-| Variable | Default | Meaning |
-|---|---|---|
-| `OBSERVARR_LISTEN` | `:9898` | listen address |
-| `OBSERVARR_DATA` | `/data` | data directory — see "Data folder" below for what lives in it |
-| `OBSERVARR_SECRET_KEY_FILE` | `<data>/secret.key` | path of the credential key that seals every saved API key, if you want it stored somewhere other than the data directory — can point at a Docker or Compose secret (mounted read-only, e.g. mode 0444; only a file others can *write* is refused) |
-| `OBSERVARR_INSECURE_COOKIES` | unset | `1` allows login over plain HTTP (LAN without TLS, no reverse proxy); never set it behind a proxy |
-| `OBSERVARR_RESET_DB` | unset | `1` moves a corrupt database aside and starts empty — use once to recover, then unset it again; setup then needs a fresh setup token |
-| `OBSERVARR_RESET_KEYS` | unset | `1` drops every saved service API key when `secret.key` is missing, so they can be re-entered — use once, then unset it again |
-| `OBSERVARR_TRUSTED_PROXIES` | empty | comma-separated IPs/CIDRs of a reverse proxy to trust `X-Forwarded-For` / `X-Forwarded-Proto` from — nothing else is read from a proxy unless it's listed here; use the proxy's exact address, not a whole Docker network |
-| `OBSERVARR_PROXY_AUTH` | unset | `1` additionally trusts the proxy's user header for login (requires `OBSERVARR_TRUSTED_PROXIES`); **the proxy must strip or overwrite that header on every request it forwards**, and every user name it sends becomes a full Observarr admin — only enable this behind a proxy you trust completely. Login, setup and signed-in requests that do not come from a trusted proxy are then refused; still publish no port for Observarr (or only `127.0.0.1:9898:9898`), so that only the proxy can reach it |
-| `OBSERVARR_PROXY_USER_HEADER` | `Remote-User` | header in which that proxy passes the user name (read only when `OBSERVARR_PROXY_AUTH=1`) |
-| `OBSERVARR_APP_CONFIGS` | unset | folder holding one subfolder per app's config, mounted read-only, for the "config folders" discovery source — unset disables that source; if set, must be an existing directory at startup |
-| `OBSERVARR_HOST_PROC` | unset | the host's `/proc` mounted read-only (e.g. `/host/proc`) for host CPU, memory, load and network figures; if set, must be an existing directory at startup |
-| `OBSERVARR_HOST_CGROUP` | unset | the host's `/sys/fs/cgroup` mounted read-only (e.g. `/host/sys/fs/cgroup`) for container CPU, memory, I/O and network (needs cgroup v2, `OBSERVARR_HOST_PROC` and `cgroup: host` on the Observarr container); if set, must be an existing directory at startup |
-| `OBSERVARR_HOST_DISKS` | empty | comma-separated paths inside the container whose disks are measured (e.g. `/host/root,/host/media`); each must exist at startup |
-| `OBSERVARR_DOCKER_HOST` | unset | Docker socket proxy, `tcp://host:port` or `unix:///path`, for container state, health and events (read-only: Observarr only issues GET requests) |
-
-The container runs as uid 65532; a bind-mounted data directory must be writable by it (e.g. `chown 65532 ./data`).
-The data directory must support hard links (any local filesystem does, and so do Docker volumes).
-
-`OBSERVARR_INSECURE_COOKIES`, `OBSERVARR_PROXY_AUTH`, `OBSERVARR_RESET_DB` and `OBSERVARR_RESET_KEYS` each
-accept only `0` or `1` (unset is the same as `0`); anything else is a startup error.
-
-### Data folder
-
-Everything Observarr keeps lives under `OBSERVARR_DATA` (`/data` by default):
-
-- `observarr.db`, `observarr.db-wal`, `observarr.db-shm` — the SQLite database (WAL mode keeps the latter two
-  alongside it while running); the audit log lives inside it too, pruned to the newest 90 days or 100,000
-  entries, whichever is hit first.
-- `secret.key` — the credential key that seals every saved API key (`OBSERVARR_SECRET_KEY_FILE` above).
-- `setup-token` — the one-time setup token; present only until setup completes.
-- `observarr.lock` — held for as long as Observarr runs, so a second Observarr pointed at the same data
-  folder exits immediately instead of sharing (and corrupting) the database.
-- `backups/` — the newest 5 pre-upgrade database copies (see "Recovery" below).
-
-### Discovering apps from their config folders
-
-Discovery's "config folders" source reads an app's own config file to suggest it — including its API key, which
-never leaves the server unless you click "Use the API key found in …" when adding it. Mount each app's config
-directory read-only under one parent folder, one subfolder per app, and point `OBSERVARR_APP_CONFIGS` at that
-parent:
+**Config-folder discovery** reads an app's own `config.xml` to suggest it — including its API key, which never
+leaves the server unless you tick "Use the API key found in …" when adding it. Mount each app's config
+directory read-only under one parent folder, one subfolder per app, and point `OBSERVARR_APP_CONFIGS` at it:
 
 ```yaml
 services:
   observarr:
-    image: observarr   # docker build -t observarr . — see Quick start above
+    image: observarr   # docker build -t observarr . — see Quick start
     environment:
       - OBSERVARR_APP_CONFIGS=/appconfig
     volumes:
@@ -116,16 +156,50 @@ services:
       - "9898:9898"
 ```
 
-The subfolder name (`sonarr`, `radarr`, …) only matters as a hint for apps whose own config file doesn't already
+The subfolder name (`sonarr`, `radarr`, …) only matters as a hint for apps whose config file doesn't already
 say which app it belongs to; either way, nothing is added until you review the suggestion and click Add.
 
-### Host and container figures
+## Configuration
 
-The System view (CPU, memory, disks, network, and every container's state, health and usage) needs the host's
-`/proc` and `/sys/fs/cgroup` mounted read-only and a Docker socket proxy — all optional, and all `OBSERVARR_HOST_*`
-and `OBSERVARR_DOCKER_HOST` above. See [`docs/deploy.md`](docs/deploy.md) for a full compose example
-(`deploy/docker-compose.yml`), what each source enables, and the security notes around the socket proxy and
-host mounts.
+All settings are environment variables.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `OBSERVARR_LISTEN` | `:9898` | Listen address. |
+| `OBSERVARR_DATA` | `/data` | Data directory (see [Data folder](#data-folder)). |
+| `OBSERVARR_SECRET_KEY_FILE` | `<data>/secret.key` | The key that seals every saved API key, if stored elsewhere — can be a Docker/Compose secret (read-only, e.g. mode 0444; only a file others can *write* is refused). |
+| `OBSERVARR_INSECURE_COOKIES` | unset | `1` allows login over plain HTTP (LAN without TLS, no reverse proxy). Never set it behind a proxy. |
+| `OBSERVARR_TRUSTED_PROXIES` | empty | Comma-separated IPs/CIDRs of a reverse proxy whose `X-Forwarded-For` / `X-Forwarded-Proto` are trusted; nothing else is read from a proxy. Use the proxy's exact address, not a whole Docker network. |
+| `OBSERVARR_PROXY_AUTH` | unset | `1` also trusts the proxy's user header for login (needs `OBSERVARR_TRUSTED_PROXIES`). **The proxy must strip or overwrite that header on every request it forwards**, and every user name it sends becomes a full admin. Login, setup and signed-in requests not from a trusted proxy are then refused; still publish no port for Observarr (or only `127.0.0.1:9898:9898`). |
+| `OBSERVARR_PROXY_USER_HEADER` | `Remote-User` | Header carrying that user name (read only with `OBSERVARR_PROXY_AUTH=1`). |
+| `OBSERVARR_APP_CONFIGS` | unset | Folder with one read-only subfolder per app's config, for config-folder discovery; unset disables it. Must exist at startup if set. |
+| `OBSERVARR_HOST_PROC` | unset | The host's `/proc`, mounted read-only (e.g. `/host/proc`): host CPU, memory, load and network. Must exist if set. |
+| `OBSERVARR_HOST_CGROUP` | unset | The host's `/sys/fs/cgroup`, mounted read-only (e.g. `/host/sys/fs/cgroup`): per-container CPU, memory, I/O and network. Needs cgroup v2, `OBSERVARR_HOST_PROC` and `cgroup: host`. Must exist if set. |
+| `OBSERVARR_HOST_DISKS` | empty | Comma-separated paths inside the container whose disks are measured (e.g. `/host/media`). Each must exist at startup. |
+| `OBSERVARR_DOCKER_HOST` | unset | Docker socket proxy, `tcp://host:port` or `unix:///path`: container state, health and events (Observarr only issues GET requests). |
+| `OBSERVARR_TRAFFIC_BUDGET` | unset | A traffic budget, down and up together, e.g. `1400GB/day` or `20TB/month` (decimal GB and TB, as providers count). The Network view and the rail then show how much of it is used. |
+| `TZ` | `UTC` | Time zone of the day boundary for daily traffic totals and budgets, e.g. `Europe/Berlin`. |
+| `OBSERVARR_RESET_DB` | unset | `1` moves a corrupt database aside and starts empty — use once, then unset; setup then needs a fresh setup token. |
+| `OBSERVARR_RESET_KEYS` | unset | `1` drops every saved API key when `secret.key` is missing, so they can be re-entered — use once, then unset. |
+
+`OBSERVARR_INSECURE_COOKIES`, `OBSERVARR_PROXY_AUTH`, `OBSERVARR_RESET_DB` and `OBSERVARR_RESET_KEYS` accept
+only `0` or `1` (unset is `0`); anything else is a startup error. The container runs as uid 65532, so a
+bind-mounted data directory must be writable by it (`chown 65532 ./data`), and it must support hard links (any
+local filesystem and Docker volumes do). Go's `GOMEMLIMIT` is honoured too — see
+[`docs/deploy.md`](docs/deploy.md#memory).
+
+### Data folder
+
+Everything Observarr keeps lives under `OBSERVARR_DATA`:
+
+- `observarr.db` (plus `observarr.db-wal` and `observarr.db-shm` while running) — the SQLite database,
+  including the audit log (pruned to the newest 90 days or 100,000 entries, whichever is hit first) and daily
+  traffic totals (kept 35 days).
+- `secret.key` — the key that seals every saved API key.
+- `setup-token` — the one-time setup token, present only until setup completes.
+- `observarr.lock` — held while Observarr runs, so a second instance pointed at the same folder exits instead
+  of sharing (and corrupting) the database.
+- `backups/` — the newest 5 pre-upgrade database copies.
 
 ## Reverse proxy
 
@@ -142,34 +216,57 @@ that's the proxy's job, not Observarr's.
 
 Behind a proxy, always set `OBSERVARR_TRUSTED_PROXIES` to the proxy's address and leave
 `OBSERVARR_INSECURE_COOKIES` unset. Without the first, every request seems to come from the proxy: the login
-lockout then counts everyone's failed logins together, so a few wrong passwords from anywhere lock everyone out,
-and the audit log shows only the proxy's address. The second would let the login cookie travel over plain HTTP.
+lockout then counts everyone's failed logins together, so a few wrong passwords from anywhere lock everyone
+out, and the audit log shows only the proxy's address. The second would let the login cookie travel over plain
+HTTP.
 
-If the proxy also forwards a trusted login header (Authelia, Authentik, …), set `OBSERVARR_PROXY_AUTH=1` as well
-(see "Configuration" above). Observarr then refuses login, setup and signed-in requests that do not come from the
-proxy, but bind it only to the proxy's network anyway: in Compose, publish no port for Observarr (the proxy
-reaches it over their shared network), or at most `127.0.0.1:9898:9898` when the proxy runs on the host.
+If the proxy forwards a trusted login header (Authelia, Authentik, …), set `OBSERVARR_PROXY_AUTH=1` as well.
+Observarr then refuses login, setup and signed-in requests that don't come from the proxy, but bind it only to
+the proxy's network anyway: in Compose, publish no port for Observarr, or at most `127.0.0.1:9898:9898` when
+the proxy runs on the host.
 
-The System view's live updates use Server-Sent Events, which need the response to reach the browser
-unbuffered. Caddy's `reverse_proxy` already disables buffering by default; with nginx, add `proxy_buffering
-off;` to the matching `location` block.
+Live updates use Server-Sent Events, which must reach the browser unbuffered. Caddy's `reverse_proxy` already
+disables buffering; with nginx, add `proxy_buffering off;` to the matching `location` block.
+
+## Security
+
+- Creating the admin account needs a one-time setup token from the server log, so only someone with access to
+  the host can do it. Login needs HTTPS unless you explicitly allow plain HTTP, and repeated failed logins lock
+  out further attempts.
+- Saved API keys are encrypted with `secret.key`. A key found in a config folder stays on the server unless you
+  choose to use it.
+- Nothing Observarr reads from can be used to change your system: every host mount is read-only, the socket
+  proxy answers only GET requests, and the container needs no capabilities or privilege escalation.
+- Read-only still means *visible*: the host `/proc` mount and the socket proxy expose more than Observarr
+  itself reads. Read the [security notes in `docs/deploy.md`](docs/deploy.md#security-notes) before enabling
+  them, and never expose the socket proxy.
 
 ## Recovery
 
-- **Corrupt database.** Observarr never resets it automatically. Startup exits with an error naming the file;
-  restore it from a backup (below), or start once with `OBSERVARR_RESET_DB=1` to move the corrupt file aside and
-  start empty — setup then needs a fresh setup token.
-- **Missing `secret.key`.** If the key that seals every saved API key goes missing while services with saved
-  keys still exist, Observarr refuses to start rather than silently losing track of them. Restore the key from
-  backup, or start once with `OBSERVARR_RESET_KEYS=1` to drop the saved keys so you can re-enter them — the
-  services themselves aren't lost, only their keys.
-- **Backups** live under `<data>/backups`, written automatically before each database migration (the newest 5
-  are kept). Back up that whole folder together with `secret.key` — a database backup without the matching key
-  can't decrypt the services' saved API keys.
+- **Corrupt database.** Observarr never resets it on its own: startup exits with an error naming the file.
+  Restore it from a backup, or start once with `OBSERVARR_RESET_DB=1` to move it aside and start empty (setup
+  then needs a fresh setup token).
+- **Missing `secret.key`.** If services with saved keys exist, Observarr refuses to start rather than silently
+  losing track of them. Restore the key, or start once with `OBSERVARR_RESET_KEYS=1` to drop the saved keys and
+  re-enter them — the services themselves are kept.
+- **Backups** are written to `<data>/backups` before each database migration (newest 5 kept). Back that folder
+  up together with `secret.key` — a database without its key can't decrypt the saved API keys.
 - **Monitoring.** `GET /api/health` returns 503 `{"status":"degraded","reason":"…"}` when the database can't be
-  written (a read-only or full disk) — the container's own `HEALTHCHECK` already calls this (`observarr
-  -health`); point any external monitoring at the same endpoint to catch the same problem.
+  written (read-only or full disk). The container's `HEALTHCHECK` already calls it (`observarr -health`); point
+  external monitoring at the same endpoint.
+
+## Docs
+
+- [`docs/deploy.md`](docs/deploy.md) — host and container figures: compose example, cgroup v1, System view
+  notes, memory and security notes.
+- [`docs/adapters.md`](docs/adapters.md) — how adapters work and how to add an app.
 
 ## Development
 
 `make ui` builds the web app, `make check` runs gofmt, vet and tests, `make build` builds the binary.
+
+## License
+
+[GPL-3.0](LICENSE). The UI ships the [Inter](https://github.com/rsms/inter) font (SIL Open Font License,
+[web/src/assets/fonts/LICENSE-Inter.txt](web/src/assets/fonts/LICENSE-Inter.txt)) and icons from
+[Lucide](https://lucide.dev) (ISC, [web/src/lib/icons/LICENSE-Lucide.txt](web/src/lib/icons/LICENSE-Lucide.txt)).

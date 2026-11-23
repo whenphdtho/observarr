@@ -6,9 +6,9 @@ you leave out, Observarr says so in the System view instead of failing.
 
 | Source | What it enables | Needs |
 |---|---|---|
-| The host's `/proc`, read-only | CPU %, memory, swap, load average, uptime, network rates | `OBSERVARR_HOST_PROC` |
+| The host's `/proc`, read-only | CPU %, memory, swap, load average, uptime, the host's traffic | `OBSERVARR_HOST_PROC` |
 | Disk paths | Disk usage bars | `OBSERVARR_HOST_DISKS` (comma-separated) |
-| The host's `/sys/fs/cgroup`, read-only | Per-container CPU %, memory, block I/O | `OBSERVARR_HOST_PROC` + `OBSERVARR_HOST_CGROUP` + `cgroup: host` on the Observarr container (below) |
+| The host's `/sys/fs/cgroup`, read-only | Per-container CPU %, memory, block I/O and traffic | `OBSERVARR_HOST_PROC` + `OBSERVARR_HOST_CGROUP` + `cgroup: host` on the Observarr container (below) |
 | A Docker socket proxy | Container list, state, health, restarts, lifecycle events, and the "Docker" discovery source | `OBSERVARR_DOCKER_HOST` |
 
 None of this needs a privileged container or write access to anything: every mount below is `:ro`, and the
@@ -56,6 +56,8 @@ services:
       - OBSERVARR_HOST_CGROUP=/host/sys/fs/cgroup
       - OBSERVARR_HOST_DISKS=/host/media
       - OBSERVARR_DOCKER_HOST=tcp://socket-proxy:2375
+      - TZ=Europe/Berlin   # daily traffic totals begin at local midnight
+      # - OBSERVARR_TRAFFIC_BUDGET=20TB/month   # optional: show how much of a traffic budget is used
       # - OBSERVARR_INSECURE_COOKIES=1   # only for plain HTTP on a trusted LAN; leave unset behind an HTTPS reverse proxy
       # Optional: suggests apps from their own config files (see README's "Discovering apps from their config
       # folders"). Needs one read-only mount per app below.
@@ -116,6 +118,27 @@ guessing at them. Check with `stat -fc %T /sys/fs/cgroup` on the host: `cgroup2f
 - **The container list refreshes at most every 5 seconds**, even during a burst of Docker lifecycle events
   (several containers starting or stopping at once); host figures (CPU, memory, …) keep sampling on their own
   schedule regardless.
+
+## Network view notes
+
+- **The host's traffic** is the sum of its physical interfaces in the mounted `/proc` (loopback, `veth*`,
+  `docker*` and `br-*` are left out), so it is what actually crosses the host's network cards.
+- **Per-app traffic** needs the container figures above (`OBSERVARR_HOST_PROC`, `OBSERVARR_HOST_CGROUP`, the
+  socket proxy and `cgroup: host`): each running container's counters are read from its own network namespace
+  via `/proc/<pid>/net/dev`. Containers with `network_mode: host` or `network_mode: container:…` have no
+  counters of their own and count only towards the host. Containers are grouped under the service they are
+  linked to (the Container field of a service).
+- **Other** is the host's traffic that no shown app explains: the host itself, system updates, containers on
+  the host network, and the apps beyond the five largest. It never goes below zero. App figures also include
+  traffic between containers, which never leaves the host, so the apps together can briefly add up to more
+  than the host's total.
+- **Daily totals** are counted from midnight in the container's time zone: set `TZ` (e.g. `TZ=Europe/Berlin`),
+  otherwise days begin at midnight UTC. They are written once a minute and kept for 35 days; the five-minute
+  and one-day charts are kept in memory and start empty after a restart.
+- **Budget:** `OBSERVARR_TRAFFIC_BUDGET=1400GB/day` or `=20TB/month` (decimal units: 1 GB = 10^9 bytes)
+  counts down and up together, the way most providers do; a monthly budget adds up the calendar month's days.
+- **Units:** rates are in Mbit/s and totals in GB/TB, as providers count; memory and disks stay in binary
+  units (GiB).
 
 ## Memory
 

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"cmp"
 	"encoding/json"
 	"strings"
 	"sync"
@@ -13,7 +14,7 @@ import (
 func TestSystemRoutesNeedSession(t *testing.T) {
 	e := newServicesEnv(t)
 	anon := newClientFor(e.client)
-	for _, path := range []string{"/api/system", "/api/system/history"} {
+	for _, path := range []string{"/api/system", "/api/system/history", "/api/network", "/api/network?range=24h"} {
 		if code, _, _ := anon.raw("GET", path, "", nil); code != 401 {
 			t.Errorf("GET %s without a session = %d, want 401", path, code)
 		}
@@ -60,14 +61,49 @@ func TestSystemContainers(t *testing.T) {
 	}
 }
 
+func TestNetwork(t *testing.T) {
+	e := newServicesEnv(t, withDocker(&fakeCollector{}))
+	eventually(t, "the first sample", func() bool { return len(e.srv.System.Network("5m").Containers) == 1 })
+	if code, data := e.send("POST", "/api/services", `{"type":"keyless","name":"Linked","url":"`+e.appURL+
+		`/open","container":"app"}`); code != 201 {
+		t.Fatalf("create = %d %v", code, data)
+	}
+	if code, _, _ := e.raw("GET", "/api/network?range=1y", "", nil); code != 400 {
+		t.Fatalf("an unknown range = %d, want 400", code)
+	}
+	for _, rng := range []string{"", "5m", "24h"} {
+		code, raw, _ := e.raw("GET", "/api/network?range="+rng, "", nil)
+		var v struct {
+			Range      string
+			Times      []int64
+			Host       map[string]any
+			Budget     any
+			Containers []map[string]any
+		}
+		if code != 200 || json.Unmarshal(raw, &v) != nil {
+			t.Fatalf("GET /api/network?range=%s = %d %s", rng, code, raw)
+		}
+		if v.Range != cmp.Or(rng, "5m") || v.Times == nil || v.Host == nil || v.Budget != nil ||
+			len(v.Containers) != 1 || v.Containers[0]["name"] != "app" || v.Containers[0]["service"] != "Linked" {
+			t.Fatalf("range %q: %s", rng, raw)
+		}
+		for _, key := range []string{"todayRx", "todayTx", "peakRx", "peakTx"} {
+			if !strings.Contains(string(raw), `"`+key+`":`) {
+				t.Errorf("range %q lacks %s: %s", rng, key, raw)
+			}
+		}
+	}
+}
+
 // feed is a sampler whose snapshots the test publishes.
 type feed struct {
 	mu   sync.Mutex
 	subs []chan system.Snapshot
 }
 
-func (f *feed) Snapshot() system.Snapshot  { return system.Snapshot{Notices: []string{"initial"}} }
-func (f *feed) History() []system.HostView { return nil }
+func (f *feed) Snapshot() system.Snapshot         { return system.Snapshot{Notices: []string{"initial"}} }
+func (f *feed) History() []system.HostView        { return nil }
+func (f *feed) Network(string) system.TrafficView { return system.TrafficView{} }
 func (f *feed) Subscribe() (<-chan system.Snapshot, func()) {
 	ch := make(chan system.Snapshot, 16)
 	f.mu.Lock()
