@@ -106,6 +106,80 @@ dialog .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap:
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; min-width: 0; }
 .card-head h2 { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 9px; min-width: 0; }
 .card-head h2 .icon { color: var(--muted); }
+/* Right-aligned note in a card head: a count, a unit, a time span. */
+.card-head .meta { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* A row of key figures (Kpi.svelte): four across, two on narrower layouts, one on the smallest. */
+.kpis { display: grid; gap: 16px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@container (max-width: 820px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 720px) { .kpis { gap: 10px; } }
+@media (max-width: 359px) { .kpis { grid-template-columns: minmax(0, 1fr); } }
+
+/* Segmented control: a group of aria-pressed buttons, one of them on. */
+.seg {
+  display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--r-sm); flex: none;
+  background: var(--surface); border: 1px solid var(--border);
+}
+.seg button { padding: 4px 12px; border-radius: 7px; font-weight: 500; color: var(--text2); background: transparent; border: 0; }
+.seg button:hover:not(:disabled) { background: var(--surface2); border: 0; color: var(--text); }
+.seg button[aria-pressed='true'] { background: var(--surface3); color: var(--text); }
+
+/* Something to set up or know: the notices of the host and container sources. */
+.banner {
+  display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: var(--r-lg);
+  background: var(--warn-soft); border: 1px solid rgba(227, 166, 80, 0.28); color: var(--text2); font-size: 13px;
+}
+.banner > .icon { color: var(--warn); margin-top: 1px; }
+.banner-text { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.banner code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.95em; color: var(--text);
+  background: var(--surface2); padding: 1px 5px; border-radius: 4px;
+}
+
+/* No figures yet, or none to show. */
+.waiting { color: var(--muted); font-size: 13px; }
+
+/* Data tables: a quiet header, numbers right-aligned in tabular figures. On narrow layouts each
+   row becomes a small card whose cells name their column (data-label). */
+.table-wrap { margin: 0 -8px; overflow-x: auto; }
+table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
+.data th, .data td { padding: 9px 8px; text-align: left; border-bottom: 1px solid var(--border); min-width: 0; }
+.data tbody tr:last-child td { border-bottom: 0; }
+.data th { white-space: nowrap; color: var(--muted); font-weight: 500; font-size: 12px; padding-top: 4px; }
+.data .r { text-align: right; }
+.data td.r { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.data th button {
+  padding: 0; gap: 4px; border: 0; border-radius: 4px; background: transparent; color: inherit;
+  font: inherit; font-weight: inherit;
+}
+.data th button:hover:not(:disabled) { background: transparent; border: 0; color: var(--text); }
+@container (max-width: 759px) {
+  .table-wrap { margin: 0; }
+  .data, .data tr, .data th, .data td { display: block; width: 100%; }
+  /* display: none, not just hidden: header buttons must not stay reachable by keyboard. */
+  .data thead { display: none; }
+  .data tbody { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr)); }
+  .data tbody tr {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface2); min-width: 0;
+  }
+  .data td { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 2px 0; border: 0; }
+  .data td::before { content: attr(data-label); color: var(--muted); font-size: 12px; flex-shrink: 0; }
+  .data td.lead { display: grid; justify-content: stretch; grid-column: 1 / -1; font-weight: 600; }
+  .data td.r { text-align: left; }
+  .data td.lead::before { display: none; }
+}
+
+/* Colour key of a chart series. */
+.sw { width: 10px; height: 10px; border-radius: 3px; flex: none; display: inline-block; }
+
+/* The brand mark; its size is set where it is used. */
+.mark {
+  display: grid; place-items: center; flex: none;
+  background: linear-gradient(135deg, #f8a171, var(--accent) 45%, #e65a6e);
+}
+.mark svg { fill: none; stroke: var(--accent-ink); stroke-width: 2; stroke-linejoin: round; }
+.mark circle { fill: var(--accent-ink); stroke: none; }
 
 /* Icon tile: a rounded square holding an icon, optionally with a status dot in its corner. */
 .tile-icon {
@@ -139,6 +213,8 @@ dialog .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap:
 .chip.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
 .chip.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
 .chip.fail { background: var(--fail-soft); color: var(--fail); border-color: transparent; }
+/* A state chip leads with a dot in its colour. */
+.chip.dotted::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
 
 .empty {
   border: 1px dashed var(--border2); border-radius: var(--r-lg); padding: 30px 24px; text-align: center;

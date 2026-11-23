@@ -48,6 +48,45 @@ export function formatRate(bytesPerSec) {
   return `${formatBytes(bytesPerSec)}/s`;
 }
 
+// Network traffic is shown as providers count it: rates in Mbit/s, totals in decimal GB and TB.
+
+// formatMbit renders a bytes-per-second rate as a number of Mbit/s without the unit: one decimal
+// below 10, whole numbers above, "<0.1" for a trickle. A missing or negative rate renders as "—".
+export function formatMbit(bytesPerSec) {
+  if (!Number.isFinite(bytesPerSec) || bytesPerSec < 0) return '—';
+  const v = (bytesPerSec * 8) / 1e6;
+  if (v === 0) return '0';
+  if (v < 0.05) return '<0.1';
+  return v < 9.95 ? v.toFixed(1) : String(Math.round(v));
+}
+
+// totalParts splits a byte total into [number, unit] in decimal GB, or TB from 1000 GB: two
+// decimals below 1, one below 10, whole numbers above; "<0.01" for a few megabytes.
+export function totalParts(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) return ['—', ''];
+  let v = bytes / 1e9;
+  let unit = 'GB';
+  if (v >= 999.5) {
+    v /= 1000;
+    unit = 'TB';
+  }
+  if (v === 0) return ['0', unit];
+  if (v < 0.005) return ['<0.01', unit];
+  return [v < 0.995 ? v.toFixed(2) : v < 9.95 ? v.toFixed(1) : String(Math.round(v)), unit];
+}
+
+// formatTotal renders a byte total as e.g. "144 GB" or "1.3 TB".
+export function formatTotal(bytes) {
+  return totalParts(bytes).join(' ').trim();
+}
+
+// formatPart renders a part of a whole, e.g. "144 / 1400 GB", naming the unit once when both share it.
+export function formatPart(part, whole, sep = ' / ') {
+  const [p, pu] = totalParts(part);
+  const [w, wu] = totalParts(whole);
+  return `${p}${pu === wu ? '' : ` ${pu}`}${sep}${w} ${wu}`;
+}
+
 // formatPct renders an already-percent value (0-100, not a 0-1 fraction — a container's CPU can
 // exceed 100 with more than one core busy) as a whole percentage. Negative renders as 0%; a
 // non-finite value renders as "—".

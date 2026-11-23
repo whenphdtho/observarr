@@ -1,6 +1,7 @@
 <script>
   import { onMount, tick } from 'svelte';
   import Overview from './Overview.svelte';
+  import Network from './Network.svelte';
   import Apps from './Apps.svelte';
   import System from './System.svelte';
   import Rail from './Rail.svelte';
@@ -15,11 +16,12 @@
 
   const VIEWS = [
     { id: 'overview', hash: '', label: 'Overview', icon: 'house', sub: 'Your apps and host at a glance' },
+    { id: 'network', hash: '#/network', label: 'Network', icon: 'network', sub: 'Throughput, traffic by app and budget' },
     { id: 'apps', hash: '#/apps', label: 'Apps', icon: 'layout-grid', sub: 'Health and queue of every service' },
     { id: 'system', hash: '#/system', label: 'System', icon: 'server', sub: 'Host, disks and containers' },
   ];
 
-  // The view is remembered in the URL hash (#/apps, #/system), so a reload or a shared link keeps it.
+  // The view is remembered in the URL hash (#/network, #/apps, #/system), so a reload or a shared link keeps it.
   function viewFromHash() {
     return VIEWS.find((v) => v.hash && v.hash === window.location.hash)?.id ?? 'overview';
   }
@@ -150,6 +152,8 @@
 
       {#if view === 'overview'}
         <Overview {services} onjump={jumpTo} />
+      {:else if view === 'network'}
+        <Network />
       {:else if view === 'apps'}
         <Apps {services} filtered={query.trim() !== ''} />
       {:else}
@@ -178,12 +182,7 @@
     display: flex; align-items: center; gap: 11px; padding: 0 10px 22px;
     font-size: 16px; font-weight: 650; letter-spacing: -0.01em;
   }
-  .mark {
-    width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; flex: none;
-    background: linear-gradient(135deg, #f8a171, var(--accent) 45%, #e65a6e);
-  }
-  .mark svg { fill: none; stroke: var(--accent-ink); stroke-width: 2; stroke-linejoin: round; }
-  .mark circle { fill: var(--accent-ink); stroke: none; }
+  .mark { width: 30px; height: 30px; border-radius: 9px; }
 
   .search {
     display: flex; align-items: center; gap: 9px; margin-bottom: 18px; padding: 0 11px; color: var(--muted);

@@ -1,11 +1,12 @@
 <script>
   import HostChart from './HostChart.svelte';
+  import Kpi from './Kpi.svelte';
   import Icon from './icons/Icon.svelte';
   import { snapshot, systemError } from './data.js';
   import { matches } from './status.js';
   import { now } from './ticker.js';
   import {
-    formatBytes, formatRate, formatPct, formatDuration, formatAge, splitNotice, containerStatusClass,
+    formatBytes, formatRate, formatMbit, formatPct, formatDuration, formatAge, splitNotice, containerStatusClass,
   } from './format.js';
 
   // System shows the host (CPU, memory, swap, load, uptime, disks, network) and every container
@@ -46,11 +47,11 @@
   const columns = [
     { key: 'name', label: 'Name' },
     { key: 'state', label: 'State' },
-    { key: 'cpu', label: 'CPU %' },
-    { key: 'mem', label: 'Memory' },
-    { key: 'net', label: 'Network' },
-    { key: 'blk', label: 'Block I/O' },
-    { key: 'restarts', label: 'Restarts' },
+    { key: 'cpu', label: 'CPU %', num: true },
+    { key: 'mem', label: 'Memory', num: true },
+    { key: 'net', label: 'Network Mbit/s', num: true },
+    { key: 'blk', label: 'Block I/O', num: true },
+    { key: 'restarts', label: 'Restarts', num: true },
     { key: 'up', label: 'Up since' },
   ];
   const sortValue = {
@@ -128,60 +129,21 @@
   {/if}
 
   {#if host}
-    <div class="tiles">
-      <div class="card tile">
-        <span class="tile-icon" aria-hidden="true"><Icon name="cpu" /></span>
-        <div class="tile-text">
-          <h2 class="cap">CPU</h2>
-          <p class="v num">{formatPct(host.cpuPercent)}</p>
-          <p class="s ellipsis">{host.cpus} core{host.cpus === 1 ? '' : 's'}</p>
-        </div>
-      </div>
-      <div class="card tile">
-        <span class="tile-icon" aria-hidden="true"><Icon name="memory-stick" /></span>
-        <div class="tile-text">
-          <h2 class="cap">Memory</h2>
-          <p class="v num ellipsis" title={`${formatBytes(host.memUsed)} of ${formatBytes(host.memTotal)} used`}>
-            {formatBytes(host.memUsed)}
-          </p>
-          <p class="s ellipsis">of {formatBytes(host.memTotal)}</p>
-          <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"
-            aria-valuenow={barPercent(host.memUsed, host.memTotal)}
-            aria-label={`Memory: ${formatBytes(host.memUsed)} of ${formatBytes(host.memTotal)} used`}>
-            <i style:width={`${barPercent(host.memUsed, host.memTotal)}%`}></i>
-          </div>
-        </div>
-      </div>
-      <div class="card tile">
-        <span class="tile-icon" aria-hidden="true"><Icon name="database" /></span>
-        <div class="tile-text">
-          <h2 class="cap">Swap</h2>
-          {#if host.swapTotal === 0}
-            <p class="v">—</p>
-            <p class="s">No swap</p>
-          {:else}
-            <p class="v num ellipsis" title={`${formatBytes(host.swapUsed)} of ${formatBytes(host.swapTotal)} used`}>
-              {formatBytes(host.swapUsed)}
-            </p>
-            <p class="s ellipsis">of {formatBytes(host.swapTotal)}</p>
-            <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"
-              aria-valuenow={barPercent(host.swapUsed, host.swapTotal)}
-              aria-label={`Swap: ${formatBytes(host.swapUsed)} of ${formatBytes(host.swapTotal)} used`}>
-              <i style:width={`${barPercent(host.swapUsed, host.swapTotal)}%`}></i>
-            </div>
-          {/if}
-        </div>
-      </div>
-      <div class="card tile">
-        <span class="tile-icon" aria-hidden="true"><Icon name="clock" /></span>
-        <div class="tile-text">
-          <h2 class="cap">Uptime</h2>
-          <p class="v num ellipsis" title={formatDuration(host.uptimeNs)}>{formatDuration(host.uptimeNs)}</p>
-          <p class="s ellipsis" title={`load average (1 / 5 / 15 min): ${host.load.map((l) => l.toFixed(2)).join(' / ')}`}>
-            load {host.load[0].toFixed(2)}
-          </p>
-        </div>
-      </div>
+    <div class="kpis">
+      <Kpi icon="cpu" label="CPU" value={formatPct(host.cpuPercent)} sub={`${host.cpus} core${host.cpus === 1 ? '' : 's'}`}
+        bar={Math.min(100, host.cpuPercent)} barTone={host.cpuPercent >= 90 ? 'warn' : ''} />
+      <Kpi icon="memory-stick" label="Memory" value={formatBytes(host.memUsed)}
+        sub={`of ${formatBytes(host.memTotal)} · ${barPercent(host.memUsed, host.memTotal)}%`}
+        bar={barPercent(host.memUsed, host.memTotal)} barTone={barPercent(host.memUsed, host.memTotal) >= 90 ? 'warn' : ''} />
+      {#if host.swapTotal === 0}
+        <Kpi icon="database" label="Swap" value="—" sub="No swap" />
+      {:else}
+        <Kpi icon="database" label="Swap" value={formatBytes(host.swapUsed)}
+          sub={`of ${formatBytes(host.swapTotal)} · ${barPercent(host.swapUsed, host.swapTotal)}%`}
+          bar={barPercent(host.swapUsed, host.swapTotal)} />
+      {/if}
+      <Kpi icon="clock" label="Uptime" value={formatDuration(host.uptimeNs)}
+        sub={`load ${host.load.map((l) => l.toFixed(2)).join(' · ')}`} />
     </div>
 
     <HostChart />
@@ -217,13 +179,16 @@
         {/if}
         {#if net.length > 0}
           <section class="card" aria-labelledby="net-title">
-            <div class="card-head"><h2 id="net-title"><Icon name="arrow-down-up" size={16} />Network</h2></div>
+            <div class="card-head">
+              <h2 id="net-title"><Icon name="arrow-down-up" size={16} />Interfaces</h2>
+              <a class="meta" href="#/network">Mbit/s · by app</a>
+            </div>
             <ul class="rows">
               {#each net as n (n.name)}
                 <li>
                   <span class="ellipsis name" title={n.name}>{n.name}</span>
-                  <span class="num rate" title={`down ${formatRate(n.rx)}, up ${formatRate(n.tx)}`}>
-                    <span class="down">↓</span> {formatRate(n.rx)} <span class="up">↑</span> {formatRate(n.tx)}
+                  <span class="num rate" title={`down ${formatMbit(n.rx)} Mbit/s, up ${formatMbit(n.tx)} Mbit/s`}>
+                    ↓ {formatMbit(n.rx)} · ↑ {formatMbit(n.tx)}
                   </span>
                 </li>
               {/each}
@@ -238,11 +203,11 @@
     <div class="card-head">
       <h2 id="containers-title"><Icon name="box" size={16} />Containers</h2>
       {#if allContainers}
-        <span class="muted small num">{containers.length === allContainers ? allContainers : `${containers.length} of ${allContainers}`}</span>
+        <span class="meta num">{containers.length === allContainers ? allContainers : `${containers.length} of ${allContainers}`}</span>
       {/if}
     </div>
     {#if containers.length === 0}
-      <p class="muted small">
+      <p class="waiting">
         {allContainers ? 'No container matches the search.' : dockerNotConfigured ? 'Docker is not configured.' : 'No containers.'}
       </p>
     {:else}
@@ -262,14 +227,14 @@
              block or grid in a narrow layout (to stack rows as cards); some screen readers then drop
              the element's table semantics unless a matching role is still set explicitly. -->
         <!-- svelte-ignore a11y_no_redundant_roles -->
-        <table role="table">
+        <table class="data" role="table">
           <caption class="visually-hidden">Containers</caption>
           <!-- svelte-ignore a11y_no_redundant_roles -->
           <thead role="rowgroup">
             <!-- svelte-ignore a11y_no_redundant_roles -->
             <tr role="row">
               {#each columns as col (col.key)}
-                <th role="columnheader" scope="col" aria-sort={ariaSort(col.key)}>
+                <th role="columnheader" scope="col" class={col.num ? 'r' : ''} aria-sort={ariaSort(col.key)}>
                   <button type="button" onclick={() => sortBy(col.key)}>
                     {col.label}
                     <span class="arrow" aria-hidden="true">
@@ -286,7 +251,7 @@
               {@const status = containerStatusClass(c.state, c.health)}
               <!-- svelte-ignore a11y_no_redundant_roles -->
               <tr role="row">
-                <td role="cell" data-label="Name" title={c.name}>
+                <td role="cell" data-label="Name" class="lead" title={c.name}>
                   <span class="ellipsis">{c.name}</span>
                 </td>
                 <td role="cell" data-label="State" title={c.state + (c.health ? ` (${c.health})` : '')}>
@@ -295,10 +260,10 @@
                     <span class="ellipsis">{c.state}{c.health ? ` (${c.health})` : ''}</span>
                   </span>
                 </td>
-                <td role="cell" data-label="CPU %" class="num">
+                <td role="cell" data-label="CPU %" class="r">
                   <span class="ellipsis">{c.state === 'running' ? formatPct(c.cpuPercent) : '—'}</span>
                 </td>
-                <td role="cell" data-label="Memory" class="num"
+                <td role="cell" data-label="Memory" class="r"
                   title={c.state === 'running' ?
                     `${formatBytes(c.memBytes)} of ${c.memLimit ? formatBytes(c.memLimit) : 'no limit'}` : ''}>
                   {#if c.state === 'running'}
@@ -310,21 +275,21 @@
                     —
                   {/if}
                 </td>
-                <td role="cell" data-label="Network" class="num"
+                <td role="cell" data-label="Network" class="r"
                   title={c.state === 'running' && ownNetwork(c.networkMode) ?
-                    `down ${formatRate(c.netRxRate)}, up ${formatRate(c.netTxRate)}` : ''}>
+                    `down ${formatMbit(c.netRxRate)} Mbit/s, up ${formatMbit(c.netTxRate)} Mbit/s` : ''}>
                   {#if c.state !== 'running'}
                     —
                   {:else if ownNetwork(c.networkMode)}
                     <span class="two">
-                      <span><span class="down" aria-hidden="true">↓</span> {formatRate(c.netRxRate)}</span>
-                      <span><span class="up" aria-hidden="true">↑</span> {formatRate(c.netTxRate)}</span>
+                      <span><span aria-hidden="true">↓</span> {formatMbit(c.netRxRate)}</span>
+                      <span><span aria-hidden="true">↑</span> {formatMbit(c.netTxRate)}</span>
                     </span>
                   {:else}
                     <span class="muted" title="no network of its own">—</span>
                   {/if}
                 </td>
-                <td role="cell" data-label="Block I/O" class="num"
+                <td role="cell" data-label="Block I/O" class="r"
                   title={c.state === 'running' ? `read ${formatRate(c.blkReadRate)}, write ${formatRate(c.blkWriteRate)}` : ''}>
                   {#if c.state === 'running'}
                     <span class="two">
@@ -335,7 +300,7 @@
                     —
                   {/if}
                 </td>
-                <td role="cell" data-label="Restarts" class="num">{c.restartCount}</td>
+                <td role="cell" data-label="Restarts" class="r">{c.restartCount}</td>
                 <td role="cell" data-label="Up since" title={c.startedAt || ''}>
                   <span class="ellipsis">{c.startedAt ? formatAge(c.startedAt, $now) : '—'}</span>
                 </td>
@@ -350,26 +315,6 @@
 
 <style>
   .system { display: grid; gap: 16px; }
-  .small { font-size: 13px; }
-
-  .banner {
-    display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: var(--r-lg);
-    background: var(--warn-soft); border: 1px solid rgba(227, 166, 80, 0.28); color: var(--text2); font-size: 13px;
-  }
-  .banner > :global(.icon) { color: var(--warn); margin-top: 1px; }
-  .banner-text { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
-  .banner code {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.95em; color: var(--text);
-    background: var(--surface2); padding: 1px 5px; border-radius: 4px;
-  }
-
-  .tiles { display: grid; gap: 16px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .tile { display: flex; gap: 13px; align-items: flex-start; padding: 15px 16px; }
-  .tile-text { display: grid; min-width: 0; flex: 1; }
-  .cap { font-size: 12.5px; color: var(--muted); font-weight: 550; }
-  .v { font-size: 19px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.3; white-space: nowrap; }
-  .s { font-size: 12.5px; color: var(--muted); }
-  .tile .bar { margin-top: 8px; }
 
   .pair { display: grid; gap: 16px; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; }
   .pair.single { grid-template-columns: minmax(0, 1fr); }
@@ -385,9 +330,10 @@
   .avail { background: var(--surface3); }
   .legend { display: flex; gap: 16px; margin-top: 14px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
-  .sw { width: 10px; height: 10px; border-radius: 3px; }
-  .sw.avail { background: var(--surface3); box-shadow: inset 0 0 0 1px var(--border2); }
+  .sw.avail { box-shadow: inset 0 0 0 1px var(--border2); }
 
+  a.meta { text-decoration: none; }
+  a.meta:hover { color: var(--text); }
   .rows { list-style: none; margin: 0; padding: 0; }
   .rows li {
     display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border);
@@ -396,74 +342,31 @@
   .rows li:last-child { border-bottom: 0; }
   .rows .name { font-weight: 550; }
   .rate { white-space: nowrap; color: var(--text2); }
-  .down { color: var(--down); }
-  .up { color: var(--up); }
 
   .mobile-sort { display: none; }
-  .table-wrap { overflow-x: auto; margin: 0 -8px; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { padding: 9px 8px; text-align: left; border-bottom: 1px solid var(--border); min-width: 0; }
-  tbody tr:last-child td { border-bottom: 0; }
-  th { white-space: nowrap; color: var(--muted); font-weight: 500; font-size: 12px; padding-top: 4px; }
-  td.num { white-space: nowrap; }
-  th button {
-    padding: 0; gap: 4px; border: 0; border-radius: 4px; background: transparent; color: inherit;
-    font: inherit; font-weight: inherit;
-  }
-  th button:hover:not(:disabled) { background: transparent; border: 0; color: var(--text); }
   .arrow { font-size: 9px; width: 1em; display: inline-block; }
   .state-wrap { display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; }
   /* Two figures of one cell (used/limit, down/up, read/write) sit one above the other. */
   .two { display: grid; line-height: 1.4; }
 
   @container (max-width: 820px) {
-    .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .pair { grid-template-columns: minmax(0, 1fr); }
   }
-  @container (max-width: 400px) {
-    .tiles { grid-template-columns: minmax(0, 1fr); gap: 10px; }
-  }
 
-  /* Narrow: each row becomes a card. A container query, not a media query, since the side
-     columns take a varying share of the window. */
+  /* Narrow: the shared card layout of .data, arranged for a container: a name line and a state
+     line; CPU %, Restarts and Up since side by side; Memory, Network and Block I/O each on a line
+     of their own, as their figures are too long to share one. */
   @container (max-width: 759px) {
     .mobile-sort { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 10px; }
     .mobile-sort label { white-space: nowrap; flex-shrink: 0; color: var(--muted); }
     .mobile-sort select { flex: 1; min-width: 0; }
-    .table-wrap { margin: 0; }
-    table, tr, th, td { display: block; width: 100%; }
-    tbody { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr)); }
-    /* display: none, not just visually hidden: the sort buttons it holds must not be reachable by
-       keyboard either. The select above does the same job and stays visible and focusable. */
-    thead { display: none; }
-
-    /* Each row becomes a compact card: a name line and a state line; then CPU %, Restarts and Up
-       since (all short values) side by side; then Memory, Network and Block I/O each on their own
-       full-width line, since their figures are too long to share a row without truncating. */
     tbody tr {
-      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 10px; row-gap: 4px;
-      grid-template-areas:
-        "name name name"
-        "state state state"
-        "cpu restarts up"
-        "mem mem mem"
-        "net net net"
-        "blk blk blk";
-      border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; min-width: 0;
-      background: var(--surface2);
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-areas: "name name name" "state state state" "cpu restarts up" "mem mem mem" "net net net" "blk blk blk";
     }
-    td {
-      display: flex; justify-content: space-between; align-items: center; gap: 8px; border-bottom: 0;
-      padding: 3px 0; min-width: 0;
-    }
-    td::before { content: attr(data-label); color: var(--muted); font-size: 12px; flex-shrink: 0; }
-
-    td[data-label='Name'] { grid-area: name; font-weight: 600; }
+    td[data-label='Name'] { grid-area: name; }
     td[data-label='State'] { grid-area: state; padding-bottom: 6px; justify-content: flex-start; color: var(--text2); }
-    td[data-label='Name']::before, td[data-label='State']::before { display: none; }
-
-    /* CPU %, Restarts and Up since are short values: the label stacks above the value instead of
-       pairing label:value inline, so three fit comfortably side by side. */
+    td[data-label='State']::before { display: none; }
     td[data-label='CPU %'], td[data-label='Restarts'], td[data-label='Up since'] { display: block; }
     td[data-label='CPU %']::before, td[data-label='Restarts']::before, td[data-label='Up since']::before {
       display: block; margin-bottom: 2px;
@@ -471,9 +374,6 @@
     td[data-label='CPU %'] { grid-area: cpu; }
     td[data-label='Restarts'] { grid-area: restarts; }
     td[data-label='Up since'] { grid-area: up; }
-
-    /* Memory, Network and Block I/O need their full figures legible, so each gets the card's full
-       width as an ordinary label/value line. */
     td[data-label='Memory'] { grid-area: mem; }
     td[data-label='Network'] { grid-area: net; }
     td[data-label='Block I/O'] { grid-area: blk; }

@@ -28,10 +28,10 @@
 
 <div class="health">
   {#if !reading}
-    <p class="muted waiting">Waiting for the first check…</p>
+    <p class="waiting">Waiting for the first check…</p>
   {:else}
     <p class="row">
-      <span class="pill" class:ok={up} class:fail={!up}>{up ? 'Up' : 'Down'}</span>
+      <span class="chip dotted state" class:ok={up} class:fail={!up}>{up ? 'Up' : 'Down'}</span>
       {#if data}
         <span class="chip num ellipsis" title={`version ${data.version}`}>v{data.version}</span>
         <span class="chip num">{data.latencyMs} ms</span>
@@ -57,15 +57,8 @@
 
 <style>
   .health { display: grid; gap: 10px; }
-  .waiting { font-size: 13px; }
   .row { display: flex; align-items: center; gap: 6px; min-width: 0; }
-  .pill {
-    display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 99px; flex: none;
-    font-size: 12px; font-weight: 550; white-space: nowrap;
-  }
-  .pill::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-  .pill.ok { color: var(--ok); background: var(--ok-soft); }
-  .pill.fail { color: var(--fail); background: var(--fail-soft); }
+  .state { flex: none; font-weight: 550; }
   .chip { flex: 0 1 auto; }
   .age { margin-left: auto; padding-left: 6px; font-size: 12px; white-space: nowrap; }
   .error { font-size: 13px; }

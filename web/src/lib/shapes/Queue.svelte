@@ -13,7 +13,7 @@
 
 <div class="queue">
   {#if !reading}
-    <p class="muted waiting">Waiting for the first check…</p>
+    <p class="waiting">Waiting for the first check…</p>
   {:else}
     <p class="row">
       <span class="label">Queue</span>
@@ -23,7 +23,7 @@
     {#if reading.error}
       <p class="error" role="alert">{reading.error}</p>
     {:else if items.length === 0}
-      <p class="muted waiting">Queue is empty.</p>
+      <p class="waiting">Queue is empty.</p>
     {:else}
       <ul class="items">
         {#each items as item}
@@ -57,7 +57,6 @@
 
 <style>
   .queue { display: grid; gap: 6px; }
-  .waiting { font-size: 13px; }
   .row { display: flex; align-items: center; gap: 8px; min-width: 0; padding-top: 12px; border-top: 1px solid var(--border); }
   .label { font-size: 13px; font-weight: 600; }
   .count {

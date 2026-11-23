@@ -2,9 +2,9 @@
   import Icon from './icons/Icon.svelte';
   import { adapters, adapterFor, snapshot } from './data.js';
   import { serviceStatus, serviceLine } from './status.js';
-  import { formatBytes, formatPct } from './format.js';
+  import { formatBytes, formatPct, formatTotal, formatPart } from './format.js';
 
-  // Rail is every service at a glance plus a short system summary. It sits in the right column on
+  // Rail is every service at a glance plus a short system summary and today's traffic. It sits in the right column on
   // wide screens and inside the Overview on narrower ones. onjump(id) shows a service's card.
   let { services, onjump } = $props();
   const uid = $props.id();
@@ -16,6 +16,8 @@
   const memPct = $derived(host && host.memTotal > 0 ? Math.round((host.memUsed / host.memTotal) * 100) : 0);
   const diskLow = $derived(!!disk && disk.avail < (disk.total - disk.free + disk.avail) * 0.1);
   const online = $derived(services.filter((s) => s.up).length);
+  const traffic = $derived($snapshot?.traffic ?? null);
+  const budget = $derived(traffic?.budget ?? null);
 </script>
 
 <section class="rail-section" aria-labelledby={`${uid}-apps`}>
@@ -79,11 +81,21 @@
     {/if}
   </ul>
 
-  {#if host && host.memTotal > 0}
-    <a class="budget" href="#/system">
-      <span class="row1"><span>Memory</span><b class="num">{formatBytes(host.memUsed)} / {formatBytes(host.memTotal)}</b></span>
-      <span class="bar" class:warn={memPct >= 90}><i style:width={`${memPct}%`}></i></span>
-      <span class="muted small">{memPct}% in use</span>
+  {#if traffic}
+    {@const total = traffic.todayRx + traffic.todayTx}
+    <a class="budget" href="#/network">
+      {#if budget}
+        {@const pct = Math.round((budget.usedBytes / budget.limitBytes) * 100)}
+        <span class="row1">
+          <span>{budget.period === 'day' ? 'Traffic today' : 'Traffic this month'}</span>
+          <b class="num">{formatPart(budget.usedBytes, budget.limitBytes)}</b>
+        </span>
+        <span class="bar" class:warn={pct >= 80 && pct < 100} class:fail={pct >= 100}><i style:width={`${Math.min(100, pct)}%`}></i></span>
+        <span class="muted small">{pct}% of the {budget.period === 'day' ? 'daily' : 'monthly'} budget</span>
+      {:else}
+        <span class="row1"><span>Traffic today</span><b class="num">{formatTotal(total)}</b></span>
+        <span class="muted small num">↓ {formatTotal(traffic.todayRx)} · ↑ {formatTotal(traffic.todayTx)}</span>
+      {/if}
     </a>
   {/if}
 </section>

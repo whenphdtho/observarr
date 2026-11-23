@@ -81,12 +81,7 @@
   main { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 16px; }
   form { width: min(380px, 100%); display: grid; gap: 14px; padding: 26px 24px; }
   .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 2px; }
-  .mark {
-    width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; flex: none;
-    background: linear-gradient(135deg, #f8a171, var(--accent) 45%, #e65a6e);
-  }
-  .mark svg { fill: none; stroke: var(--accent-ink); stroke-width: 2; stroke-linejoin: round; }
-  .mark circle { fill: var(--accent-ink); stroke: none; }
+  .mark { width: 36px; height: 36px; border-radius: 10px; }
   h1 { font-size: 20px; font-weight: 650; letter-spacing: -0.015em; }
   label { display: grid; gap: 6px; font-size: 13px; color: var(--text2); }
   .hint { font-size: 12px; }
