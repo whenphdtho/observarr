@@ -5,6 +5,7 @@ package catalog
 import (
 	"observarr/internal/adapter"
 	"observarr/internal/adapters/arr"
+	"observarr/internal/adapters/rclone"
 )
 
 // Register adds every known adapter to r. Add new adapters here; this list is the whole catalog.
@@ -12,4 +13,5 @@ func Register(r *adapter.Registry) {
 	for _, d := range arr.Definitions {
 		r.Register(arr.New(d))
 	}
+	r.Register(rclone.New())
 }

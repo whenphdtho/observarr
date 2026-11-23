@@ -7,13 +7,13 @@ import (
 	"observarr/internal/adapters/catalog"
 )
 
-func TestRegisterRegistersFourUniqueTypes(t *testing.T) {
+func TestRegisterRegistersUniqueTypes(t *testing.T) {
 	r := adapter.NewRegistry()
 	catalog.Register(r)
 
 	infos := r.Infos()
-	if len(infos) != 4 {
-		t.Fatalf("got %d adapters, want 4", len(infos))
+	if len(infos) != 5 {
+		t.Fatalf("got %d adapters, want 5", len(infos))
 	}
 
 	seen := make(map[string]bool, len(infos))
@@ -27,7 +27,7 @@ func TestRegisterRegistersFourUniqueTypes(t *testing.T) {
 		seen[info.Type] = true
 	}
 
-	for _, want := range []string{"sonarr", "radarr", "lidarr", "prowlarr"} {
+	for _, want := range []string{"sonarr", "radarr", "lidarr", "prowlarr", "rclone"} {
 		if !seen[want] {
 			t.Errorf("catalog is missing type %q", want)
 		}
@@ -38,7 +38,7 @@ func TestRegisterCanLookUpEachType(t *testing.T) {
 	r := adapter.NewRegistry()
 	catalog.Register(r)
 
-	for _, typ := range []string{"sonarr", "radarr", "lidarr", "prowlarr"} {
+	for _, typ := range []string{"sonarr", "radarr", "lidarr", "prowlarr", "rclone"} {
 		a, ok := r.Get(typ)
 		if !ok {
 			t.Errorf("Get(%q): not found", typ)

@@ -1,0 +1,6 @@
+{
+	"vfses": [
+		"media-crypt:",
+		"cloud:backup"
+	]
+}

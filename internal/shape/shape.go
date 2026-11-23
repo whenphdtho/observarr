@@ -92,3 +92,55 @@ func ClipTo(s string, n int) string {
 	}
 	return b
 }
+
+// KindMounts is filled by apps that mount remote storage and cache it on a local disk.
+const KindMounts Kind = "mounts"
+
+// Mount states.
+const (
+	MountMounted = "mounted" // the app reports it as mounted at MountPoint
+	MountActive  = "active"  // the app serves it but does not report where it is mounted
+	// MountUnmounted is a mount the app knows of that is not mounted now (for apps that keep configured mounts).
+	MountUnmounted = "unmounted"
+)
+
+// Mount is one remote file system an app mounts, with its local cache.
+type Mount struct {
+	Remote            string `json:"remote"`               // what is mounted, e.g. "cloud:media"
+	MountPoint        string `json:"mountPoint,omitempty"` // where, if the app reports it
+	State             string `json:"state"`                // MountMounted or MountActive
+	CacheMode         string `json:"cacheMode,omitempty"`  // the app's cache mode, e.g. "full"; "" if unknown
+	Cache             bool   `json:"cache"`                // the mount keeps a disk cache; the figures below are its own
+	CacheUsedBytes    int64  `json:"cacheUsedBytes"`
+	CacheMaxBytes     int64  `json:"cacheMaxBytes"` // 0: no limit
+	CachedFiles       int64  `json:"cachedFiles"`
+	UploadsInProgress int64  `json:"uploadsInProgress"`
+	UploadsQueued     int64  `json:"uploadsQueued"`
+	ErroredFiles      int64  `json:"erroredFiles"` // cached files the app failed to write back
+	OutOfSpace        bool   `json:"outOfSpace"`   // the cache disk is full
+}
+
+// Transfer is one transfer in progress.
+type Transfer struct {
+	Name      string  `json:"name"`
+	Progress  float64 `json:"progress"` // 0..1
+	SizeBytes int64   `json:"sizeBytes"`
+	Speed     float64 `json:"speed"` // bytes/s
+}
+
+// Mounts is filled by apps that mount remote storage.
+type Mounts struct {
+	Total           int        `json:"total"`           // mounts the app reports (may exceed len(Mounts))
+	Mounts          []Mount    `json:"mounts"`          // at most MaxMounts; [] not nil
+	Speed           float64    `json:"speed"`           // transfer speed now, bytes/s
+	Bytes           int64      `json:"bytes"`           // bytes transferred since the app started
+	Errors          int64      `json:"errors"`          // transfer errors since the app started
+	ActiveTransfers int        `json:"activeTransfers"` // transfers in progress (may exceed len(Transfers))
+	Transfers       []Transfer `json:"transfers"`       // at most MaxTransfers; [] not nil
+}
+
+// MaxMounts bounds the mounts kept per reading, MaxTransfers the transfers.
+const (
+	MaxMounts    = 20
+	MaxTransfers = 20
+)

@@ -1,0 +1,18 @@
+{
+	"arch": "amd64",
+	"decomposed": [
+		1,
+		71,
+		2
+	],
+	"goTags": "none",
+	"goVersion": "go1.25.3",
+	"isBeta": false,
+	"isGit": false,
+	"linking": "static",
+	"os": "linux",
+	"osArch": "amd64",
+	"osKernel": "6.8.0-86-generic (x86_64)",
+	"osVersion": "debian 12.8 (64 bit)",
+	"version": "v1.71.2"
+}
