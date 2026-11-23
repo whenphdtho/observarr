@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"cmp"
 	"context"
 	"slices"
 	"sync"
@@ -92,6 +93,48 @@ func (l *Limiter) Reset(ctx context.Context, addr string) error {
 		return nil
 	}
 	return l.store.RememberLogin(ctx, addr, at)
+}
+
+// AddrState is what the Limiter holds about one address: its attempts within LockoutWindow (successful logins
+// clear them) and, when it is locked out, for how long still.
+type AddrState struct {
+	Key      string        // the address key (see LimitKey)
+	Attempts int           // attempts within LockoutWindow
+	Last     time.Time     // the latest of them
+	Locked   time.Duration // time left in its lockout; 0 if it is not locked out
+}
+
+// Status is the state of the Limiter: every address with attempts in the window, those locked out first, then by
+// latest attempt; and how long the server-wide budget still refuses unknown addresses (0 if it does not).
+func (l *Limiter) Status() (addrs []AddrState, globalLocked time.Duration) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := l.now()
+	addrs = make([]AddrState, 0, len(l.attempts))
+	for key := range l.attempts {
+		recent := l.recent(key)
+		if len(recent) == 0 {
+			continue
+		}
+		s := AddrState{Key: key, Attempts: len(recent), Last: recent[len(recent)-1]}
+		if len(recent) >= MaxAttempts {
+			s.Locked = max(0, recent[0].Add(LockoutWindow).Sub(now))
+		}
+		addrs = append(addrs, s)
+	}
+	slices.SortFunc(addrs, func(a, b AddrState) int {
+		if c := cmp.Compare(b.Locked, a.Locked); c != 0 {
+			return c
+		}
+		if c := b.Last.Compare(a.Last); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.Key, b.Key)
+	})
+	if end := l.windowStart.Add(GlobalWindow); l.global >= GlobalAttempts && now.Before(end) {
+		globalLocked = end.Sub(now)
+	}
+	return addrs, globalLocked
 }
 
 // reset does Reset's work in memory and returns the time of the login.
