@@ -3,6 +3,8 @@
 </script>
 
 <script>
+  import { monotonePath } from './curve.js';
+
   // AreaChart draws one or more series over time as smooth lines with a fading fill, with y-axis
   // labels and a minute-based time axis. times are milliseconds since epoch, one per value;
   // each series is { values, color } with color a CSS colour (e.g. "var(--down)"). max fixes the
@@ -40,23 +42,10 @@
   const x = (t) => PAD.left + ((t - t0) / span) * plotW;
   const y = (v) => PAD.top + plotH - (Math.min(top, Math.max(0, v)) / top) * plotH;
 
-  // linePath joins the points with Catmull-Rom curves; control points are clamped to the plot so
-  // the curve never dips below zero or above the top.
+  // linePath joins the points with a monotone curve (see curve.js): it never runs backwards in
+  // time, however unevenly the samples are spaced, and never overshoots past zero or the top.
   function linePath(values) {
-    const pts = values.map((v, i) => [x(times[i]), y(v)]);
-    if (pts.length < 2) return '';
-    const clampY = (v) => Math.min(PAD.top + plotH, Math.max(PAD.top, v));
-    let d = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p0 = pts[i - 1] ?? pts[i];
-      const p1 = pts[i];
-      const p2 = pts[i + 1];
-      const p3 = pts[i + 2] ?? p2;
-      const c1 = [p1[0] + (p2[0] - p0[0]) / 6, clampY(p1[1] + (p2[1] - p0[1]) / 6)];
-      const c2 = [p2[0] - (p3[0] - p1[0]) / 6, clampY(p2[1] - (p3[1] - p1[1]) / 6)];
-      d += `C${c1[0].toFixed(1)},${c1[1].toFixed(1)} ${c2[0].toFixed(1)},${c2[1].toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
-    }
-    return d;
+    return monotonePath(values.map((v, i) => [x(times[i]), y(v)]));
   }
 
   function areaPath(line) {

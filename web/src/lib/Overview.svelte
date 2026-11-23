@@ -56,9 +56,9 @@
       <span class="tile-icon" aria-hidden="true"><Icon name="memory-stick" /></span>
       <span class="kpi-text">
         {#if host}
-          <span class="v num">{memParts[0]}<small>{memParts[1]} used</small></span>
-          <span class="s ellipsis" title={`${formatBytes(host.memUsed)} of ${formatBytes(host.memTotal)}`}>
-            of {formatBytes(host.memTotal)} · {memPct}%
+          <span class="v num">{memParts[0]}<small>{memParts[1]}</small></span>
+          <span class="s ellipsis" title={`${formatBytes(host.memUsed)} of ${formatBytes(host.memTotal)} used`}>
+            used of {formatBytes(host.memTotal)} · {memPct}%
           </span>
           <span class="bar" class:warn={memPct >= 90}><i style:width={`${memPct}%`}></i></span>
         {:else}
@@ -138,6 +138,13 @@
   }
   @container (max-width: 400px) {
     .kpis { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  }
+  /* Four tiles in a row narrower than about 250px each (a 1280–1536px window with the rail shown):
+     the icon goes above the figures, so the captions get the tile's full width instead of being
+     cut off. */
+  @container (min-width: 821px) and (max-width: 1040px) {
+    .kpi { flex-direction: column; align-items: stretch; gap: 10px; padding: 14px 16px; }
+    .kpi .tile-icon { width: 32px; height: 32px; }
   }
   /* Phones: a 2×2 grid from 360px up, with the icon above the figures so every value keeps one
      line; a single column below 360px. These come after the container queries so they win. */
