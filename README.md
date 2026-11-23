@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/whenphdtho/observarr/actions/workflows/ci.yml/badge.svg)](https://github.com/whenphdtho/observarr/actions/workflows/ci.yml)
 
-<img src="docs/images/demo.webp" width="880" alt="Observarr demo: signing in to the Overview with its live host chart, the Apps view with queues advancing, adding Lidarr from a Docker suggestion, the System view, and the same views on a phone">
+<img src="docs/images/demo.webp" width="880" alt="Observarr demo: signing in to the Overview with live throughput, the Network view live and over 24 hours, the Apps view with Big Buck Bunny downloading, adding Lidarr from a Docker suggestion, the System view, and the same views on a phone">
 
 <sub>▶ [Watch in full quality (MP4)](docs/images/demo.mp4)</sub>
 
@@ -22,8 +22,8 @@ and its containers are doing — all from one small container. Status: early dev
 - **Overview at a glance:** live download and upload with the apps moving the most traffic, services up,
   active downloads, host CPU and memory, and one list of everything that needs attention — down services,
   health warnings, stuck downloads.
-- **Network view:** where the traffic goes — every app's share over the last five minutes or day, in and out,
-  today's totals per app, today's peak and an optional daily or monthly traffic budget.
+- **Network:** where your traffic goes, by app, live and over 24 h — in and out, today's totals per app, and an
+  optional daily or monthly budget.
 - **Live health and queues** for Sonarr, Radarr, Lidarr and Prowlarr: version, response time, health
   warnings, and every queued download with progress, ETA and import problems, pushed to the browser as they change.
 - **System view:** host CPU, memory, swap, load, uptime, disks and network, plus every container's state,
@@ -34,34 +34,44 @@ and its containers are doing — all from one small container. Status: early dev
   distroless image. Saved API keys are encrypted at rest. Works on a phone, too.
 
 <p align="center">
-  <img src="docs/images/overview.png" alt="Overview: sidebar with the views, four key figures (services up, downloads, host CPU, memory), a live CPU chart, a Needs attention list with a Radarr health warning and an import problem, and a rail listing every app and the host's figures">
+  <img src="docs/images/overview.png" alt="Overview: a Throughput card with live download and upload, the containers moving the most traffic and a network chart, four key figures (services up, downloads, CPU, memory), a Needs attention list with a Radarr health warning and an import problem, and a rail with every app, the host's figures and today's traffic against the budget">
   <br>
-  <sub>Overview: key figures, a live host chart and everything that needs attention</sub>
+  <sub>Overview: throughput, key figures and everything that needs attention</sub>
 </p>
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/apps.png" alt="Apps view: cards for Lidarr, Prowlarr, Radarr and Sonarr, each with its container's state and usage, health and version, a Radarr health warning, and download queues with progress, size left and ETA"></td>
-    <td width="50%"><img src="docs/images/system.png" alt="System view: CPU, memory, swap and uptime tiles, a live host activity chart, disk and network cards, and the start of the containers table"></td>
+    <td width="50%"><img src="docs/images/network.png" alt="Network view: download, upload, today's total and top-now tiles, a mirrored stacked chart of where the traffic goes per container over the last five minutes, a By app table and a daily budget gauge"></td>
+    <td width="50%"><img src="docs/images/apps.png" alt="Apps view: cards for Lidarr, Prowlarr, Radarr and Sonarr, each with its container's state and usage, health and version, a Radarr health warning, and download queues led by Big Buck Bunny with progress, size left and ETA"></td>
   </tr>
   <tr>
+    <td align="center"><sub>Network: where the traffic goes, by app</sub></td>
     <td align="center"><sub>Apps: health, queue and container of every service</sub></td>
-    <td align="center"><sub>System: host, disks, network and containers</sub></td>
   </tr>
   <tr>
+    <td><img src="docs/images/system.png" alt="System view: CPU, memory, swap and uptime tiles, a live host activity chart, disk and network cards, and the start of the containers table"></td>
     <td><img src="docs/images/discover-docker.png" alt="Discover services dialog with the Network, Linked apps, Config folders and Docker sources, and a Lidarr suggestion found in Docker"></td>
-    <td><img src="docs/images/add-from-suggestion.png" alt="Add service dialog filled from the Lidarr suggestion, with its container linked and a successful connection test"></td>
   </tr>
   <tr>
+    <td align="center"><sub>System: host, disks, network and containers</sub></td>
     <td align="center"><sub>Discover: suggestions from Docker and other sources</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/add-from-suggestion.png" alt="Add service dialog filled from the Lidarr suggestion, with its container linked and a successful connection test"></td>
+    <td><img src="docs/images/network-24h.png" alt="Network view over the last 24 hours: the per-container traffic chart since the demo started, with the By app table and the daily budget gauge"></td>
+  </tr>
+  <tr>
     <td align="center"><sub>Add from a suggestion: test, then add</sub></td>
+    <td align="center"><sub>Network over 24 hours</sub></td>
   </tr>
 </table>
 
 <p align="center">
-  <img src="docs/images/phone-overview.png" width="260" alt="Overview on a phone-width screen: the four key figures as a two-by-two grid above the host chart, with the views in a dock at the bottom">
+  <img src="docs/images/phone-overview.png" width="240" alt="Overview on a phone-width screen: the Throughput card above the key figures, with the views in a dock at the bottom">
   &nbsp;
-  <img src="docs/images/phone-system.png" width="260" alt="System view on a phone-width screen, with the views in a dock at the bottom">
+  <img src="docs/images/phone-network.png" width="240" alt="Network view on a phone-width screen: traffic tiles and the where-the-traffic-goes chart, with the views in a dock at the bottom">
+  &nbsp;
+  <img src="docs/images/phone-system.png" width="240" alt="System view on a phone-width screen, with the views in a dock at the bottom">
 </p>
 
 ## Quick start
