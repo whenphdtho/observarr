@@ -1,0 +1,48 @@
+{
+	"bytes": 52613349376,
+	"checks": 0,
+	"deletedDirs": 0,
+	"deletes": 0,
+	"elapsedTime": 86412.3071259,
+	"errors": 2,
+	"eta": 41,
+	"fatalError": false,
+	"lastError": "upload failed: failed to open source object",
+	"listed": 1832,
+	"renames": 0,
+	"retryError": true,
+	"serverSideCopies": 0,
+	"serverSideCopyBytes": 0,
+	"serverSideMoveBytes": 0,
+	"serverSideMoves": 0,
+	"speed": 18350080.5,
+	"totalBytes": 53687091200,
+	"totalChecks": 0,
+	"totalTransfers": 214,
+	"transferTime": 2930.112,
+	"transferring": [
+		{
+			"bytes": 734003200,
+			"dstFs": "media-crypt:",
+			"eta": 18,
+			"group": "global_stats",
+			"name": "Films/A Quiet Field (2024)/A Quiet Field (2024).mkv",
+			"percentage": 62,
+			"size": 1183842304,
+			"speed": 12582912,
+			"speedAvg": 11953766.4,
+			"srcFs": "/var/cache/rclone/vfs/media-crypt"
+		},
+		{
+			"bytes": 104857600,
+			"group": "global_stats",
+			"name": "Shows/Northern Lights/Season 01/Northern Lights - S01E03.mkv",
+			"percentage": 12,
+			"size": 873463808,
+			"speed": 5767168,
+			"speedAvg": 5242880,
+			"eta": 133
+		}
+	],
+	"transfers": 212
+}

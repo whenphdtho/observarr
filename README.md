@@ -29,6 +29,9 @@ and its containers are doing — all from one small container. Status: early dev
   warnings, and every queued download with progress, ETA and import problems, pushed to the browser as they change.
 - **System view:** host CPU, memory, swap, load, uptime, disks and network, plus every container's state,
   health, CPU, memory, network, block I/O and restarts — and each app card shows its own container's line.
+- **Storage view:** every disk's used, reserved and free space, and rclone's mounts through its remote-control API —
+  each mount's state, VFS cache use against its limit, uploads in progress and queued, files that failed to
+  upload, and the transfers running now. See [Connect rclone](docs/deploy.md#connect-rclone).
 - **Security view:** failed sign-ins by address, lockouts, active sessions (with a one-click "sign out all
   other sessions"), recent sign-ins and a checklist of your access settings with plain-language warnings. Connect
   CrowdSec with a read-only bouncer key to see what it blocks: active bans, local versus blocklist decisions,

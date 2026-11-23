@@ -6,6 +6,7 @@
   import AddApps from './AddApps.svelte';
   import System from './System.svelte';
   import Security from './Security.svelte';
+  import Storage from './Storage.svelte';
   import Rail from './Rail.svelte';
   import Icon from './icons/Icon.svelte';
   import { live, serviceList, reconnecting, lastEvent } from './live.js';
@@ -21,6 +22,7 @@
     { id: 'network', hash: '#/network', label: 'Network', icon: 'network', sub: 'Throughput, traffic by app and budget' },
     { id: 'apps', hash: '#/apps', label: 'Apps', icon: 'layout-grid', sub: 'Health and queue of every service' },
     { id: 'system', hash: '#/system', label: 'System', icon: 'server', sub: 'Host, disks and containers' },
+    { id: 'storage', hash: '#/storage', label: 'Storage', icon: 'hard-drive', sub: 'Disks, mounts and caches' },
     { id: 'security', hash: '#/security', label: 'Security', icon: 'shield', sub: 'Sign-ins, sessions and blocked addresses' },
   ];
 
@@ -184,6 +186,8 @@
         <Apps {services} filtered={query.trim() !== ''} onadd={openAddApps} />
       {:else if view === 'security'}
         <Security />
+      {:else if view === 'storage'}
+        <Storage services={$serviceList} />
       {:else}
         <System {query} />
       {/if}

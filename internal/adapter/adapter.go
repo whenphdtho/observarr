@@ -13,7 +13,7 @@ import (
 	"observarr/internal/shape"
 )
 
-// Info describes an adapter for the UI's "Add service" form.
+// Info describes an adapter for the UI's "Add apps" page.
 type Info struct {
 	Type        string       `json:"type"`        // stable id, e.g. "myapp"; stored with each service
 	Name        string       `json:"name"`        // display name, e.g. "My App"
@@ -21,6 +21,10 @@ type Info struct {
 	NeedsAPIKey bool         `json:"needsApiKey"`
 	Kinds       []shape.Kind `json:"kinds"` // shapes this adapter can fill; the UI shows only these
 	Icon        string       `json:"icon"`  // icon name hint, e.g. "tv"; the UI falls back to a generic icon
+	// KeyLabel names the secret field when it holds something other than an API key, e.g. "Credentials". With
+	// NeedsAPIKey false, a non-empty KeyLabel makes the field optional rather than hidden.
+	KeyLabel string `json:"keyLabel,omitempty"`
+	KeyHint  string `json:"keyHint,omitempty"` // shown with the field, e.g. the form the secret takes
 }
 
 // Target is one configured service as the adapter sees it.

@@ -43,6 +43,9 @@
   });
   const info = $derived(adapters.find((a) => a.type === type) ?? null);
   const needsKey = $derived(info?.needsApiKey ?? false);
+  // An adapter that names its secret field (keyLabel) without needing it takes an optional one.
+  const showKey = $derived(needsKey || !!info?.keyLabel);
+  const keyLabel = $derived(info?.keyLabel || 'API key');
   const selfHost = $derived(selfHostOf(url));
 
   // addressChanged (edit mode only) is true once the scheme, host or port differ from the
@@ -145,15 +148,18 @@
       <p id={`${uid}-self`} class="muted hint wide">{selfHost} is Observarr itself — use the app's container name or LAN address</p>
     {/if}
 
-    {#if needsKey}
+    {#if showKey}
       <label>
-        API key
+        <span>{keyLabel}{#if !needsKey} <span class="muted hint">· optional</span>{/if}</span>
         <input type="password" bind:value={apiKey} autocomplete="off" maxlength="256"
-          required={mode === 'edit' && addressChanged} aria-describedby={mode === 'edit' ? `${uid}-keyhint` : undefined} />
+          required={mode === 'edit' && addressChanged && needsKey}
+          aria-describedby={mode === 'edit' || info?.keyHint ? `${uid}-keyhint` : undefined} />
         {#if mode === 'edit'}
           <span id={`${uid}-keyhint`} class="muted hint">
-            {addressChanged ? 'Enter the API key again when changing the address' : 'Leave blank to keep the current key'}
+            {addressChanged ? `Enter the ${keyLabel.toLowerCase()} again when changing the address` : 'Leave blank to keep the current one'}
           </span>
+        {:else if info?.keyHint}
+          <span id={`${uid}-keyhint`} class="muted hint">{info.keyHint}</span>
         {/if}
       </label>
     {/if}

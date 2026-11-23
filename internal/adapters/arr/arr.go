@@ -58,7 +58,7 @@ func New(d Definition) adapter.Adapter {
 	return base
 }
 
-// Info describes this family member for the UI's "Add service" form.
+// Info describes this family member for the UI's "Add apps" page.
 func (a arrAdapter) Info() adapter.Info {
 	kinds := []shape.Kind{shape.KindHealth}
 	if a.def.HasQueue {

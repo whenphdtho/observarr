@@ -1,0 +1,74 @@
+// Summaries of disks and mounts shared by the Storage view, the System view and the mounts widget. They read
+// only the host snapshot and the generic "mounts" shape, never anything app-specific.
+
+// percentOf is part of whole as a whole percentage, 0 when whole is 0.
+export function percentOf(part, whole) {
+  return whole > 0 ? Math.round(Math.min(1, Math.max(0, part / whole)) * 100) : 0;
+}
+
+// diskParts splits a disk the way df does: used is total minus free, and what is left for new writes is "avail"
+// (a file system can reserve part of its free space). Used + reserved + available is the whole disk; pct is how
+// full it is for new writes.
+export function diskParts(d) {
+  const used = d.total - d.free;
+  const reserved = Math.max(0, d.free - d.avail);
+  return { used, reserved, avail: d.avail, pct: percentOf(used, used + d.avail) };
+}
+
+// diskTotals adds up the disks. Two paths on one file system report the same figures; they are counted once.
+export function diskTotals(disks) {
+  const seen = new Set();
+  let used = 0;
+  let avail = 0;
+  let total = 0;
+  for (const d of disks) {
+    const key = `${d.total}/${d.free}/${d.avail}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const p = diskParts(d);
+    used += p.used;
+    avail += p.avail;
+    total += d.total;
+  }
+  return { used, avail, total, count: seen.size, pct: percentOf(used, used + avail) };
+}
+
+// mountProblem is what is wrong with a mount, worst first, or '' when nothing is: { text, tone }.
+export function mountProblem(m) {
+  if (m.state === 'unmounted') return { text: 'not mounted', tone: 'fail' };
+  if (m.outOfSpace) return { text: 'cache out of space', tone: 'fail' };
+  if (m.erroredFiles > 0) return { text: `${m.erroredFiles} errored`, tone: 'fail' };
+  return null;
+}
+
+// mountServices are the services that declare the "mounts" shape.
+export function mountServices(services) {
+  return services.filter((s) => s.kinds?.includes('mounts'));
+}
+
+// mountSummary adds up the latest mounts readings of services: mounts healthy and in all, cache used and its
+// limit (limit 0 when any cache has none), transfer speed and transfers in progress. readings counts the
+// services with a usable reading.
+export function mountSummary(services) {
+  const out = { readings: 0, total: 0, healthy: 0, caches: 0, cacheUsed: 0, cacheMax: 0, unlimited: false,
+    speed: 0, active: 0 };
+  for (const svc of services) {
+    const data = svc.readings?.mounts?.data;
+    if (!data || svc.readings.mounts.error) continue;
+    out.readings += 1;
+    out.total += data.total;
+    out.speed += data.speed;
+    out.active += data.activeTransfers;
+    for (const m of data.mounts) {
+      if (!mountProblem(m)) out.healthy += 1;
+      if (!m.cache) continue;
+      out.caches += 1;
+      out.cacheUsed += m.cacheUsedBytes;
+      if (m.cacheMaxBytes > 0) out.cacheMax += m.cacheMaxBytes;
+      else out.unlimited = true;
+    }
+    // Mounts beyond those listed are counted in total but their health is unknown, so not healthy.
+  }
+  if (out.unlimited) out.cacheMax = 0;
+  return out;
+}

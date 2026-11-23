@@ -1,0 +1,6 @@
+{
+	"error": "couldn't find method \"mount/listmounts\"",
+	"input": {},
+	"path": "mount/listmounts",
+	"status": 404
+}

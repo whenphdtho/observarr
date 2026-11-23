@@ -1,0 +1,15 @@
+{
+	"fs": "cloud:backup",
+	"inUse": 1,
+	"metadataCache": {
+		"dirs": 3,
+		"files": 27
+	},
+	"opt": {
+		"CacheMaxAge": 3600000000000,
+		"CacheMaxSize": -1,
+		"CacheMode": 0,
+		"DirCacheTime": 300000000000,
+		"ReadOnly": true
+	}
+}

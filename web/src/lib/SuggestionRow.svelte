@@ -25,6 +25,9 @@
 
   const appName = $derived(adapter?.name ?? sug.type);
   const needsKey = $derived(adapter?.needsApiKey ?? false);
+  // An adapter that names its secret field (keyLabel) without needing it takes an optional one.
+  const showKey = $derived(needsKey || !!adapter?.keyLabel);
+  const keyLabel = $derived(adapter?.keyLabel || 'API key');
   // A host-less find (a config folder only knows the port) gets this browser's host as a guess.
   const guessedUrl = $derived(sug.hostKnown ? sug.url : withHost(sug.url, window.location.hostname));
   const where = $derived(
@@ -158,10 +161,12 @@
           <p class="muted hint wide ellipsis" title={`The key will be sent to ${keyTarget}`}>The key will be sent to {keyTarget}</p>
         {/if}
       {/if}
-      {#if needsKey && !useFoundKey}
+      {#if showKey && !useFoundKey}
         <label>
-          API key
-          <input type="password" bind:value={apiKey} autocomplete="off" maxlength="256" />
+          <span>{keyLabel}{#if !needsKey} <span class="muted hint">· optional</span>{/if}</span>
+          <input type="password" bind:value={apiKey} autocomplete="off" maxlength="256"
+            aria-describedby={adapter?.keyHint ? `${uid}-keyhint` : undefined} />
+          {#if adapter?.keyHint}<span id={`${uid}-keyhint`} class="muted hint">{adapter.keyHint}</span>{/if}
         </label>
       {/if}
       <div class="form-foot">

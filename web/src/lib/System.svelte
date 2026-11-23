@@ -4,6 +4,7 @@
   import Icon from './icons/Icon.svelte';
   import { snapshot, systemError } from './data.js';
   import { matches } from './status.js';
+  import { diskParts } from './storage.js';
   import { now } from './ticker.js';
   import {
     formatBytes, formatRate, formatMbit, formatPct, formatDuration, formatAge, splitNotice, containerStatusClass,
@@ -27,15 +28,6 @@
 
   function barPercent(used, total) {
     return total > 0 ? Math.round(Math.min(1, Math.max(0, used / total)) * 100) : 0;
-  }
-
-  // A disk's bar follows df's convention: used is total minus free, and what is left for new
-  // writes is "avail" (a file system can reserve part of its free space). Used + reserved +
-  // available is the whole disk.
-  function diskParts(d) {
-    const used = d.total - d.free;
-    const reserved = Math.max(0, d.free - d.avail);
-    return { used, reserved, avail: d.avail, pct: barPercent(used, used + d.avail) };
   }
 
   // ownNetwork mirrors collect.Container.OwnNetwork: a container sharing the host's network (or
@@ -152,29 +144,22 @@
       <div class="pair" class:single={disks.length === 0 || net.length === 0}>
         {#if disks.length > 0}
           <section class="card" aria-labelledby="disks-title">
-            <div class="card-head"><h2 id="disks-title"><Icon name="hard-drive" size={16} />Disks</h2></div>
-            {#each disks as d (d.path)}
-              {@const p = diskParts(d)}
-              <div class="disk">
-                <div class="disk-head">
-                  <span class="ellipsis path" title={d.path}>{d.path}</span>
-                  <span class="muted num figures" title={`${formatBytes(p.used)} used of ${formatBytes(d.total)}`}>
-                    {formatBytes(p.used)} used · <span class="free">{formatBytes(p.avail)} free</span>
+            <div class="card-head">
+              <h2 id="disks-title"><Icon name="hard-drive" size={16} />Disks</h2>
+              <a class="meta" href="#/storage">Details in Storage</a>
+            </div>
+            <ul class="rows">
+              {#each disks as d (d.path)}
+                {@const p = diskParts(d)}
+                <li class="disk-row">
+                  <span class="ellipsis name" title={d.path}>{d.path}</span>
+                  <span class="bar mini" class:warn={p.pct >= 90} aria-hidden="true"><i style:width={`${p.pct}%`}></i></span>
+                  <span class="num rate" title={`${formatBytes(p.used)} used, ${formatBytes(p.avail)} free of ${formatBytes(d.total)}`}>
+                    {p.pct}% · {formatBytes(p.avail)} free
                   </span>
-                </div>
-                <div class="stack" role="img"
-                  aria-label={`${d.path}: ${formatBytes(p.used)} used, ${formatBytes(p.avail)} free of ${formatBytes(d.total)}, ${p.pct}% full`}>
-                  <i class="used" style:flex-grow={p.used}></i>
-                  {#if p.reserved > 0}<i class="reserved" style:flex-grow={p.reserved}></i>{/if}
-                  <i class="avail" style:flex-grow={p.avail}></i>
-                </div>
-              </div>
-            {/each}
-            <p class="legend">
-              <span><i class="sw used"></i>Used</span>
-              {#if disks.some((d) => d.free > d.avail)}<span><i class="sw reserved"></i>Reserved</span>{/if}
-              <span><i class="sw avail"></i>Free</span>
-            </p>
+                </li>
+              {/each}
+            </ul>
           </section>
         {/if}
         {#if net.length > 0}
@@ -318,19 +303,6 @@
 
   .pair { display: grid; gap: 16px; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; }
   .pair.single { grid-template-columns: minmax(0, 1fr); }
-  .disk + .disk { margin-top: 14px; }
-  .disk-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; min-width: 0; font-size: 13px; }
-  .path { font-weight: 550; }
-  .figures { flex: none; font-size: 12.5px; white-space: nowrap; }
-  .free { color: var(--ok); }
-  .stack { display: flex; gap: 2px; height: 14px; border-radius: 7px; overflow: hidden; background: var(--surface3); }
-  .stack > i { display: block; flex-basis: 0; min-width: 2px; transition: flex-grow 200ms var(--ease); }
-  .used { background: var(--accent); }
-  .reserved { background: var(--dim); }
-  .avail { background: var(--surface3); }
-  .legend { display: flex; gap: 16px; margin-top: 14px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
-  .legend span { display: inline-flex; align-items: center; gap: 6px; }
-  .sw.avail { box-shadow: inset 0 0 0 1px var(--border2); }
 
   a.meta { text-decoration: none; }
   a.meta:hover { color: var(--text); }
@@ -342,6 +314,13 @@
   .rows li:last-child { border-bottom: 0; }
   .rows .name { font-weight: 550; }
   .rate { white-space: nowrap; color: var(--text2); }
+  .rows li.disk-row { align-items: center; }
+  .disk-row .name { flex: 1 1 auto; min-width: 0; }
+  .bar.mini { flex: 0 1 90px; min-width: 32px; }
+  .disk-row .rate { flex: none; min-width: 15ch; text-align: right; }
+  @container (max-width: 420px) {
+    .bar.mini { display: none; }
+  }
 
   .mobile-sort { display: none; }
   .arrow { font-size: 9px; width: 1em; display: inline-block; }

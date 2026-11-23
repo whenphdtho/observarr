@@ -1,0 +1,45 @@
+{
+	"diskCache": {
+		"bytesUsed": 64424509440,
+		"erroredFiles": 1,
+		"files": 318,
+		"hashType": 1,
+		"outOfSpace": false,
+		"path": "/var/cache/rclone/vfs/media-crypt",
+		"pathMeta": "/var/cache/rclone/vfsMeta/media-crypt",
+		"uploadsInProgress": 2,
+		"uploadsQueued": 5
+	},
+	"fs": "media-crypt:",
+	"inUse": 1,
+	"metadataCache": {
+		"dirs": 412,
+		"files": 9184
+	},
+	"opt": {
+		"BlockNormDupes": false,
+		"CacheMaxAge": 3600000000000,
+		"CacheMaxSize": 107374182400,
+		"CacheMinFreeSpace": -1,
+		"CacheMode": 3,
+		"CachePollInterval": 60000000000,
+		"CaseInsensitive": false,
+		"ChunkSize": 134217728,
+		"ChunkSizeLimit": -1,
+		"ChunkStreams": 0,
+		"DirCacheTime": 300000000000,
+		"DirPerms": 511,
+		"FilePerms": 438,
+		"GID": 1000,
+		"NoChecksum": false,
+		"NoModTime": false,
+		"NoSeek": false,
+		"PollInterval": 60000000000,
+		"ReadOnly": false,
+		"ReadWait": 20000000,
+		"UID": 1000,
+		"Umask": 2,
+		"WriteBack": 5000000000,
+		"WriteWait": 1000000000
+	}
+}

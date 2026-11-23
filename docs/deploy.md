@@ -140,6 +140,47 @@ guessing at them. Check with `stat -fc %T /sys/fs/cgroup` on the host: `cgroup2f
 - **Units:** rates are in Mbit/s and totals in GB/TB, as providers count; memory and disks stay in binary
   units (GiB).
 
+## Storage
+
+The Storage view shows the disks listed in `OBSERVARR_HOST_DISKS` (used, reserved and free space; two paths on
+the same file system are counted once in the totals) and the mounts of every service that reports them. The
+System view keeps a short disk summary that links there.
+
+### Connect rclone
+
+Observarr reads rclone's mounts, VFS caches and transfers through rclone's remote-control API. It only makes
+read-only calls (`core/version`, `core/stats`, `rc/noopauth`, `mount/listmounts`, `vfs/list`, `vfs/stats`); rclone
+takes them as POST requests, but none of them changes anything, and the adapter refuses any other call.
+
+1. **Turn the remote control on.** Either start your mount with it:
+
+   ```sh
+   rclone mount media-crypt: /mnt/media --vfs-cache-mode full \
+     --rc --rc-addr 0.0.0.0:5572 --rc-user observarr --rc-pass 'a long random password'
+   ```
+
+   or run a separate `rclone rcd --rc-addr 0.0.0.0:5572 --rc-user … --rc-pass …` and create the mounts through
+   it. `0.0.0.0` makes the port reachable from other containers; publish it on no host port.
+2. **Keep the port on an internal network.** The remote control can also change things — unmount, delete,
+   copy — for whoever holds the credentials, so put rclone and Observarr on a Docker network of their own
+   (`internal: true` where rclone needs no other access through it) and never expose 5572 to the internet.
+3. **Add it in Observarr:** Apps → Add apps → Add manually → rclone, URL `http://rclone:5572` (the container
+   name and the `--rc-addr` port), and the credentials as `user:password` (`observarr:a long random password`). They are
+   sealed like an API key and never shown again. Leave them blank only with `--rc-no-auth`.
+
+Notes:
+
+- **Mount points.** `mount/listmounts` lists only mounts made through the remote control (`rclone rcd` plus
+  `mount/mount`). A mount started on the command line still shows, with its cache and uploads, but as *active*
+  with "mount point not reported".
+- **Without credentials** (and without `--rc-no-auth`), rclone refuses `mount/listmounts`; everything else
+  still works. With `--rc-user` set, every call needs the credentials.
+- **Cache figures** are those of the VFS disk cache (`--vfs-cache-mode` above `off`): used bytes against
+  `--vfs-cache-max-size` (no limit when unset), cached files, uploads in progress and queued, files that failed
+  to upload, and whether the cache disk is out of space. The last two also show as warnings on the service.
+- AltMount is not supported: it has no documented read-only API for its mount status that works without a
+  logged-in session.
+
 ## Memory
 
 Observarr idles at a few tens of MiB. Go's garbage collector honours `GOMEMLIMIT` on its own; set it if the
@@ -173,7 +214,7 @@ Observarr reads CrowdSec's Local API (LAPI) the way a bouncer does, read-only:
 2. Give Observarr network access to the LAPI (port 8080 by default). In Compose, put both on a shared network
    and use the service name, e.g. `http://crowdsec:8080`. The LAPI only needs to be reachable by Observarr,
    never from the internet.
-3. In Observarr, **Apps → Add service**, pick CrowdSec, enter the URL and the bouncer key, **Test**, then
+3. In Observarr, **Apps → Add apps → Add manually**, pick CrowdSec, enter the URL and the bouncer key, **Test**, then
    **Add**.
 
 What Observarr does with the key: it calls `GET /v1/decisions` (every active decision, about once a minute

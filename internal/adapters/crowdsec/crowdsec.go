@@ -52,7 +52,7 @@ func New() adapter.Adapter {
 	return Adapter{now: time.Now, maxBytes: maxDecisionBytes, maxCount: maxDecisions}
 }
 
-// Info describes CrowdSec for the "Add service" form.
+// Info describes CrowdSec for the "Add apps" page.
 func (Adapter) Info() adapter.Info {
 	return adapter.Info{
 		Type:        "crowdsec",

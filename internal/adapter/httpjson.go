@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -55,18 +56,51 @@ const MaxStreamBytes = 64 << 20 // 64 MiB
 func StreamJSONLimit(ctx context.Context, t Target, path string, keyHeader string, limit int64,
 	read func(*json.Decoder) error) error {
 	limit = min(max(limit, 1), MaxStreamBytes)
+	return doJSON(ctx, t, http.MethodGet, path, nil, limit, func(req *http.Request) {
+		if t.APIKey != "" && keyHeader != "" {
+			req.Header.Set(keyHeader, t.APIKey)
+		}
+	}, read)
+}
+
+// maxPostBytes bounds the JSON document PostJSON sends.
+const maxPostBytes = 64 << 10
+
+// PostJSON POSTs body, a JSON document of at most 64 KiB, to base+path and hands the answer to read like
+// StreamJSON. It is for apps whose read-only calls are POSTs (a remote-control API that takes its parameters as a
+// JSON body); an adapter must only use it for calls that change nothing. authorize, if not nil, adds the
+// credentials to the request; they never appear in an error.
+func PostJSON(ctx context.Context, t Target, path string, body []byte, authorize func(*http.Request),
+	read func(*json.Decoder) error) error {
+	if len(body) > maxPostBytes {
+		return errors.New("adapter: request body too large")
+	}
+	return doJSON(ctx, t, http.MethodPost, path, body, maxBodyBytes, authorize, read)
+}
+
+// doJSON sends one request to base+path, with body (if not nil) as JSON, and hands the answer, of at most limit
+// bytes, to read. setHeaders, if not nil, adds the credentials.
+func doJSON(ctx context.Context, t Target, method, path string, body []byte, limit int64,
+	setHeaders func(*http.Request), read func(*json.Decoder) error) error {
 	reqURL, err := joinPath(t.BaseURL, path)
 	if err != nil {
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL.String(), nil)
+	var reqBody io.Reader
+	if body != nil {
+		reqBody = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, reqURL.String(), reqBody)
 	if err != nil {
 		return fmt.Errorf("adapter: build request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
-	if t.APIKey != "" && keyHeader != "" {
-		req.Header.Set(keyHeader, t.APIKey)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if setHeaders != nil {
+		setHeaders(req)
 	}
 
 	resp, err := t.HTTP.Do(req)
@@ -88,14 +122,14 @@ func StreamJSONLimit(ctx context.Context, t Target, path string, keyHeader strin
 		return fmt.Errorf("adapter: %s: %w", reqURL.Path, StatusError(resp.StatusCode))
 	}
 
-	body := &bodyReader{r: http.MaxBytesReader(nil, resp.Body, limit)}
-	if err := read(json.NewDecoder(body)); err != nil {
+	answer := &bodyReader{r: http.MaxBytesReader(nil, resp.Body, limit)}
+	if err := read(json.NewDecoder(answer)); err != nil {
 		var tooLarge *http.MaxBytesError
 		switch {
-		case errors.As(body.err, &tooLarge):
+		case errors.As(answer.err, &tooLarge):
 			return fmt.Errorf("adapter: %s: %w", reqURL.Path, ErrTooLarge)
-		case body.err != nil:
-			return fmt.Errorf("adapter: read response from %s: %w", reqURL.Path, body.err)
+		case answer.err != nil:
+			return fmt.Errorf("adapter: read response from %s: %w", reqURL.Path, answer.err)
 		}
 		// Deliberately drop the decoder's own message and the body: both can echo back
 		// fragments of the response, which must never reach logs or the UI.
