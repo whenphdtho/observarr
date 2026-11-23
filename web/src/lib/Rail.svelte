@@ -3,6 +3,8 @@
   import { adapters, adapterFor, snapshot } from './data.js';
   import { serviceStatus, serviceLine } from './status.js';
   import { formatBytes, formatPct, formatTotal, formatPart } from './format.js';
+  import { mountServices, mountSummary } from './storage.js';
+  import { securityServices, activeBans, formatCount } from './security.js';
 
   // Rail is every service at a glance plus a short system summary and today's traffic. It sits in the right column on
   // wide screens and inside the Overview on narrower ones. onjump(id) shows a service's card.
@@ -18,6 +20,10 @@
   const online = $derived(services.filter((s) => s.up).length);
   const traffic = $derived($snapshot?.traffic ?? null);
   const budget = $derived(traffic?.budget ?? null);
+  // One line each for mounts and bans, only once a service fills those shapes.
+  const mounts = $derived(mountSummary(mountServices(services)));
+  const blockers = $derived(securityServices(services));
+  const bans = $derived(activeBans(blockers));
 </script>
 
 <section class="rail-section" aria-labelledby={`${uid}-apps`}>
@@ -75,6 +81,18 @@
           <b class="num">{formatBytes(disk.avail)}</b>
         </a></li>
       {/if}
+    {/if}
+    {#if mounts.readings > 0}
+      <li><a class="srow" href="#/storage">
+        <span class="dot {mounts.healthy === mounts.total ? 'ok' : 'warn'}"></span><span class="ellipsis">Mounts healthy</span>
+        <b class="num">{mounts.healthy}/{mounts.total}</b>
+      </a></li>
+    {/if}
+    {#if bans.any}
+      <li><a class="srow" href="#/security">
+        <span class="dot"></span><span class="ellipsis">Active bans</span>
+        <b class="num">{formatCount(bans.bans, bans.capped)}</b>
+      </a></li>
     {/if}
     {#if !host && !containers.length}
       <li><a class="srow" href="#/system"><span class="dot"></span><span class="ellipsis">No host figures yet</span></a></li>

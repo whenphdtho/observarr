@@ -3,8 +3,12 @@
   import Rail from './Rail.svelte';
   import Kpi from './Kpi.svelte';
   import Icon from './icons/Icon.svelte';
+  import { onMount } from 'svelte';
+  import { api } from './api.js';
   import { snapshot } from './data.js';
   import { downloading, attention } from './status.js';
+  import { mountAttention } from './storage.js';
+  import { formatLeft } from './security.js';
   import { formatBytes, formatPct } from './format.js';
 
   // Overview is the landing view: the host's throughput, four key figures and what needs attention.
@@ -18,7 +22,29 @@
   const queued = $derived(services.reduce((n, s) => n + (s.readings?.queue?.data?.total ?? 0), 0));
   const memPct = $derived(host && host.memTotal > 0 ? Math.round((host.memUsed / host.memTotal) * 100) : 0);
   const memParts = $derived(host ? formatBytes(host.memUsed).split(' ') : ['—', '']);
-  const issues = $derived(attention(services, $snapshot?.containers ?? []));
+  // The server-wide sign-in limit is the one security state worth a line here; it is read every minute while the
+  // Overview is open, and a failed read just leaves it out.
+  let lockedSec = $state(0);
+  async function loadLock() {
+    try {
+      lockedSec = (await api('GET', '/api/security')).serverLockedSec ?? 0;
+    } catch {
+      lockedSec = 0;
+    }
+  }
+  onMount(() => {
+    loadLock();
+    const id = setInterval(loadLock, 60 * 1000);
+    return () => clearInterval(id);
+  });
+  const lockIssue = $derived(lockedSec > 0 ? [{
+    key: 'server-lock', tone: 'warn', title: 'Sign-ins limited', href: '#/security',
+    detail: `Many addresses failed to sign in; for ${formatLeft(lockedSec)} only addresses that signed in before may try`,
+  }] : []);
+  const issues = $derived(
+    [...attention(services, $snapshot?.containers ?? []), ...mountAttention(services), ...lockIssue]
+      .sort((a, b) => (a.tone === 'fail' ? 0 : 1) - (b.tone === 'fail' ? 0 : 1)),
+  );
   const servicesTone = $derived(checked === 0 ? '' : up === services.length ? 'ok' : up === 0 ? 'fail' : 'warn');
 </script>
 
