@@ -48,7 +48,7 @@ export function withHost(raw, host) {
 // The docs on GitHub: the app does not serve its own docs, so links to them are absolute.
 const REPO = 'https://github.com/whenphdtho/observarr';
 export const DEPLOY_DOCS = `${REPO}/blob/main/docs/deploy.md`;
-export const ADDING_APPS_DOCS = `${REPO}#adding-your-apps`;
+export const ADDING_APPS_DOCS = `${REPO}/blob/main/docs/configuration.md#adding-your-apps`;
 
 // connectDocs links to the guide's "Connect <app>" section, using GitHub's heading anchors.
 export function connectDocs(appName) {

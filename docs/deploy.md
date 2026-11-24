@@ -49,7 +49,7 @@ services:
       - "9898:9898"
     networks:
       - default    # Compose's own network for this file — join your apps' existing network too (see
-                   # the README's "Adding your apps") if you want to reach them from here
+                   # "Adding your apps" in docs/configuration.md) if you want to reach them from here
       - internal    # reach the socket proxy, and nothing else
     environment:
       - OBSERVARR_HOST_PROC=/host/proc
@@ -59,7 +59,7 @@ services:
       - TZ=Europe/Berlin   # daily traffic totals begin at local midnight
       # - OBSERVARR_TRAFFIC_BUDGET=20TB/month   # optional: show how much of a traffic budget is used
       # - OBSERVARR_INSECURE_COOKIES=1   # only for plain HTTP on a trusted LAN; leave unset behind an HTTPS reverse proxy
-      # Optional: lists apps on the Add apps page from their own config files (see README's "Adding your apps").
+      # Optional: lists apps on the Add apps page from their own config files (see "Adding your apps" in docs/configuration.md).
       # Needs one read-only mount per app below.
       # - OBSERVARR_APP_CONFIGS=/appconfig
     volumes:
