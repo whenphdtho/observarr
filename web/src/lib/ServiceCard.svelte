@@ -114,7 +114,7 @@
           <span class="ellipsis">{warningText(lead.warning)}</span>
         </p>
       {:else}
-        <p class="lead-note ellipsis" class:fail={lead.tone === 'fail'} title={lead.text}>{lead.text}</p>
+        <p class="lead-note" class:ellipsis={lead.tone !== 'fail'} class:fail={lead.tone === 'fail'} title={lead.text}>{lead.text}</p>
       {/if}
     </div>
   {/if}
@@ -213,7 +213,11 @@
   .lead-warning :global(.icon) { color: var(--warn); }
   .lead-warning.level-error :global(.icon) { color: var(--fail); }
   .lead-note { font-size: var(--t-sm); color: var(--muted); }
-  .lead-note.fail { color: var(--fail); }
+  /* An error keeps up to two lines of the fixed-height row; its full text is in the title. */
+  .lead-note.fail {
+    color: var(--fail); overflow-wrap: anywhere; overflow: hidden;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; line-height: 1.4;
+  }
 
   .details { display: grid; gap: 12px; min-width: 0; }
   .widgets { display: grid; gap: 4px 32px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); align-items: start; }

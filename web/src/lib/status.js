@@ -44,7 +44,8 @@ export function serviceLine(svc) {
 
 // cardSummary is what a collapsed service card shows: one summary line ({ text, tone }) and one
 // lead row — the first queue item, else the first warning, else a placeholder — so every
-// collapsed card has the same rows whatever the service reports.
+// collapsed card has the same rows whatever the service reports. A service that is down gets a
+// short summary and its error, said once, in the lead row.
 export function cardSummary(svc) {
   const health = svc.readings?.health;
   const queue = svc.readings?.queue;
@@ -54,7 +55,7 @@ export function cardSummary(svc) {
 
   let summary;
   if (!health) summary = { text: 'Waiting for the first check…', tone: '' };
-  else if (!svc.up) summary = { text: health.error || 'Not answering', tone: 'fail' };
+  else if (!svc.up) summary = { text: 'Not reachable', tone: 'fail' };
   else {
     const parts = [];
     const n = downloading(svc);
@@ -67,7 +68,8 @@ export function cardSummary(svc) {
   }
 
   let lead;
-  if (items.length > 0) lead = { kind: 'item', item: items[0] };
+  if (health && !svc.up) lead = { kind: 'note', text: health.error || 'Not answering', tone: 'fail' };
+  else if (items.length > 0) lead = { kind: 'item', item: items[0] };
   else if (warns.length > 0) lead = { kind: 'warning', warning: warns[0] };
   else if (hasQueue && queue?.error) lead = { kind: 'note', text: queue.error, tone: 'fail' };
   else if (hasQueue) lead = { kind: 'note', text: 'Queue is empty', tone: '' };
