@@ -181,7 +181,8 @@
                   {/if}
                   <span class="state" class:fail-text={st.tone === 'fail'} title={st.title}>{st.text}</span>
                 </div>
-                <div class="m-body">
+                <!-- Without a disk cache there is no bar and no facts: its one line sits under the name, not far right. -->
+                <div class="m-body" class:bare={!m.cache}>
                   <div class="m-cache">
                     {#if pct !== null}
                       <div class="bar" class:warn={pct >= 90} class:fail={m.outOfSpace} role="img"
@@ -298,6 +299,8 @@
   .m-cache .bar { flex: 1 1 auto; min-width: 48px; }
   .cache-text { flex: 0 1 auto; min-width: 0; font-size: var(--t-sm); color: var(--text2); }
   .m-body .facts { grid-area: facts; }
+  .m-body.bare { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'cache' 'facts'; }
+  .m-body.bare .m-cache { justify-content: flex-start; }
   .facts:empty { display: none; }
   .more { font-size: var(--t-sm); padding-top: 8px; }
 

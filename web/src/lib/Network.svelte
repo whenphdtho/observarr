@@ -184,7 +184,8 @@
                   <tr>
                     <td class="lead" title={s.label}>
                       <span class="app">
-                        {#if s.color}<i class="sw" style:background={s.color}></i>{/if}
+                        <!-- A row the chart does not draw keeps an empty swatch, so every name lines up. -->
+                        <i class="sw" class:blank={!s.color} style:background={s.color || null}></i>
                         <span class="ellipsis">{s.label}</span>
                       </span>
                       <span class="share" title={`${Math.round(share * 100)}% of today's traffic`}><i style:width={`${share * 100}%`}></i></span>
@@ -238,6 +239,7 @@
   .legend li { display: flex; align-items: flex-start; gap: 10px; padding: 5px 0; min-width: 0; font-size: var(--t-base); }
   .legend .legend-head { font-size: var(--t-sm); color: var(--muted); justify-content: space-between; padding-top: 0; }
   .legend .sw { margin-top: 6px; }
+  .sw.blank { background: transparent; }
   .who { display: grid; min-width: 0; flex: 1; line-height: 1.35; }
   .who .name { font-weight: 550; }
   .who .muted, .fig .muted { font-size: var(--t-sm); }
