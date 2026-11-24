@@ -21,6 +21,9 @@ type Info struct {
 	NeedsAPIKey bool         `json:"needsApiKey"`
 	Kinds       []shape.Kind `json:"kinds"` // shapes this adapter can fill; the UI shows only these
 	Icon        string       `json:"icon"`  // icon name hint, e.g. "tv"; the UI falls back to a generic icon
+	// IconURL is where the app's own one-colour logo is served (filled in by the Registry for a Branded
+	// adapter); empty when it has none, and the UI then shows Icon.
+	IconURL string `json:"iconUrl,omitempty"`
 	// KeyLabel names the secret field when it holds something other than an API key, e.g. "Credentials". With
 	// NeedsAPIKey false, a non-empty KeyLabel makes the field optional rather than hidden.
 	KeyLabel string `json:"keyLabel,omitempty"`

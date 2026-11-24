@@ -311,3 +311,7 @@ disables buffering; with nginx, add `proxy_buffering off;` to the matching `loca
 [GPL-3.0](LICENSE). The UI ships the [Inter](https://github.com/rsms/inter) font (SIL Open Font License,
 [web/src/assets/fonts/LICENSE-Inter.txt](web/src/assets/fonts/LICENSE-Inter.txt)) and icons from
 [Lucide](https://lucide.dev) (ISC, [web/src/lib/icons/LICENSE-Lucide.txt](web/src/lib/icons/LICENSE-Lucide.txt)).
+
+The app logos belong to their projects and are shown only to identify the apps. They are one-colour versions from
+[Simple Icons](https://simpleicons.org) (CC0) and [dashboard-icons](https://github.com/homarr-labs/dashboard-icons)
+(Apache-2.0); [NOTICE](NOTICE) lists each one, its source and what was changed.

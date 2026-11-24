@@ -33,13 +33,31 @@ func (r *Registry) Get(typ string) (Adapter, bool) {
 	return a, ok
 }
 
+// Logo returns the logo of the adapter registered for typ, if it has one.
+func (r *Registry) Logo(typ string) ([]byte, bool) {
+	a, ok := r.byType[typ]
+	if !ok {
+		return nil, false
+	}
+	b, ok := a.(Branded)
+	if !ok {
+		return nil, false
+	}
+	svg := b.Logo()
+	return svg, len(svg) > 0
+}
+
 // Infos returns the Info of every registered adapter, sorted by Name then Type. Each Info's
-// Kinds is a fresh copy, so callers can't mutate the registry's own data.
+// Kinds is a fresh copy, so callers can't mutate the registry's own data. A Branded adapter's
+// IconURL names its logo, with a version that changes with the logo.
 func (r *Registry) Infos() []Info {
 	infos := make([]Info, 0, len(r.byType))
 	for _, a := range r.byType {
 		info := a.Info()
 		info.Kinds = slices.Clone(info.Kinds)
+		if svg, ok := r.Logo(info.Type); ok {
+			info.IconURL = LogoPath(info.Type) + "?v=" + logoVersion(svg)
+		}
 		infos = append(infos, info)
 	}
 	slices.SortFunc(infos, func(a, b Info) int {

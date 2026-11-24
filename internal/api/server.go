@@ -83,6 +83,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", s.health)
 	mux.HandleFunc("GET /api/session", s.session)
+	mux.HandleFunc("GET /api/icons/{file}", s.icon)
 	mux.HandleFunc("POST /api/setup", s.setup)
 	mux.HandleFunc("POST /api/login", s.login)
 	mux.Handle("POST /api/logout", s.requireSession(s.logout))

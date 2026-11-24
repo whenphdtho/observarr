@@ -59,3 +59,25 @@ func TestRegisterDoesNotRegisterReadarr(t *testing.T) {
 		t.Error("catalog still registers \"readarr\", which was retired upstream")
 	}
 }
+
+// Every shipped adapter carries its app's logo, and every logo is a safe, self-contained SVG of modest size.
+func TestEveryAdapterLogoIsSafeSVG(t *testing.T) {
+	r := adapter.NewRegistry()
+	catalog.Register(r)
+	for _, info := range r.Infos() {
+		svg, ok := r.Logo(info.Type)
+		if !ok {
+			t.Errorf("%s has no logo", info.Type)
+			continue
+		}
+		if err := adapter.CheckLogo(svg); err != nil {
+			t.Errorf("%s logo: %v", info.Type, err)
+		}
+		if len(svg) > 12<<10 {
+			t.Errorf("%s logo is %d bytes, want at most 12 KiB", info.Type, len(svg))
+		}
+		if info.IconURL == "" {
+			t.Errorf("%s has no IconURL", info.Type)
+		}
+	}
+}
