@@ -50,23 +50,23 @@ and its containers are doing — all from one small container. Status: early dev
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/network.png" alt="Network view: download, upload, today's total and top-now tiles, a mirrored stacked chart of where the traffic goes per container over the last five minutes, a By app table and a daily budget gauge"></td>
-    <td width="50%"><img src="docs/images/apps.png" alt="Apps view: six collapsed cards for CrowdSec, Lidarr, Media mounts (rclone), Prowlarr, Radarr and Sonarr, each with Up and version chips, a summary line such as 2 downloading, 2 queued, 1 warning, and its leading download or warning"></td>
+    <td width="50%"><img src="docs/images/network.png" alt="Network view: download, upload, today's total and top-now figures, a mirrored stacked chart of where the traffic goes per container over the last five minutes, a By app table and the daily budget"></td>
+    <td width="50%"><img src="docs/images/apps.png" alt="Apps view: six collapsed cards for CrowdSec, Lidarr, Media mounts (rclone), Prowlarr, Radarr and Sonarr, each with its state and version, a summary line such as 2 downloading, 2 queued, 1 warning, and its leading download or warning"></td>
   </tr>
   <tr>
     <td align="center"><sub>Network: where the traffic goes, by app</sub></td>
     <td align="center"><sub>Apps: one collapsible card per service</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/images/storage.png" alt="Storage view: disks used, mounts healthy, cache used and transfer speed tiles, the disk bar, and rclone's mounts and caches: an archive cache out of space, a media cache with uploads in progress and queued, and the transfers running now"></td>
-    <td><img src="docs/images/security.png" alt="Security view: failed sign-ins, lockouts, active sessions and active bans tiles, failed sign-in attempts by address with one address locked out, and what CrowdSec blocks by origin and scenario"></td>
+    <td><img src="docs/images/storage.png" alt="Storage view: disks used, mounts healthy, cache used and transfer speed figures, the disk bar, and rclone's mounts and caches: an archive cache out of space, a media cache with uploads in progress and queued, and the transfers running now"></td>
+    <td><img src="docs/images/security.png" alt="Security view: failed sign-ins, lockouts, active sessions and active bans figures, failed sign-in attempts by address with one address locked out, and what CrowdSec blocks by origin and scenario"></td>
   </tr>
   <tr>
     <td align="center"><sub>Storage: disks, rclone mounts, caches and transfers</sub></td>
     <td align="center"><sub>Security: sign-ins, sessions and CrowdSec bans</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/images/system.png" alt="System view: CPU, memory, swap and uptime tiles, a live host activity chart, disk and network cards, and the start of the containers table"></td>
+    <td><img src="docs/images/system.png" alt="System view: CPU, memory, swap and uptime figures, a live host activity chart, disks and network interfaces, and the start of the containers table"></td>
     <td><img src="docs/images/add-apps-found.png" alt="First start: an Add your apps card listing Lidarr, Prowlarr, Radarr and Sonarr found as Docker containers on the server, with Sonarr's inline form open, its API key found in its config folder and a Test and add button"></td>
   </tr>
   <tr>
@@ -75,7 +75,7 @@ and its containers are doing — all from one small container. Status: early dev
   </tr>
   <tr>
     <td><img src="docs/images/apps-expanded.png" alt="Apps view with the Radarr card expanded across the row: container line, health with a warning, the full queue, and Edit and Remove buttons"></td>
-    <td><img src="docs/images/network-24h.png" alt="Network view over the last 24 hours: the per-container traffic chart since the demo started, with the By app table and the daily budget gauge"></td>
+    <td><img src="docs/images/network-24h.png" alt="Network view over the last 24 hours: the per-container traffic chart since the demo started, with the By app table and the daily budget"></td>
   </tr>
   <tr>
     <td align="center"><sub>A card expanded: full health, queue and container</sub></td>
@@ -86,9 +86,9 @@ and its containers are doing — all from one small container. Status: early dev
 <p align="center">
   <img src="docs/images/phone-overview.png" width="240" alt="Overview on a phone-width screen: the Throughput card above the key figures, with the views in a dock at the bottom">
   &nbsp;
-  <img src="docs/images/phone-network.png" width="240" alt="Network view on a phone-width screen: traffic tiles and the where-the-traffic-goes chart, with the views in a dock at the bottom">
+  <img src="docs/images/phone-network.png" width="240" alt="Network view on a phone-width screen: traffic figures and the where-the-traffic-goes chart, with the views in a dock at the bottom">
   &nbsp;
-  <img src="docs/images/phone-storage.png" width="240" alt="Storage view on a phone-width screen: disk, mount and cache tiles above the disk bar and the mounts list, with the views in a dock at the bottom">
+  <img src="docs/images/phone-storage.png" width="240" alt="Storage view on a phone-width screen: disk, mount and cache figures above the disk bar and the mounts list, with the views in a dock at the bottom">
 </p>
 
 ## Quick start
