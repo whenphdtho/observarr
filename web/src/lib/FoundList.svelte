@@ -79,7 +79,7 @@
 <div class="found">
   <p class="visually-hidden" role="status">{notice}</p>
   {#if loading}
-    <p class="found-status muted" role="status">
+    <p class="found-status loading muted" role="status">
       <span class="spinner" aria-hidden="true"></span>Looking at the containers and config folders on this server…
     </p>
   {:else if error}
@@ -119,11 +119,12 @@
 
 <style>
   .found { display: grid; gap: 8px; min-width: 0; }
-  .found-status { display: flex; align-items: center; gap: 10px; font-size: 13px; padding: 6px 0; }
+  .found-status { font-size: var(--t-base); padding: 6px 0; max-width: 90ch; }
+  .found-status.loading { display: flex; align-items: center; gap: 10px; }
   .found-status:focus { outline: none; }
   .rows { margin: 0; padding: 0; display: grid; }
   .retry { justify-self: start; }
-  .problems { font-size: 12.5px; color: var(--muted); }
+  .problems { font-size: var(--t-sm); color: var(--muted); }
   .problems summary { cursor: pointer; width: fit-content; }
   .problems ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 2px; overflow-wrap: anywhere; }
   .problems b { color: var(--text2); font-weight: 550; }
