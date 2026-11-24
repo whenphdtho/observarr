@@ -43,9 +43,9 @@ and its containers are doing — all from one small container. Status: early dev
   distroless image. Saved API keys are encrypted at rest. Works on a phone, too.
 
 <p align="center">
-  <img src="docs/images/overview.png" alt="Overview: a Throughput card with live download and upload, the containers moving the most traffic and a network chart, four key figures (services up, downloads, CPU, memory), a Needs attention list with two rclone cache problems, a Radarr health warning and an import problem, and a rail with every app, the host's figures and today's traffic against the budget">
+  <img src="docs/images/overview.png" alt="Overview: a Needs attention panel on top with two rclone cache problems, a Radarr health warning and an import problem, then a Throughput section with live download and upload, the containers moving the most traffic and a network chart, four key figures (services up, downloads, CPU, memory), and a rail with every app, the host's figures and today's traffic against the budget">
   <br>
-  <sub>Overview: throughput, key figures and everything that needs attention</sub>
+  <sub>Overview: Needs attention first, then throughput and key figures</sub>
 </p>
 
 <table>
@@ -84,7 +84,7 @@ and its containers are doing — all from one small container. Status: early dev
 </table>
 
 <p align="center">
-  <img src="docs/images/phone-overview.png" width="240" alt="Overview on a phone-width screen: the Throughput card above the key figures, with the views in a dock at the bottom">
+  <img src="docs/images/phone-overview.png" width="240" alt="Overview on a phone-width screen: the Needs attention panel above the Throughput chart, with the views in a dock at the bottom">
   &nbsp;
   <img src="docs/images/phone-network.png" width="240" alt="Network view on a phone-width screen: traffic figures and the where-the-traffic-goes chart, with the views in a dock at the bottom">
   &nbsp;
