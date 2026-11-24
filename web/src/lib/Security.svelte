@@ -1,4 +1,5 @@
 <script>
+  import Skeleton from './Skeleton.svelte';
   import { onMount } from 'svelte';
   import Kpi from './Kpi.svelte';
   import Icon from './icons/Icon.svelte';
@@ -128,7 +129,7 @@
       <span class="meta">failed · last 24 h</span>
     </div>
     {#if !failed}
-      <p class="waiting">Loading…</p>
+      <Skeleton count={3} />
     {:else if failed.groups.length === 0}
       <p class="waiting">No failed sign-ins in the last 24 hours.</p>
     {:else}
@@ -336,7 +337,7 @@
         {#if view}<span class="meta num">{view.sessionCount}</span>{/if}
       </div>
       {#if !view}
-        <p class="waiting">Loading…</p>
+        <Skeleton count={3} />
       {:else}
         <ul class="list">
           {#each sessions as s, i (i)}
@@ -368,7 +369,7 @@
         <h2 id="signins-title">Recent sign-ins</h2>
       </div>
       {#if !view}
-        <p class="waiting">Loading…</p>
+        <Skeleton count={3} />
       {:else if view.signIns.length === 0}
         <p class="waiting">No sign-ins recorded.</p>
       {:else}
@@ -399,7 +400,7 @@
       {/if}
     </div>
     {#if !view}
-      <p class="waiting">Loading…</p>
+      <Skeleton count={4} />
     {:else}
       <ul class="checks">
         {#each view.settings as s (s.id)}

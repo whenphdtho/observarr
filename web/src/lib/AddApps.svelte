@@ -1,4 +1,5 @@
 <script>
+  import { reveal, conceal } from './motion.js';
   import { onMount } from 'svelte';
   import { api } from './api.js';
   import { adapters, adapterFor, snapshot } from './data.js';
@@ -104,7 +105,7 @@
         </span>
       </button>
       {#if open.network}
-        <div class="fold-body" id="fold-network">
+        <div class="fold-body" id="fold-network" in:reveal out:conceal>
           <form class="scan" onsubmit={scan}>
             <label>
               Hosts or private subnets
@@ -136,7 +137,7 @@
           </span>
         </button>
         {#if open.linked}
-          <div class="fold-body" id="fold-linked">
+          <div class="fold-body" id="fold-linked" in:reveal out:conceal>
             <div class="scan-foot">
               {#if running === 'linked'}
                 <span class="spinner" role="status"><span class="visually-hidden">Finding…</span></span>

@@ -122,7 +122,7 @@
 
   {#if host}
     <div class="kpis">
-      <Kpi label="CPU" value={formatPct(host.cpuPercent)} sub={`${host.cpus} core${host.cpus === 1 ? '' : 's'}`}
+      <Kpi label="CPU" value={formatPct(host.cpuPercent)} num={host.cpuPercent} format={formatPct} sub={`${host.cpus} core${host.cpus === 1 ? '' : 's'}`}
         bar={Math.min(100, host.cpuPercent)} barTone={host.cpuPercent >= 90 ? 'warn' : ''} />
       <Kpi label="Memory" value={formatBytes(host.memUsed)}
         sub={`of ${formatBytes(host.memTotal)} · ${barPercent(host.memUsed, host.memTotal)}%`}

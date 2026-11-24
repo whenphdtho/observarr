@@ -5,7 +5,12 @@
   // figure a link. The value and caption keep one line; their full text is in the title.
   import Icon from './icons/Icon.svelte';
 
-  let { label, value, unit = '', sub = '', tone = '', bar = null, barTone = '', href = null } = $props();
+  import Num from './Num.svelte';
+
+  // num (a number) with format makes the value glide between readings instead of jumping; value is then only
+  // its full text for the title. A value of '—' with a caption of 'Loading…' shows a quiet placeholder.
+  let { label, value, unit = '', sub = '', tone = '', bar = null, barTone = '', href = null, num = null, format = null } = $props();
+  const loading = $derived(value === '—' && sub === 'Loading…');
 
   const full = $derived(unit ? `${value} ${unit}` : String(value));
 </script>
@@ -16,9 +21,9 @@
     {#if href}<span class="chev" aria-hidden="true"><Icon name="chevron-right" size={13} /></span>{/if}
   </span>
   <span class="value num {tone === 'warn' || tone === 'fail' ? `${tone}-text` : ''}" title={full}>
-    {value}{#if unit}<small>{unit}</small>{/if}
+    {#if loading}<span class="bone" aria-hidden="true"></span><span class="visually-hidden">Loading…</span>{:else}{#if num !== null && format}<Num value={num} {format} />{:else}{value}{/if}{#if unit}<small>{unit}</small>{/if}{/if}
   </span>
-  {#if sub}<span class="sub ellipsis" title={sub}>{sub}</span>{/if}
+  {#if sub && !loading}<span class="sub ellipsis" title={sub}>{sub}</span>{/if}
   {#if bar !== null}
     <span class="bar {barTone}" aria-hidden="true"><i style:width={`${Math.min(100, Math.max(0, bar))}%`}></i></span>
   {/if}
@@ -44,6 +49,8 @@
   .value small { font-size: var(--t-sm); font-weight: 450; color: var(--muted); margin-left: 4px; letter-spacing: 0; }
   .sub { font-size: var(--t-sm); color: var(--muted); }
   .bar { margin-top: 8px; }
+  .bar > i { transition: width 400ms var(--ease); }
+  .bone { display: inline-block; width: 64px; height: 18px; margin: 4px 0; border-radius: 4px; background: var(--surface2); vertical-align: middle; }
   @media (max-width: 720px) {
     .kpi { padding: 10px 12px 12px; }
   }

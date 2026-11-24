@@ -1,4 +1,6 @@
 <script>
+  import Num from './Num.svelte';
+  import Skeleton from './Skeleton.svelte';
   import AreaChart from './AreaChart.svelte';
   import { history, snapshot } from './data.js';
   import { serviceList } from './live.js';
@@ -36,18 +38,19 @@
     {/if}
   </div>
 
-  {#if !latest}
-    <p class="waiting pad">{$snapshot && !$snapshot.host ?
-      'No host figures: they need the host’s /proc (see the System view).' : 'Waiting for the first reading…'}</p>
+  {#if !latest && $snapshot && !$snapshot.host}
+    <p class="waiting pad">No host figures: they need the host’s /proc (see the System view).</p>
+  {:else if !latest}
+    <Skeleton kind="chart" label="Waiting for the first reading…" />
   {:else if showNet}
     <div class="nums">
       <div class="num-block">
         <span class="legend"><i class="sw down"></i>Download</span>
-        <span class="big num">{formatMbit(rx)}<small>Mbit/s</small></span>
+        <span class="big num"><Num value={mbit(rx)} format={(v) => formatMbit((v * 1e6) / 8)} /><small>Mbit/s</small></span>
       </div>
       <div class="num-block">
         <span class="legend"><i class="sw up"></i>Upload</span>
-        <span class="big num">{formatMbit(tx)}<small>Mbit/s</small></span>
+        <span class="big num"><Num value={mbit(tx)} format={(v) => formatMbit((v * 1e6) / 8)} /><small>Mbit/s</small></span>
       </div>
       {#if traffic}
         <div class="peak">
@@ -73,7 +76,7 @@
     <div class="nums">
       <div class="num-block">
         <span class="legend"><i class="sw down"></i>CPU</span>
-        <span class="big num">{Math.round(Math.max(0, latest.cpuPercent))}<small>%</small></span>
+        <span class="big num"><Num value={Math.max(0, latest.cpuPercent)} /><small>%</small></span>
       </div>
       <div class="num-block">
         <span class="legend">Load</span>

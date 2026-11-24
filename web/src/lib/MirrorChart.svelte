@@ -1,5 +1,6 @@
 <script>
   import { niceCeil, timeTicks, clock } from './chart.js';
+  import { chartShift } from './motion.js';
 
   // MirrorChart stacks traffic sources over time in Mbit/s: incoming above the zero line, outgoing
   // below it, on one scale. times are ms since epoch; each layer is { color, series: { rx, tx } }
@@ -9,6 +10,7 @@
   const PAD = { top: 10, right: 6, bottom: 24, left: 44 };
   const MIN_SIDE = 0.18; // the smaller side keeps at least this share of the height, so it stays readable
   let width = $state(0);
+  const uid = $props.id();
 
   const mbit = (v) => ((Number.isFinite(v) ? Math.max(0, v) : 0) * 8) / 1e6;
 
@@ -70,10 +72,15 @@
         <line class="grid" class:zero={v === 0} x1={PAD.left} x2={PAD.left + plotW} y1={y(v)} y2={y(v)} />
         <text class="label" x={PAD.left - 8} y={y(v)} text-anchor="end" dominant-baseline="middle">{tickLabel(v)}</text>
       {/each}
-      {#each layers as l, k (k)}
-        <path class="band" d={area(stacks.rx[k], stacks.rx[k - 1], 1)} style:fill={l.color} />
-        <path class="band" d={area(stacks.tx[k], stacks.tx[k - 1], -1)} style:fill={l.color} />
-      {/each}
+      <clipPath id={`${uid}-plot`}><rect x={PAD.left} y={0} width={plotW} height={height}></rect></clipPath>
+      <g clip-path={`url(#${uid}-plot)`}>
+        <g use:chartShift={{ t0, span, width: plotW }}>
+          {#each layers as l, k (k)}
+            <path class="band" d={area(stacks.rx[k], stacks.rx[k - 1], 1)} style:fill={l.color} />
+            <path class="band" d={area(stacks.tx[k], stacks.tx[k - 1], -1)} style:fill={l.color} />
+          {/each}
+        </g>
+      </g>
       <text class="side" x={PAD.left + 8} y={PAD.top + 12}>↓ In</text>
       <text class="side" x={PAD.left + 8} y={PAD.top + plotH - 6}>↑ Out</text>
       {#each xTicks as t (t)}

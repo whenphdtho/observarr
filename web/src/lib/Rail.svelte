@@ -1,4 +1,6 @@
 <script>
+  import AppIcon from './AppIcon.svelte';
+  import Skeleton from './Skeleton.svelte';
   import Icon from './icons/Icon.svelte';
   import { adapters, adapterFor, snapshot } from './data.js';
   import { serviceStatus, serviceLine } from './status.js';
@@ -33,7 +35,7 @@
     {#if services.length}<em>{online === services.length ? 'all online' : `${online} of ${services.length} online`}</em>{/if}
   </h2>
   {#if !$synced}
-    <p class="muted none">Loading…</p>
+    <Skeleton kind="rows" count={4} label="Loading the apps…" />
   {:else if services.length === 0}
     <p class="muted none">No services to show.</p>
   {:else}
@@ -45,7 +47,7 @@
         <li>
           <button type="button" class="app row-link {status === 'fail' || status === 'warn' ? status : ''}" onclick={() => onjump(svc.id)} aria-label={`${svc.name}: ${lineText}`}>
             <span class="tile-icon" aria-hidden="true">
-              <Icon name={adapterFor($adapters, svc.type)?.icon} size={17} />
+              <AppIcon adapter={adapterFor($adapters, svc.type)} size={18} />
               <span class="status-dot {status}"></span>
             </span>
             <span class="text">

@@ -1,4 +1,5 @@
 <script>
+  import Mark from './Mark.svelte';
   import { api } from './api.js';
 
   // mode: 'setup' | 'login'. notice, when set, is shown above the fields (used to tell the user
@@ -43,15 +44,10 @@
 <main>
   <form class="card" onsubmit={submit}>
     <div class="brand">
-      <span class="mark" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="20" height="20">
-          <path d="M3.5 12c2.3-3.9 5.1-5.8 8.5-5.8s6.2 1.9 8.5 5.8c-2.3 3.9-5.1 5.8-8.5 5.8S5.8 15.9 3.5 12z" />
-          <circle cx="12" cy="12" r="2.6" />
-        </svg>
-      </span>
+      <Mark size={40} />
       <h1>Observarr</h1>
     </div>
-    <p class="muted">{setup ? 'Create the admin account.' : 'Sign in to continue.'}</p>
+    <p class="lede">{setup ? 'Create the admin account.' : 'Sign in to continue.'}</p>
     {#if !setup && notice}<p class="muted notice" role="status">{notice}</p>{/if}
     <label>
       User name
@@ -79,10 +75,17 @@
 
 <style>
   main { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 16px; }
-  form { width: min(380px, 100%); display: grid; gap: 14px; padding: 26px 24px; }
-  .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 2px; }
-  .mark { width: 36px; height: 36px; border-radius: var(--r); }
-  h1 { font-size: var(--t-xl); font-weight: 650; letter-spacing: -0.015em; }
+  form {
+    width: min(392px, 100%); display: grid; gap: 16px; padding: 30px 28px 28px; box-shadow: var(--lift);
+    animation: arrive 260ms var(--ease);
+  }
+  @keyframes arrive { from { opacity: 0; transform: translateY(8px); } }
+  .brand { display: flex; align-items: center; gap: 14px; margin-bottom: 2px; }
+  h1 { font-size: var(--t-h1); font-weight: 680; letter-spacing: -0.025em; }
+  .lede { color: var(--text2); font-size: var(--t-md); margin-top: -6px; }
+  @media (max-width: 420px) {
+    form { padding: 24px 20px 22px; }
+  }
   label { display: grid; gap: 6px; font-size: var(--t-base); color: var(--text2); }
   .hint { font-size: var(--t-sm); }
   .notice { font-size: var(--t-base); }

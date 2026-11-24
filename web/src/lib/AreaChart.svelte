@@ -1,6 +1,7 @@
 <script>
   import { monotonePath } from './curve.js';
   import { niceCeil, timeTicks, clock } from './chart.js';
+  import { chartShift } from './motion.js';
 
   // AreaChart draws one or more series over time as smooth lines over a faint flat fill, with y-axis
   // labels and a time axis. times are milliseconds since epoch, one per value;
@@ -10,6 +11,7 @@
 
   const PAD = { top: 8, right: 6, bottom: 24, left: 52 };
   let width = $state(0);
+  const uid = $props.id();
 
   const plotW = $derived(Math.max(0, width - PAD.left - PAD.right));
   const plotH = $derived(height - PAD.top - PAD.bottom);
@@ -49,11 +51,16 @@
           <text class="label" x={x(t)} y={height - 6} text-anchor="middle">{clock(t)}</text>
         {/if}
       {/each}
-      {#each series as s, i (i)}
-        {@const line = linePath(s.values)}
-        <path class="area" d={areaPath(line)} style:fill={s.color} />
-        <path class="line" d={line} style:stroke={s.color} />
-      {/each}
+      <clipPath id={`${uid}-plot`}><rect x={PAD.left} y={0} width={plotW} height={height}></rect></clipPath>
+      <g clip-path={`url(#${uid}-plot)`}>
+        <g use:chartShift={{ t0, span, width: plotW }}>
+          {#each series as s, i (i)}
+            {@const line = linePath(s.values)}
+            <path class="area" d={areaPath(line)} style:fill={s.color} />
+            <path class="line" d={line} style:stroke={s.color} />
+          {/each}
+        </g>
+      </g>
     </svg>
   {:else if width > 0}
     <p class="waiting">Waiting for the first reading…</p>

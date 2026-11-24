@@ -1,4 +1,5 @@
 <script>
+  import Skeleton from './Skeleton.svelte';
   import { untrack } from 'svelte';
   import Kpi from './Kpi.svelte';
   import MirrorChart from './MirrorChart.svelte';
@@ -104,9 +105,9 @@
     </div>
   {:else}
     <div class="kpis">
-      <Kpi label="Download" value={formatMbit(nowRx)} unit="Mbit/s"
+      <Kpi label="Download" value={formatMbit(nowRx)} num={(nowRx * 8) / 1e6} format={(v) => formatMbit((v * 1e6) / 8)} unit="Mbit/s"
         sub={`peak ${formatMbit(Math.max(summary?.peakRx ?? 0, nowRx))} Mbit/s today`} />
-      <Kpi label="Upload" value={formatMbit(nowTx)} unit="Mbit/s"
+      <Kpi label="Upload" value={formatMbit(nowTx)} num={(nowTx * 8) / 1e6} format={(v) => formatMbit((v * 1e6) / 8)} unit="Mbit/s"
         sub={`peak ${formatMbit(Math.max(summary?.peakTx ?? 0, nowTx))} Mbit/s today`} />
       <Kpi label="Today" value={totalParts(todayTotal)[0]} unit={totalParts(todayTotal)[1]}
         sub={budget?.period === 'day' ? `limit ${formatTotal(budget.limitBytes)}` :
@@ -127,7 +128,7 @@
       {#if error}
         <p class="error" role="alert">{error}</p>
       {:else if !view}
-        <p class="waiting pad">Waiting for the first reading…</p>
+        <Skeleton kind="chart" height={280} label="Waiting for the first reading…" />
       {:else}
         <div class="flow">
           <MirrorChart times={view.times} layers={chart}

@@ -3,7 +3,10 @@
   import Rail from './Rail.svelte';
   import Kpi from './Kpi.svelte';
   import Icon from './icons/Icon.svelte';
-  import { onMount } from 'svelte';
+  import Skeleton from './Skeleton.svelte';
+  import { flip } from 'svelte/animate';
+  import { reveal, conceal, ms, EASE } from './motion.js';
+  import { onMount, untrack } from 'svelte';
   import { api } from './api.js';
   import { snapshot } from './data.js';
   import { synced } from './live.js';
@@ -55,6 +58,26 @@
   ].filter(Boolean).join(' · '));
   const VIEW_NAMES = { '#/apps': 'Apps', '#/storage': 'Storage', '#/security': 'Security', '#/system': 'System' };
 
+  // Rows that appear after the first reading are marked fresh for a moment, so a new problem is noticed; the
+  // rows already there when the view opens are not.
+  let known = null;
+  let fresh = $state({});
+  $effect(() => {
+    if (!$synced) return;
+    const keys = issues.map((i) => i.key);
+    if (known === null) {
+      known = new Set(keys);
+      return;
+    }
+    const added = keys.filter((k) => !known.has(k));
+    known = new Set(keys);
+    if (added.length === 0) return;
+    fresh = { ...untrack(() => fresh), ...Object.fromEntries(added.map((k) => [k, true])) };
+    setTimeout(() => {
+      fresh = Object.fromEntries(Object.entries(fresh).filter(([k]) => !added.includes(k)));
+    }, 1600);
+  });
+
   // openIssue takes an entry about one service straight to its card; the others follow their link.
   function openIssue(event, item) {
     if (item.service == null || item.href !== '#/apps') return;
@@ -66,7 +89,7 @@
 
 <div class="overview">
   {#if !$synced}
-    <p class="calm waiting" role="status">Waiting for the first reading…</p>
+    <div class="calm"><Skeleton count={1} label="Waiting for the first reading…" /></div>
   {:else if issues.length === 0}
     <section class="calm" aria-labelledby="attention-title">
       <h2 id="attention-title" class="visually-hidden">Needs attention</h2>
@@ -76,14 +99,15 @@
       </p>
     </section>
   {:else}
-    <section class="attention" class:has-fail={fails > 0} aria-labelledby="attention-title">
+    <section class="attention" class:has-fail={fails > 0} aria-labelledby="attention-title" in:reveal out:conceal>
       <div class="att-head">
         <h2 id="attention-title">Needs attention</h2>
         <span class="tally num">{tally}</span>
       </div>
       <ul class="issues">
         {#each issues as item (item.key)}
-          <li class={item.tone}>
+          <li class={item.tone} class:fresh={fresh[item.key]} in:reveal out:conceal
+            animate:flip={{ duration: ms(200), easing: EASE }}>
             <a href={item.href} class="issue row-link" onclick={(e) => openIssue(e, item)}>
               <span class="dot {item.tone}" aria-hidden="true"></span>
               <span class="what">
@@ -116,7 +140,7 @@
       <Kpi href="#/apps" label="Downloads" value="—" sub="Loading…" />
     {/if}
     {#if host}
-      <Kpi href="#/system" label="CPU" value={formatPct(host.cpuPercent)}
+      <Kpi href="#/system" label="CPU" value={formatPct(host.cpuPercent)} num={host.cpuPercent} format={formatPct}
         sub={`${host.cpus} core${host.cpus === 1 ? '' : 's'} · load ${host.load[0].toFixed(2)}`}
         bar={Math.min(100, host.cpuPercent)} barTone={host.cpuPercent >= 90 ? 'warn' : ''} />
       <Kpi href="#/system" label="Memory" value={memParts[0]} unit={memParts[1]}
@@ -143,18 +167,23 @@
   /* Something to look at: the one boxed panel of the page, edged in the worst state's colour. */
   .attention {
     background: var(--surface); border: 1px solid var(--warn-edge); border-radius: var(--r-lg);
-    padding: 14px 8px 8px; min-width: 0;
+    padding: 14px 8px 8px; min-width: 0; box-shadow: var(--lift);
   }
   .attention.has-fail { border-color: var(--fail-edge); }
   .att-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0 10px 8px; min-width: 0; }
-  .att-head h2 { font-size: var(--t-lg); font-weight: 600; }
+  .att-head h2 { font-size: var(--t-lg); font-weight: 650; letter-spacing: -0.015em; }
   .tally { font-size: var(--t-sm); color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .issues { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
   .issue {
     display: flex; align-items: flex-start; gap: 11px; padding: 9px 10px; border-radius: var(--r);
-    min-width: 0; color: var(--text); text-decoration: none;
+    min-width: 0; color: var(--text); text-decoration: none; transition: background 140ms var(--ease);
   }
   .fail .issue { background: var(--fail-wash); }
+  /* A problem that just appeared: its row lights once and settles to its usual wash. */
+  .fresh .issue { animation: fresh 1.4s var(--ease); }
+  .fresh.fail .issue { animation-name: fresh-fail; }
+  @keyframes fresh { from { background: rgba(227, 166, 80, 0.2); } }
+  @keyframes fresh-fail { from { background: rgba(236, 108, 125, 0.26); } }
   .fail .issue:hover { background: rgba(236, 108, 125, 0.14); }
   .issue:hover .title { text-decoration: underline; text-underline-offset: 3px; }
   .issue:focus-visible { outline-offset: 0; }

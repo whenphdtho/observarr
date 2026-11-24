@@ -3,6 +3,7 @@
   import EditService from './EditService.svelte';
   import FoundList from './FoundList.svelte';
   import Icon from './icons/Icon.svelte';
+  import Mark from './Mark.svelte';
   import { adapters, adaptersError, adapterFor, snapshot } from './data.js';
   import { lastEvent } from './live.js';
 
@@ -100,12 +101,7 @@
   {#if onboarding && !filtered}
     <section class="card onboarding" aria-labelledby="onboarding-title">
       <div class="intro">
-        <span class="mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="20" height="20">
-            <path d="M3.5 12c2.3-3.9 5.1-5.8 8.5-5.8s6.2 1.9 8.5 5.8c-2.3 3.9-5.1 5.8-8.5 5.8S5.8 15.9 3.5 12z" />
-            <circle cx="12" cy="12" r="2.6" />
-          </svg>
-        </span>
+        <span class="intro-mark"><Mark size={36} /></span>
         <div class="intro-text">
           <h2 id="onboarding-title">{services.length === 0 ? 'Add your apps' : 'Add the rest of your apps'}</h2>
           <p class="muted">
@@ -129,6 +125,7 @@
       <div class="empty">
         <Icon name="search" size={28} />
         <b>No service matches the search</b>
+        <span>Try part of a name, an app or an address — or press Esc to clear it.</span>
       </div>
     {/if}
   {:else}
@@ -152,7 +149,6 @@
 
   .onboarding { display: grid; gap: 12px; padding: 22px 22px 16px; }
   .intro { display: flex; gap: 14px; align-items: flex-start; min-width: 0; }
-  .intro .mark { width: 36px; height: 36px; border-radius: var(--r); }
   .intro-text { display: grid; gap: 4px; min-width: 0; flex: 1; }
   .intro h2 { font-size: var(--t-lg); font-weight: 620; letter-spacing: -0.01em; }
   .intro p { font-size: var(--t-base); max-width: 62ch; }
@@ -167,6 +163,6 @@
   @container (max-width: 400px) {
     .count { flex-basis: 100%; }
     .onboarding { padding: 16px 16px 12px; }
-    .intro .mark { display: none; }
+    .intro-mark { display: none; }
   }
 </style>

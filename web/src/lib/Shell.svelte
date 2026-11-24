@@ -9,6 +9,8 @@
   import Storage from './Storage.svelte';
   import Rail from './Rail.svelte';
   import Icon from './icons/Icon.svelte';
+  import Mark from './Mark.svelte';
+  import { arrive } from './motion.js';
   import { live, serviceList, reconnecting, lastEvent } from './live.js';
   import { loadAdapters, loadSystem } from './data.js';
   import { matches } from './status.js';
@@ -126,12 +128,7 @@
 <div class="app">
   <aside class="left">
     <div class="brand">
-      <span class="mark" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="18" height="18">
-          <path d="M3.5 12c2.3-3.9 5.1-5.8 8.5-5.8s6.2 1.9 8.5 5.8c-2.3 3.9-5.1 5.8-8.5 5.8S5.8 15.9 3.5 12z" />
-          <circle cx="12" cy="12" r="2.6" />
-        </svg>
-      </span>
+      <Mark size={26} />
       Observarr
     </div>
 
@@ -171,12 +168,15 @@
       <header class="top">
         <h1 class="ellipsis">{addingApps ? 'Add apps' : current.label}</h1>
         <p class="live" class:stale={$reconnecting} role="status">
-          <i aria-hidden="true"></i>
+          <!-- The dot beats once per update; it is rebuilt each time, so there is no running loop. -->
+          {#key $lastEvent}<i aria-hidden="true" class:beat={!$reconnecting && $lastEvent > 0}></i>{/key}
           <span>{$reconnecting ? 'Reconnecting…' : 'Live'}</span>
           {#if age && !$reconnecting}<span class="ago" aria-hidden="true">· {age}</span>{/if}
         </p>
       </header>
 
+      {#key addingApps ? 'add' : view}
+      <div class="view" in:arrive>
       {#if view === 'overview'}
         <Overview {services} onjump={jumpTo} />
       {:else if view === 'network'}
@@ -192,6 +192,8 @@
       {:else}
         <System {query} />
       {/if}
+      </div>
+      {/key}
     </div>
   </main>
 
@@ -213,9 +215,8 @@
 
   .brand {
     display: flex; align-items: center; gap: 10px; padding: 0 10px 22px;
-    font-size: var(--t-md); font-weight: 650;
+    font-size: var(--t-lg); font-weight: 680; letter-spacing: -0.02em;
   }
-  .mark { width: 26px; height: 26px; border-radius: var(--r); }
 
   .search {
     display: flex; align-items: center; gap: 9px; margin-bottom: 18px; padding: 0 10px; color: var(--muted);
@@ -224,6 +225,7 @@
   .search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
   .search input { flex: 1; min-width: 0; padding: 7px 0; border: 0; border-radius: 0; background: transparent; outline: none; }
   .search input::placeholder { color: var(--muted); }
+  .search input:focus { box-shadow: none; }
   .search input::-webkit-search-cancel-button { display: none; }
   .search kbd {
     font: 500 var(--t-xs) 'Inter', sans-serif; color: var(--muted); border: 1px solid var(--border2); border-radius: 4px; padding: 0 5px;
@@ -251,9 +253,18 @@
   .acct .ibtn { border-color: transparent; }
 
   .top { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; min-width: 0; }
-  h1 { flex: 1; font-size: var(--t-xl); font-weight: 600; letter-spacing: -0.01em; }
+  h1 { flex: 1; font-size: var(--t-h1); font-weight: 680; letter-spacing: -0.025em; line-height: 1.2; }
   .live { display: inline-flex; align-items: center; gap: 4px; flex: none; font-size: var(--t-sm); color: var(--muted); white-space: nowrap; }
-  .live i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); margin-right: 4px; }
+  .live i { position: relative; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); margin-right: 4px; }
+  /* One soft ring leaves the dot when a reading arrives. */
+  .live i.beat::after {
+    content: ''; position: absolute; inset: 0; border-radius: 50%; border: 1px solid var(--ok);
+    animation: beat 900ms var(--ease) both;
+  }
+  @keyframes beat {
+    from { transform: scale(1); opacity: 0.8; }
+    to { transform: scale(2.6); opacity: 0; }
+  }
   .live.stale i { background: var(--warn); }
   .live.stale { color: var(--warn); }
 

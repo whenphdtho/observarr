@@ -1,4 +1,6 @@
 <script>
+  import AppIcon from './AppIcon.svelte';
+  import { reveal, conceal } from './motion.js';
   import { api } from './api.js';
   import { widgets } from './shapes/index.js';
   import { formatPct, formatBytes, formatPercent, containerStatusClass } from './format.js';
@@ -80,7 +82,7 @@
 <article class="card service {status === 'fail' || status === 'warn' ? status : ''}" class:open={expanded} id={`service-${service.id}`} tabindex="-1"
   aria-labelledby={`service-name-${service.id}`}>
   <header>
-    <span class="tile-icon" aria-hidden="true"><Icon name={adapter?.icon} /></span>
+    <span class="tile-icon" aria-hidden="true"><AppIcon {adapter} size={20} /></span>
     <div class="ident">
       <h2 id={`service-name-${service.id}`} class="ellipsis" title={service.name}>{service.name}</h2>
       <p class="muted ellipsis" title={`${adapter?.name ?? service.type} · ${service.url}`}>
@@ -120,7 +122,7 @@
   {/if}
 
   {#if expanded}
-    <div class="details" id={detailsId}>
+    <div class="details" id={detailsId} in:reveal out:conceal>
       {#if container}
         <p class="container-line" title={containerTitle}>
           <Icon name="box" size={14} />

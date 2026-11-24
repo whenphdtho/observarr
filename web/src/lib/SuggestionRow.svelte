@@ -1,4 +1,6 @@
 <script>
+  import AppIcon from './AppIcon.svelte';
+  import { reveal, conceal } from './motion.js';
   import { api } from './api.js';
   import { hostOf, selfHostOf, withHost } from './urls.js';
   import Icon from './icons/Icon.svelte';
@@ -114,7 +116,7 @@
 
 <li class="sug" class:open>
   <div class="row">
-    <span class="tile-icon" aria-hidden="true"><Icon name={adapter?.icon} size={17} /></span>
+    <span class="tile-icon" aria-hidden="true"><AppIcon {adapter} size={18} /></span>
     <div class="info">
       <span class="name ellipsis" title={appName}>{appName}</span>
       <span class="meta ellipsis" title={`${where} · ${sug.hostKnown ? sug.url : 'host unknown'}`}>
@@ -138,7 +140,7 @@
   </div>
 
   {#if open}
-    <form id={`${uid}-form`} class="mini" onsubmit={add} aria-label={`Add ${appName}`}>
+    <form id={`${uid}-form`} class="mini" onsubmit={add} aria-label={`Add ${appName}`} in:reveal out:conceal>
       <label>
         Name
         <input bind:this={nameEl} bind:value={name} required maxlength="64" autocomplete="off" />
