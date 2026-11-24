@@ -88,8 +88,6 @@ func TestDiscoveryRoutesNeedSessionAndCSRF(t *testing.T) {
 		{"GET", "/api/discovery", ""},
 		{"POST", "/api/discovery/network", `{"targets":"127.0.0.1"}`},
 		{"POST", "/api/discovery/linked", ""},
-		{"POST", "/api/discovery/config", ""},
-		{"POST", "/api/discovery/docker", ""},
 		{"POST", "/api/discovery/x/dismiss", ""},
 	}
 	for _, r := range routes {
@@ -122,18 +120,12 @@ func TestDiscoveryState(t *testing.T) {
 	if s := sources(e); s["network"] != true || s["linked"] != false || s["config"] != false || s["docker"] != false {
 		t.Fatalf("sources = %v", s)
 	}
-	if code, _ := e.send("POST", "/api/discovery/config", ""); code != 404 {
-		t.Fatalf("config discovery without a folder = %d, want 404", code)
-	}
 	e.create("Hub")
 	if s := sources(e); s["linked"] != true {
 		t.Fatalf("sources with a linking service = %v", s)
 	}
 	if s := sources(newServicesEnv(t, withAppConfigs(t))); s["config"] != true {
 		t.Fatalf("sources with a config folder = %v", s)
-	}
-	if code, _ := e.send("POST", "/api/discovery/docker", ""); code != 404 {
-		t.Fatalf("Docker discovery without Docker = %d, want 404", code)
 	}
 	if s := sources(newServicesEnv(t, withDocker(&fakeCollector{}))); s["docker"] != true {
 		t.Fatalf("sources with Docker = %v", s)
@@ -195,13 +187,13 @@ func TestAddForgetsOtherFindsOfTheSameApp(t *testing.T) {
 	if _, res := e.discoveryRun("/api/discovery/network", `{"targets":"127.0.0.1"}`); len(res.Suggestions) != 1 {
 		t.Fatalf("scan = %+v", res)
 	}
-	_, res := e.discoveryRun("/api/discovery/config", "")
-	if len(res.Suggestions) != 1 {
-		t.Fatalf("config = %+v", res)
+	_, found, _ := e.localList()
+	if len(found) != 1 {
+		t.Fatalf("local = %+v", found)
 	}
 	if code, data := e.send("POST", "/api/services", fmt.Sprintf(
 		`{"type":"fake","name":"Configured","url":%q,"suggestion":%q,"useFoundKey":true}`,
-		"http://127.0.0.1:"+strconv.Itoa(e.appPort), res.Suggestions[0].ID)); code != 201 {
+		"http://127.0.0.1:"+strconv.Itoa(e.appPort), found[""].ID)); code != 201 {
 		t.Fatalf("add = %d %v", code, data)
 	}
 	// The network find of the same app at the same address is gone too.
@@ -210,19 +202,48 @@ func TestAddForgetsOtherFindsOfTheSameApp(t *testing.T) {
 	}
 }
 
+// An app added by hand under an address of its own also stands for the host-less find holding its key: that find
+// goes at once, and stays gone once the service is removed, like one added from the find itself.
+func TestAddByHandForgetsHostlessFindWithItsKey(t *testing.T) {
+	e := newServicesEnv(t, withAppConfigs(t))
+	if _, found, _ := e.localList(); len(found) != 1 || !found[""].KeyFound {
+		t.Fatalf("local = %+v", found)
+	}
+	code, data := e.send("POST", "/api/services", fmt.Sprintf(`{"type":"fake","name":"By hand","url":%q,"apiKey":%q}`,
+		e.appURL, testKey))
+	if code != 201 {
+		t.Fatalf("add = %d %v", code, data)
+	}
+	if got := e.srv.discovery.Suggestions(); len(got) != 0 {
+		t.Fatalf("suggestions after the add = %+v", got)
+	}
+	if code, _ := e.send("DELETE", e.path(int64(data["id"].(float64))), ""); code != 204 {
+		t.Fatalf("delete = %d", code)
+	}
+	if _, found, _ := e.localList(); len(found) != 0 {
+		t.Fatalf("local after the removal = %+v", found)
+	}
+}
+
+// A service saved before the folder was read is recognised by its key.
+func TestLocalSkipsHostlessFindOfASavedService(t *testing.T) {
+	e := newServicesEnv(t, withAppConfigs(t))
+	if code, data := e.send("POST", "/api/services", fmt.Sprintf(`{"type":"fake","name":"Saved","url":%q,"apiKey":%q}`,
+		e.appURL, testKey)); code != 201 {
+		t.Fatalf("add = %d %v", code, data)
+	}
+	if _, found, _ := e.localList(); len(found) != 0 {
+		t.Fatalf("local = %+v", found)
+	}
+}
+
 func TestDiscoverConfigAndAddWithFoundKey(t *testing.T) {
 	e := newServicesEnv(t, withAppConfigs(t))
-	code, res := e.discoveryRun("/api/discovery/config", "")
-	if code != 200 || len(res.Suggestions) != 1 {
-		t.Fatalf("config = %d %+v", code, res)
-	}
-	sug := res.Suggestions[0]
-	if sug.HostKnown || !sug.KeyFound || sug.KeySource != "fake.key in apps" ||
+	_, found, _ := e.localList()
+	sug := found[""]
+	if len(found) != 1 || sug.HostKnown || !sug.KeyFound || sug.KeySource != "fake.key in apps" ||
 		sug.URL != "http://:"+strconv.Itoa(e.appPort)+"/" {
-		t.Fatalf("suggestion = %+v", sug)
-	}
-	if !e.hasAudit("ran config-folder discovery: ") {
-		t.Fatalf("audit = %v", e.auditRows())
+		t.Fatalf("local = %+v", found)
 	}
 
 	add := func(typ, url string) (int, map[string]any) {
@@ -269,22 +290,22 @@ func TestDiscoverConfigAndAddWithFoundKey(t *testing.T) {
 	}
 	// The host-less find matches no registered URL, yet it is not suggested again — not even once
 	// the service is removed (it can still be added by hand).
-	if _, res := e.discoveryRun("/api/discovery/config", ""); len(res.Suggestions) != 0 {
-		t.Fatalf("added suggestion came back: %+v", res)
+	if _, found, _ := e.localList(); len(found) != 0 {
+		t.Fatalf("added suggestion came back: %+v", found)
 	}
 	if code, _ := e.send("DELETE", e.path(id), ""); code != 204 {
 		t.Fatalf("delete = %d", code)
 	}
-	if _, res := e.discoveryRun("/api/discovery/config", ""); len(res.Suggestions) != 0 {
-		t.Fatalf("suggestion came back after the service was removed: %+v", res)
+	if _, found, _ := e.localList(); len(found) != 0 {
+		t.Fatalf("suggestion came back after the service was removed: %+v", found)
 	}
 }
 
 func TestConcurrentAddsOfOneSuggestion(t *testing.T) {
 	e := newServicesEnv(t, withAppConfigs(t))
-	_, res := e.discoveryRun("/api/discovery/config", "")
-	if len(res.Suggestions) != 1 {
-		t.Fatalf("config = %+v", res)
+	_, found, _ := e.localList()
+	if len(found) != 1 {
+		t.Fatalf("local = %+v", found)
 	}
 	const adds = 8
 	codes := make(chan int, adds)
@@ -293,7 +314,7 @@ func TestConcurrentAddsOfOneSuggestion(t *testing.T) {
 		wg.Go(func() {
 			code, _ := e.send("POST", "/api/services", fmt.Sprintf(
 				`{"type":"fake","name":"Copy %d","url":%q,"suggestion":%q,"useFoundKey":true}`, i, e.appURL,
-				res.Suggestions[0].ID))
+				found[""].ID))
 			codes <- code
 		})
 	}
@@ -365,7 +386,7 @@ func TestDismissSuggestion(t *testing.T) {
 }
 
 func TestDiscoveryOneRunAtATime(t *testing.T) {
-	e := newServicesEnv(t, withAppConfigs(t))
+	e := newServicesEnv(t)
 	// A linking app whose /linked answers only when the test lets it.
 	entered, release := make(chan struct{}), make(chan struct{})
 	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -390,7 +411,7 @@ func TestDiscoveryOneRunAtATime(t *testing.T) {
 		done <- code
 	}()
 	<-entered
-	for _, path := range []string{"/api/discovery/network", "/api/discovery/linked", "/api/discovery/config"} {
+	for _, path := range []string{"/api/discovery/network", "/api/discovery/linked"} {
 		if code, data := e.send("POST", path, `{"targets":"127.0.0.1"}`); code != 409 ||
 			!strings.Contains(fmt.Sprint(data["error"]), "already in progress") {
 			t.Errorf("%s during a run = %d %v, want 409", path, code, data)
@@ -400,63 +421,8 @@ func TestDiscoveryOneRunAtATime(t *testing.T) {
 	if code := <-done; code != 200 {
 		t.Fatalf("first run = %d", code)
 	}
-	if code, _ := e.discoveryRun("/api/discovery/config", ""); code != 200 {
+	if code, _ := e.discoveryRun("/api/discovery/network", `{"targets":"127.0.0.1"}`); code != 200 {
 		t.Fatalf("run after the first ended = %d", code)
-	}
-}
-
-func TestDiscoverDockerThenAddLinksTheContainer(t *testing.T) {
-	f := &fakeCollector{}
-	option := withDocker(f)
-	f.cs[0].Labels = map[string]string{"observarr.type": "fake", "observarr.url": "http://127.0.0.1:1"} // nothing there
-	f.cs = append(f.cs, collect.Container{ID: "b2", Name: "found", State: "running", PID: 43,
-		Labels: map[string]string{"observarr.type": "fake"}})
-	e := newServicesEnv(t, option)
-	appURL := e.appURL
-	f.mu.Lock()
-	f.cs[1].Labels = map[string]string{"observarr.type": "fake", "observarr.url": appURL} // a new map: the old one is shared
-	f.mu.Unlock()
-	f.events <- collect.Event{Name: "found", Action: "start"}
-	// The sampler lists containers at most every 5 s, also after an event.
-	eventuallyWithin(t, 10*time.Second, "the labelled container in the list", func() bool {
-		cs := e.srv.System.Snapshot().Containers
-		return len(cs) == 2 && cs[1].Labels["observarr.url"] == appURL
-	})
-
-	code, res := e.discoveryRun("/api/discovery/docker", "")
-	if code != 200 || len(res.Suggestions) != 2 {
-		t.Fatalf("Docker discovery = %d %+v", code, res)
-	}
-	byName := map[string]discovery.Suggestion{}
-	for _, s := range res.Suggestions {
-		byName[s.Container] = s
-	}
-	if s := byName["app"]; s.Verified || s.Reason == "" || s.Source != "docker" {
-		t.Fatalf("unreachable container = %+v, want unverified with a reason", s)
-	}
-	found := byName["found"]
-	if !found.Verified || found.URL != appURL {
-		t.Fatalf("reachable container = %+v", found)
-	}
-	if !e.hasAudit("ran Docker discovery: ") {
-		t.Fatalf("audit = %v", e.auditRows())
-	}
-
-	code, data := e.send("POST", "/api/services", fmt.Sprintf(`{"type":"fake","name":"Found","url":%q,"suggestion":%q,"apiKey":%q}`,
-		appURL, found.ID, testKey))
-	if code != 201 {
-		t.Fatalf("add = %d %v", code, data)
-	}
-	id := int64(data["id"].(float64))
-	if svc, _ := e.srv.Store.ServiceByID(context.Background(), id); svc.Container != "found" {
-		t.Fatalf("stored link = %q, want the suggestion's container", svc.Container)
-	}
-	if c := e.serviceState(id).Container; c == nil || c.Name != "found" || c.State != "running" {
-		t.Fatalf("brief = %+v", c)
-	}
-	// Linked now, so it is not suggested again.
-	if code, res := e.discoveryRun("/api/discovery/docker", ""); code != 200 || len(res.Suggestions) != 1 {
-		t.Fatalf("rerun = %d %+v", code, res)
 	}
 }
 

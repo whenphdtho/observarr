@@ -52,7 +52,7 @@ func TestConfigFoldersStuckReadEndsWithTheRun(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	res, err := e.ConfigFolders(ctx, onDisk(t, fstest.MapFS{"a/x": {}, "b/x": {}}))
+	res, err := e.Local(ctx, nil, onDisk(t, fstest.MapFS{"a/x": {}, "b/x": {}}))
 	if err != nil {
 		t.Fatal(err)
 	}

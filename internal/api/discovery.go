@@ -104,41 +104,6 @@ func (s *Server) discoverLinked(w http.ResponseWriter, r *http.Request, sess sto
 	})
 }
 
-func (s *Server) discoverConfig(w http.ResponseWriter, r *http.Request, sess store.Session) {
-	if s.Config.AppConfigs == "" {
-		writeError(w, http.StatusNotFound, "no app config folder is set up (OBSERVARR_APP_CONFIGS)")
-		return
-	}
-	s.discover(w, r, sess, "ran config-folder discovery", "", func(ctx context.Context) (discovery.Result, error) {
-		return s.discovery.ConfigFolders(ctx, s.Config.AppConfigs)
-	})
-}
-
-// discoverDocker suggests apps from the sampler's container list, which Docker events keep current.
-func (s *Server) discoverDocker(w http.ResponseWriter, r *http.Request, sess store.Session) {
-	if s.Config.DockerHost == "" {
-		writeError(w, http.StatusNotFound, "Docker is not set up (OBSERVARR_DOCKER_HOST)")
-		return
-	}
-	s.discover(w, r, sess, "ran Docker discovery", "", func(ctx context.Context) (discovery.Result, error) {
-		snap := s.systemSnapshot()
-		cs := make([]collect.Container, len(snap.Containers))
-		for i, v := range snap.Containers {
-			cs[i] = v.Container
-		}
-		res, err := s.discovery.Docker(ctx, cs)
-		if err != nil {
-			return res, err
-		}
-		for _, n := range snap.Notices { // Docker could not be read: say why the list is empty
-			if n == system.NoticeDocker || n == system.NoticeDockerError {
-				res.Errors = append([]discovery.SourceError{{Target: "docker", Message: n}}, res.Errors...)
-			}
-		}
-		return res, nil
-	})
-}
-
 // localTimeout bounds one listing of the apps on this server; only a hung config-folder mount takes that long.
 const localTimeout = 10 * time.Second
 

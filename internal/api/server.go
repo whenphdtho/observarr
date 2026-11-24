@@ -75,7 +75,7 @@ func (s *Server) Handler() http.Handler {
 	if s.systemEvery == 0 {
 		s.systemEvery = 2 * time.Second
 	}
-	s.discovery = discovery.New(s.Registry, s.HTTP, s.Store, time.Now, s.Log)
+	s.discovery = discovery.New(s.Registry, s.HTTP, s.Store, s.openKey, time.Now, s.Log)
 	if s.System != nil {
 		go s.followContainers()
 	}
@@ -102,8 +102,6 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/discovery/local", s.requireSession(s.discoverLocal))
 	mux.Handle("POST /api/discovery/network", s.requireSession(s.discoverNetwork))
 	mux.Handle("POST /api/discovery/linked", s.requireSession(s.discoverLinked))
-	mux.Handle("POST /api/discovery/config", s.requireSession(s.discoverConfig))
-	mux.Handle("POST /api/discovery/docker", s.requireSession(s.discoverDocker))
 	mux.Handle("POST /api/discovery/{id}/dismiss", s.requireSession(s.dismissSuggestion))
 	// Any other API request, including a wrong method on a known path, is a 404: simpler than 405 with Allow.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {

@@ -3,7 +3,6 @@ package discovery
 import (
 	"bytes"
 	"context"
-	"errors"
 	"log/slog"
 	"slices"
 	"strings"
@@ -21,20 +20,10 @@ func (a imageApp) MatchesImage(image string) bool {
 	return adapter.ImageRepo(image) == "fake/"+a.info.Type
 }
 
-func TestDocker(t *testing.T) {
-	st := newStore(t)
-	fp := func(_ context.Context, tg adapter.Target) (bool, string, error) {
-		switch tg.BaseURL.Hostname() {
-		case "tv", "relabelled", "tv.example":
-			return true, "4.0", nil
-		case "films":
-			return false, "", nil
-		}
-		return false, "", errors.New("dial tcp: lookup other: no such host")
-	}
-	e, _ := newEngine(t, st, imageApp{fingerprinter{info("sonarr", 8989), fp}},
-		imageApp{fingerprinter{info("radarr", 7878), fp}}, info("plain", 80))
-	running := func(c collect.Container) collect.Container { c.State = "running"; return c }
+func TestLocalContainers(t *testing.T) {
+	e, _ := newEngine(t, newStore(t), imageApp{fingerprinter{info("sonarr", 8989), okFor()}},
+		imageApp{fingerprinter{info("radarr", 7878), okFor()}}, info("plain", 80))
+	run := func(c collect.Container) collect.Container { c.State = "running"; return c }
 	tcp := func(ports ...int) []collect.Port {
 		var out []collect.Port
 		for _, p := range ports {
@@ -43,44 +32,43 @@ func TestDocker(t *testing.T) {
 		return out
 	}
 	cs := []collect.Container{
-		running(collect.Container{Name: "tv", Image: "FAKE/sonarr:latest", Ports: tcp(8989)}),
-		running(collect.Container{Name: "films", Image: "custom/thing", Labels: map[string]string{"observarr.type": "radarr"},
+		run(collect.Container{Name: "tv", Image: "FAKE/sonarr:latest", Ports: tcp(8989)}),
+		run(collect.Container{Name: "films", Image: "custom/thing", Labels: map[string]string{"observarr.type": "radarr"},
 			Ports: append([]collect.Port{{Private: 1900, Proto: "udp"}}, tcp(9000, 7878)...)}),
-		running(collect.Container{Name: "other", Image: "custom", Labels: map[string]string{"observarr.type": "radarr"},
+		run(collect.Container{Name: "other", Image: "custom", Labels: map[string]string{"observarr.type": "radarr"},
 			Ports: tcp(9000, 9001)}),
-		running(collect.Container{Name: "relabelled", Image: "fake/sonarr", Labels: map[string]string{"observarr.type": "ghost"}}),
-		running(collect.Container{Name: "override", Image: "fake/sonarr",
+		run(collect.Container{Name: "relabelled", Image: "fake/sonarr", Labels: map[string]string{"observarr.type": "ghost"}}),
+		run(collect.Container{Name: "override", Image: "fake/sonarr",
 			Labels: map[string]string{"observarr.url": "https://tv.example/sonarr/"}}),
-		running(collect.Container{Name: "badurl", Image: "fake/sonarr", Labels: map[string]string{"observarr.url": "ftp://x"}}),
-		running(collect.Container{Name: "plain", Image: "x", Labels: map[string]string{"observarr.type": "plain"}}),
-		running(collect.Container{Name: "web", Image: "nginx"}),
+		run(collect.Container{Name: "badurl", Image: "fake/sonarr", Labels: map[string]string{"observarr.url": "ftp://x"}}),
+		run(collect.Container{Name: "plain", Image: "x", Labels: map[string]string{"observarr.type": "plain"}}),
+		run(collect.Container{Name: "web", Image: "nginx"}),
 		{Name: "stopped", Image: "fake/sonarr", State: "exited"},
 	}
-	res, err := e.Docker(context.Background(), cs)
+	res, err := e.Local(context.Background(), cs, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := map[string]Suggestion{}
 	for _, s := range res.Suggestions {
 		got[s.Container] = s
-		if s.Source != "docker" {
-			t.Errorf("%s: source %q", s.Container, s.Source)
+		if s.Source != "docker" || s.Verified || s.Reason != reasonNotYet {
+			t.Errorf("%s: %+v", s.Container, s)
 		}
 	}
 	want := map[string]Suggestion{
-		"tv":         {Type: "sonarr", URL: "http://tv:8989/", Verified: true, Version: "4.0"},
-		"films":      {Type: "radarr", URL: "http://films:7878/", Reason: reasonOtherApp},
-		"other":      {Type: "radarr", URL: "http://other:9000/", Reason: reasonUnreachable},
-		"relabelled": {Type: "sonarr", URL: "http://relabelled:8989/", Verified: true, Version: "4.0"},
-		"override":   {Type: "sonarr", URL: "https://tv.example/sonarr", Verified: true, Version: "4.0"},
-		"plain":      {Type: "plain", URL: "http://plain:80/", Reason: reasonUnchecked},
+		"tv":         {Type: "sonarr", URL: "http://tv:8989/"},
+		"films":      {Type: "radarr", URL: "http://films:7878/"},
+		"other":      {Type: "radarr", URL: "http://other:9000/"},
+		"relabelled": {Type: "sonarr", URL: "http://relabelled:8989/"},
+		"override":   {Type: "sonarr", URL: "https://tv.example/sonarr"},
+		"plain":      {Type: "plain", URL: "http://plain:80/"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("suggestions for %v, want %v", keys(got), keys(want))
 	}
 	for name, w := range want {
-		g := got[name]
-		if g.Type != w.Type || g.URL != w.URL || g.Verified != w.Verified || g.Version != w.Version || g.Reason != w.Reason {
+		if g := got[name]; g.Type != w.Type || g.URL != w.URL {
 			t.Errorf("%s: got %+v, want %+v", name, g, w)
 		}
 	}
@@ -92,18 +80,18 @@ func TestDocker(t *testing.T) {
 	}
 }
 
-func TestDockerSkipsLinkedContainers(t *testing.T) {
+func TestLocalSkipsLinkedContainers(t *testing.T) {
 	st := newStore(t)
 	_, err := st.CreateService(context.Background(), store.Service{Type: "sonarr", Name: "TV", BaseURL: "http://10.0.0.5:8989",
 		Container: "tv"}, func(int64) ([]byte, error) { return nil, nil })
 	if err != nil {
 		t.Fatal(err)
 	}
-	e, _ := newEngine(t, st, imageApp{fingerprinter{info("sonarr", 8989), okFor("tv", "tv2")}})
-	res, err := e.Docker(context.Background(), []collect.Container{
+	e, _ := newEngine(t, st, imageApp{fingerprinter{info("sonarr", 8989), okFor()}})
+	res, err := e.Local(context.Background(), []collect.Container{
 		{Name: "tv", Image: "fake/sonarr", State: "running"},
 		{Name: "tv2", Image: "fake/sonarr", State: "running"},
-	})
+	}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +100,7 @@ func TestDockerSkipsLinkedContainers(t *testing.T) {
 	}
 }
 
-func TestDockerSkipsInvalidContainerNames(t *testing.T) {
+func TestLocalSkipsInvalidContainerNames(t *testing.T) {
 	e, _ := newEngine(t, newStore(t), imageApp{fingerprinter{info("sonarr", 8989), okFor()}})
 	var logs bytes.Buffer
 	e.log = slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
@@ -124,7 +112,7 @@ func TestDockerSkipsInvalidContainerNames(t *testing.T) {
 	var res Result
 	for range 2 {
 		var err error
-		if res, err = e.Docker(context.Background(), cs); err != nil {
+		if res, err = e.Local(context.Background(), cs, ""); err != nil {
 			t.Fatal(err)
 		}
 	}

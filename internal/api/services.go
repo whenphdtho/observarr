@@ -181,13 +181,17 @@ func (s *Server) createService(w http.ResponseWriter, r *http.Request, sess stor
 		s.internal(w, r, err)
 		return
 	}
+	// Not cancelled with the request: the service is saved, so its suggestions must go too.
+	ctx := context.WithoutCancel(r.Context())
 	if in.Suggestion != "" {
-		// Not cancelled with the request: the service is saved, so its suggestion must go too.
-		if _, err := s.discovery.Take(context.WithoutCancel(r.Context()), in.Suggestion); err != nil {
+		if _, err := s.discovery.Take(ctx, in.Suggestion); err != nil {
 			s.Log.Warn("added suggestion may be suggested again", "service", svc.Name, "err", err)
 		}
 	}
-	s.discovery.Forget(svc.Type, sp.target.BaseURL) // other finds of the same app at the same address
+	// Other finds of the same app: at the same address, or without one but with the same key.
+	if err := s.discovery.Forget(ctx, svc.Type, sp.target.BaseURL, sp.target.APIKey); err != nil {
+		s.Log.Warn("added app may be suggested again", "service", svc.Name, "err", err)
+	}
 	st := s.run(svc, sp.target)
 	detail := svc.Name + " (" + svc.Type + ")"
 	if keySource != "" {

@@ -2,10 +2,12 @@ package discovery
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"sync/atomic"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"observarr/internal/adapter"
 	"observarr/internal/collect"
@@ -46,8 +48,8 @@ func TestLocalContactsNoApp(t *testing.T) {
 	e, _ := newEngine(t, newStore(t), tv, films)
 	root := onDisk(t, fstest.MapFS{"sonarr/app.conf": {Data: []byte(foundKey)}})
 	cs := []collect.Container{
-		running("tv", "fake/sonarr", 8989),
-		running("films", "fake/radarr", 7878),
+		running("Sonarr", "fake/sonarr", 8989),
+		running("radarr", "fake/radarr", 7878),
 		running("web", "nginx", 80),
 		{Name: "old", Image: "fake/radarr", State: "exited"},
 	}
@@ -65,15 +67,15 @@ func TestLocalContactsNoApp(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("suggestions = %+v", res.Suggestions)
 	}
-	// The config folder's key goes with the one container of its type and port.
-	if s := got["tv"]; s.URL != "http://tv:8989/" || !s.HostKnown || !s.KeyFound || s.KeySource != "app.conf in sonarr" ||
+	// The config folder's key goes with the one container of its type, port and name (ignoring case).
+	if s := got["Sonarr"]; s.URL != "http://Sonarr:8989/" || !s.HostKnown || !s.KeyFound || s.KeySource != "app.conf in sonarr" ||
 		s.Verified || s.Reason != reasonNotYet || s.Source != "docker" || s.Type != "sonarr" {
 		t.Fatalf("tv = %+v", s)
 	}
-	if s := got["films"]; s.URL != "http://films:7878/" || s.KeyFound || s.Verified || s.Source != "docker" {
+	if s := got["radarr"]; s.URL != "http://radarr:7878/" || s.KeyFound || s.Verified || s.Source != "docker" {
 		t.Fatalf("films = %+v", s)
 	}
-	if c, ok := e.Peek(got["tv"].ID); !ok || c.APIKey != foundKey || c.Container != "tv" {
+	if c, ok := e.Peek(got["Sonarr"].ID); !ok || c.APIKey != foundKey || c.Container != "Sonarr" {
 		t.Fatalf("Peek = %+v, %v", c, ok)
 	}
 
@@ -97,9 +99,10 @@ func TestLocalJoinsOnlyWhenUnambiguous(t *testing.T) {
 	e, _ := newEngine(t, newStore(t), tv)
 	root := onDisk(t, fstest.MapFS{"sonarr/app.conf": {Data: []byte(foundKey)}})
 	cases := map[string][]collect.Container{
-		"two containers": {running("tv", "fake/sonarr", 8989), running("tv2", "fake/sonarr", 8989)},
-		"other port":     {running("tv", "fake/sonarr", 9000)},
-		"labelled url": {{Name: "tv", Image: "fake/sonarr", State: "running",
+		"two containers": {running("sonarr", "fake/sonarr", 8989), running("sonarr2", "fake/sonarr", 8989)},
+		"other port":     {running("sonarr", "fake/sonarr", 9000)},
+		"other name":     {running("tv", "fake/sonarr", 8989)},
+		"labelled url": {{Name: "sonarr", Image: "fake/sonarr", State: "running",
 			Labels: map[string]string{"observarr.url": "http://tv.example:8989/"}}},
 	}
 	for name, cs := range cases {
@@ -133,5 +136,61 @@ func TestLocalWithoutSources(t *testing.T) {
 	res, err = e.Local(context.Background(), nil, "/nonexistent-observarr-test")
 	if err != nil || len(res.Errors) != 1 || res.Errors[0].Message != "the config folder cannot be read" {
 		t.Fatalf("Local with a missing folder = %+v, %v", res, err)
+	}
+}
+
+// A listing never replaces a suggestion confirmed by contacting the app; it keeps it offered for longer.
+func TestLocalKeepsVerifiedSuggestion(t *testing.T) {
+	e, clk := newEngine(t, newStore(t), newLocalApp("sonarr", 8989))
+	verified := scan(t, e, "tv").Suggestions[0]
+	if !verified.Verified || verified.Version != "1.0" {
+		t.Fatalf("scan = %+v", verified)
+	}
+	clk.add(50 * time.Minute)
+	res, err := e.Local(context.Background(), []collect.Container{running("tv", "fake/sonarr", 8989)}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Suggestions) != 1 || res.Suggestions[0] != verified {
+		t.Fatalf("Local = %+v, want the verified %+v", res.Suggestions, verified)
+	}
+	clk.add(50 * time.Minute)
+	if got := e.Suggestions(); len(got) != 1 || got[0] != verified {
+		t.Fatalf("after its first hour = %+v", got)
+	}
+}
+
+// A host-less find matches no saved address, so it is matched to a saved service by its key, or, when keys cannot
+// tell, only when there is one of each.
+func TestLocalSkipsHostlessFindOfASavedService(t *testing.T) {
+	tv := newLocalApp("sonarr", 8989)
+	keyed := onDisk(t, fstest.MapFS{"sonarr/app.conf": {Data: []byte(foundKey)}})
+	keyless := onDisk(t, fstest.MapFS{"sonarr/app.conf": {}})
+	cases := []struct {
+		name  string
+		saved []string // the keys of the saved services
+		root  string
+		want  int
+	}{
+		{"same key", []string{"other", foundKey}, keyed, 0},
+		{"other key", []string{"other"}, keyed, 1},
+		{"no saved key, one service", []string{""}, keyed, 0},
+		{"no saved key, two services", []string{"", ""}, keyed, 1},
+		{"no found key, one service", []string{"other"}, keyless, 0},
+		{"no found key, two services", []string{"other", "more"}, keyless, 1},
+	}
+	for _, c := range cases {
+		st := newStore(t)
+		for i, key := range c.saved {
+			saveService(t, st, "sonarr", fmt.Sprintf("TV %d", i), fmt.Sprintf("http://tv%d:8989", i), key)
+		}
+		e, _ := newEngine(t, st, tv)
+		res, err := e.Local(context.Background(), nil, c.root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(res.Suggestions) != c.want {
+			t.Errorf("%s: %d suggestions, want %d", c.name, len(res.Suggestions), c.want)
+		}
 	}
 }

@@ -180,15 +180,14 @@ func TestSystemEventsInOrder(t *testing.T) {
 	}
 }
 
-func TestDockerDiscoveryReportsUnreadableDocker(t *testing.T) {
+func TestLocalListReportsUnreadableDocker(t *testing.T) {
 	f := &fakeCollector{}
 	option := withDocker(f)
 	f.docker = false // configured, but the collector cannot read it
 	e := newServicesEnv(t, option)
 	eventually(t, "the first sample", func() bool { return len(e.srv.System.Snapshot().Notices) > 0 })
-	code, res := e.discoveryRun("/api/discovery/docker", "")
-	if code != 200 || len(res.Errors) != 1 || res.Errors[0].Target != "docker" ||
-		res.Errors[0].Message != system.NoticeDocker {
-		t.Fatalf("Docker discovery = %d %+v", code, res)
+	_, found, errs := e.localList()
+	if len(found) != 0 || len(errs) != 1 || errs[0].Target != "docker" || errs[0].Message != system.NoticeDocker {
+		t.Fatalf("local = %+v %+v", found, errs)
 	}
 }

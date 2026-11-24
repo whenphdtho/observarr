@@ -97,6 +97,18 @@ func newStore(t *testing.T) *store.Store {
 	return st
 }
 
+// openKey stands in for the credential box: a test service's sealed key is the key itself.
+func openKey(svc store.Service) (string, error) { return string(svc.SealedKey), nil }
+
+// saveService stores a service of type typ at rawURL with key ("" for none).
+func saveService(t *testing.T, st *store.Store, typ, name, rawURL, key string) {
+	t.Helper()
+	if _, err := st.CreateService(context.Background(), store.Service{Type: typ, Name: name, BaseURL: rawURL},
+		func(int64) ([]byte, error) { return []byte(key), nil }); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func newEngine(t *testing.T, st *store.Store, adapters ...adapter.Adapter) (*Engine, *clock) {
 	t.Helper()
 	reg := adapter.NewRegistry()
@@ -104,7 +116,7 @@ func newEngine(t *testing.T, st *store.Store, adapters ...adapter.Adapter) (*Eng
 		reg.Register(a)
 	}
 	c := &clock{t: time.Unix(1_700_000_000, 0)}
-	return New(reg, nil, st, c.now, slog.New(slog.NewTextHandler(io.Discard, nil))), c
+	return New(reg, nil, st, openKey, c.now, slog.New(slog.NewTextHandler(io.Discard, nil))), c
 }
 
 // okFor recognises exactly the given host names.
@@ -197,7 +209,7 @@ func TestScanNetworkProbeTimeout(t *testing.T) {
 	if b := time.Duration(budget.Load()); b <= 0 || b > 50*time.Millisecond {
 		t.Fatalf("probe deadline %v away, want ≤ 50ms", b)
 	}
-	if New(nil, nil, nil, time.Now, nil).probeTimeout != 1500*time.Millisecond {
+	if New(nil, nil, nil, nil, time.Now, nil).probeTimeout != 1500*time.Millisecond {
 		t.Fatal("default probe timeout is not 1.5 s")
 	}
 }
@@ -226,7 +238,7 @@ func TestScanNetworkRunTimeout(t *testing.T) {
 	if len(res.Errors) != 1 || res.Errors[0] != (SourceError{Target: "network", Message: "time limit (120 s) reached — scan a smaller range or list hosts"}) {
 		t.Fatalf("errors = %+v, want one saying the scan stopped", res.Errors)
 	}
-	if New(nil, nil, nil, time.Now, nil).scanTimeout != 120*time.Second {
+	if New(nil, nil, nil, nil, time.Now, nil).scanTimeout != 120*time.Second {
 		t.Fatal("default scan timeout is not 120 s")
 	}
 	if maxProbes != 128 {
@@ -333,7 +345,7 @@ func TestConfigFolders(t *testing.T) {
 		"loose-file":        {Data: []byte("x")},
 	}
 	e, _ := newEngine(t, newStore(t), reader{info("fake", 8989)})
-	res, err := e.ConfigFolders(context.Background(), onDisk(t, root))
+	res, err := e.Local(context.Background(), nil, onDisk(t, root))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -362,7 +374,7 @@ func TestConfigFoldersReadsAtMost50(t *testing.T) {
 		root[fmt.Sprintf("d%02d/app.conf", i)] = &fstest.MapFile{Data: []byte("k")}
 	}
 	e, _ := newEngine(t, newStore(t), reader{info("fake", 8989)})
-	res, err := e.ConfigFolders(context.Background(), onDisk(t, root))
+	res, err := e.Local(context.Background(), nil, onDisk(t, root))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -464,7 +476,7 @@ func TestSuggestionsCapped(t *testing.T) {
 
 func TestTakeOnce(t *testing.T) {
 	e, _ := newEngine(t, newStore(t), reader{info("fake", 8989)})
-	res, err := e.ConfigFolders(context.Background(), onDisk(t, fstest.MapFS{"s/app.conf": {Data: []byte(foundKey)}}))
+	res, err := e.Local(context.Background(), nil, onDisk(t, fstest.MapFS{"s/app.conf": {Data: []byte(foundKey)}}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -489,7 +501,7 @@ func TestTakeOnce(t *testing.T) {
 
 func TestSuggestionJSONNeverHoldsTheKey(t *testing.T) {
 	e, _ := newEngine(t, newStore(t), reader{info("fake", 8989)})
-	res, err := e.ConfigFolders(context.Background(), onDisk(t, fstest.MapFS{"s/app.conf": {Data: []byte(foundKey)}}))
+	res, err := e.Local(context.Background(), nil, onDisk(t, fstest.MapFS{"s/app.conf": {Data: []byte(foundKey)}}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -525,7 +537,7 @@ func TestTakenSuggestionIsNotSuggestedAgain(t *testing.T) {
 	st := newStore(t)
 	root := fstest.MapFS{"s/app.conf": {Data: []byte(foundKey)}}
 	e, _ := newEngine(t, st, reader{info("fake", 8989)})
-	res, err := e.ConfigFolders(context.Background(), onDisk(t, root))
+	res, err := e.Local(context.Background(), nil, onDisk(t, root))
 	if err != nil || len(res.Suggestions) != 1 {
 		t.Fatalf("config = %+v %v", res, err)
 	}
@@ -535,7 +547,7 @@ func TestTakenSuggestionIsNotSuggestedAgain(t *testing.T) {
 	// A host-less find matches no registered URL; the record made by Take keeps it away, also
 	// after a restart.
 	e2, _ := newEngine(t, st, reader{info("fake", 8989)})
-	if res, err := e2.ConfigFolders(context.Background(), onDisk(t, root)); err != nil || len(res.Suggestions) != 0 {
+	if res, err := e2.Local(context.Background(), nil, onDisk(t, root)); err != nil || len(res.Suggestions) != 0 {
 		t.Fatalf("after take = %+v %v", res, err)
 	}
 }
@@ -560,9 +572,45 @@ func TestForget(t *testing.T) {
 	e, _ := newEngine(t, newStore(t), fingerprinter{info("fake", 80), okFor("h1", "h2")},
 		fingerprinter{info("other", 80), okFor()})
 	scan(t, e, "h1", "h2")
-	e.Forget("other", &url.URL{Scheme: "http", Host: "h1"})
-	e.Forget("fake", &url.URL{Scheme: "HTTP", Host: "H1:80", Path: "/"})
+	ctx := context.Background()
+	if err := e.Forget(ctx, "other", &url.URL{Scheme: "http", Host: "h1"}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Forget(ctx, "fake", &url.URL{Scheme: "HTTP", Host: "H1:80", Path: "/"}, ""); err != nil {
+		t.Fatal(err)
+	}
 	if got := e.Suggestions(); len(got) != 1 || got[0].URL != "http://h2:80/" {
 		t.Fatalf("after forget = %+v", got)
+	}
+}
+
+// An app added under an address of its own also stands for the host-less find holding its key.
+func TestForgetHostlessFindWithTheSameKey(t *testing.T) {
+	st := newStore(t)
+	apps := []adapter.Adapter{newLocalApp("sonarr", 8989), newLocalApp("radarr", 8989)}
+	e, _ := newEngine(t, st, apps...)
+	// The same key in a folder of another type: only a key of the added type counts.
+	root := onDisk(t, fstest.MapFS{"sonarr/app.conf": {Data: []byte(foundKey)}, "radarr/app.conf": {Data: []byte(foundKey)}})
+	ctx := context.Background()
+	if res, err := e.Local(ctx, nil, root); err != nil || len(res.Suggestions) != 2 {
+		t.Fatalf("Local = %+v %v", res, err)
+	}
+	u := &url.URL{Scheme: "http", Host: "tv.lan:8989"}
+	if err := e.Forget(ctx, "sonarr", u, "another-key"); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.Suggestions()) != 2 {
+		t.Fatalf("a find with another key was forgotten: %+v", e.Suggestions())
+	}
+	if err := e.Forget(ctx, "sonarr", u, foundKey); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.Suggestions(); len(got) != 1 || got[0].Type != "radarr" {
+		t.Fatalf("after forget = %+v", got)
+	}
+	// Recorded: it stays away, also after a restart.
+	e2, _ := newEngine(t, st, apps...)
+	if res, err := e2.Local(ctx, nil, root); err != nil || len(res.Suggestions) != 1 || res.Suggestions[0].Type != "radarr" {
+		t.Fatalf("after a restart = %+v %v", res, err)
 	}
 }

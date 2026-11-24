@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"io/fs"
@@ -29,7 +30,7 @@ import (
 const (
 	maxProbes      = 128                     // network probes in flight at once
 	probeTimeout   = 1500 * time.Millisecond // one Fingerprint call
-	scanTimeout    = 120 * time.Second       // one whole network scan or Docker run
+	scanTimeout    = 120 * time.Second       // one whole network scan
 	linkedTimeout  = 10 * time.Second        // one LinkedApps call
 	maxFolders     = 50                      // config folders read per run
 	maxSourceErrs  = 100                     // errors reported per run
@@ -52,7 +53,7 @@ type Suggestion struct {
 	KeyFound  bool   `json:"keyFound"`
 	KeySource string `json:"keySource,omitempty"`
 	Source    string `json:"source"` // "network" | "linked" | "config" | "docker" (Local reports the last two)
-	// Verified is false for a Docker find whose app could not be recognised at its URL; Reason says why.
+	// Verified is false for a find whose app has not been recognised at its URL; Reason says why.
 	Verified  bool   `json:"verified"`
 	Reason    string `json:"reason,omitempty"`
 	Container string `json:"container,omitempty"` // the Docker container, for Docker finds
@@ -90,11 +91,12 @@ type entry struct {
 // Engine runs discovery sources and keeps their suggestions in memory for a while. Nothing it
 // finds is added, polled or stored as a service; the API does that when the user adds one.
 type Engine struct {
-	reg   *adapter.Registry
-	httpc *http.Client
-	st    *store.Store
-	now   func() time.Time
-	log   *slog.Logger
+	reg     *adapter.Registry
+	httpc   *http.Client
+	st      *store.Store
+	openKey func(store.Service) (string, error) // a saved service's key, "" if it has none
+	now     func() time.Time
+	log     *slog.Logger
 
 	probeTimeout, scanTimeout time.Duration // the constants above; tests shorten them
 
@@ -107,9 +109,11 @@ type Engine struct {
 // maxSkipped bounds the unusable container names remembered; beyond, all are forgotten (and logged again).
 const maxSkipped = 1000
 
-// New returns an Engine with no suggestions.
-func New(reg *adapter.Registry, httpc *http.Client, st *store.Store, now func() time.Time, log *slog.Logger) *Engine {
-	return &Engine{reg: reg, httpc: httpc, st: st, now: now, log: log, probeTimeout: probeTimeout,
+// New returns an Engine with no suggestions. openKey opens a saved service's key, so that a config-folder find without
+// a host can be recognised as a service saved already.
+func New(reg *adapter.Registry, httpc *http.Client, st *store.Store, openKey func(store.Service) (string, error),
+	now func() time.Time, log *slog.Logger) *Engine {
+	return &Engine{reg: reg, httpc: httpc, st: st, openKey: openKey, now: now, log: log, probeTimeout: probeTimeout,
 		scanTimeout: scanTimeout, entries: make(map[string]*entry), skipped: make(map[string]bool)}
 }
 
@@ -119,15 +123,11 @@ type find struct {
 	version    string
 	unverified string // why the app could not be recognised; "" when it was, or the source read it from the app
 	source     string // the source that found it, when a run combines several; "" = the run's own
+	folder     string // the config folder it was read from, for a config find
 }
 
-// Reasons a Docker find is not verified.
-const (
-	reasonUnreachable = "not reachable from Observarr (different Docker network?)"
-	reasonOtherApp    = "something else answers at this address"
-	reasonUnchecked   = "not checked: this app cannot be recognised without its key"
-	reasonNotYet      = "not contacted yet: Observarr checks it when you add it"
-)
+// reasonNotYet is why a find of Local is not verified.
+const reasonNotYet = "not contacted yet: Observarr checks it when you add it"
 
 // ScanNetwork probes http://host:<DefaultPort> of every adapter that implements
 // adapter.Fingerprinter, for every host (from ParseTargets). Probes sharing a host and port run one
@@ -256,19 +256,10 @@ func (e *Engine) Linked(ctx context.Context, sources []LinkedSource) (Result, er
 	return e.keep(ctx, "linked", finds, errs, false)
 }
 
-// ConfigFolders reads every immediate subdirectory of the folder root (at most 50, in name order) with each
-// adapter that implements adapter.ConfigReader; the first that recognises a folder wins. A folder that does not
-// answer before ctx ends (a hung network mount, say) ends the run with an error for it.
-func (e *Engine) ConfigFolders(ctx context.Context, root string) (Result, error) {
-	finds, errs, err := e.configFinds(ctx, root)
-	if err != nil {
-		return Result{}, err
-	}
-	return e.keep(ctx, "config", finds, errs, false)
-}
-
-// configFinds reads the config folders under root for ConfigFolders and Local. It only reads files: no app is
-// contacted.
+// configFinds reads every immediate subdirectory of the folder root (at most 50, in name order) with each adapter
+// that implements adapter.ConfigReader; the first that recognises a folder wins. A folder that does not answer
+// before ctx ends (a hung network mount, say) ends the reading with an error for it. It only reads files: no app
+// is contacted.
 func (e *Engine) configFinds(ctx context.Context, root string) ([]find, []SourceError, error) {
 	type listing struct {
 		dirents []fs.DirEntry
@@ -336,7 +327,7 @@ func (e *Engine) configFinds(ctx context.Context, root string) ([]find, []Source
 		case !ok:
 			errs = append(errs, SourceError{Target: d.Name(), Message: errNoAnswer})
 		case r.c.BaseURL != nil:
-			finds = append(finds, find{c: r.c})
+			finds = append(finds, find{c: r.c, source: "config", folder: d.Name()})
 		case r.err != nil:
 			errs = append(errs, SourceError{Target: d.Name(), Message: r.err.Error()})
 		}
@@ -359,52 +350,18 @@ func await[T any](ctx context.Context, f func() T) (v T, ok bool) {
 	}
 }
 
-// Docker suggests the app of every running container that names a registered type in its "observarr.type" label,
-// or else whose image an adapter recognises (adapter.ImageMatcher; the first in the registry's order wins). Its URL
-// is http://<container name>:<port>, the port being the adapter's default port when the container exposes it, else
-// its first TCP port; an "observarr.url" label replaces the URL. Each find is fingerprinted where the adapter allows
-// it; one that cannot be recognised there is still suggested, marked unverified with the reason. A container whose
-// name is not a valid Docker name is skipped.
-func (e *Engine) Docker(ctx context.Context, cs []collect.Container) (Result, error) {
-	ctx, cancel := context.WithTimeout(ctx, e.scanTimeout)
-	defer cancel()
-	apps, errs := e.containerApps(cs)
-
-	var (
-		mu    sync.Mutex
-		finds []find
-		wg    sync.WaitGroup
-		slots = make(chan struct{}, maxProbes)
-	)
-	for _, ca := range apps {
-		select {
-		case slots <- struct{}{}:
-		case <-ctx.Done():
-		}
-		if ctx.Err() != nil {
-			errs = append(errs, SourceError{Target: "docker", Message: "the run stopped before every container was checked"})
-			break
-		}
-		wg.Go(func() {
-			defer func() { <-slots }()
-			f := e.verify(ctx, ca.a, ca.c)
-			mu.Lock()
-			finds = append(finds, f)
-			mu.Unlock()
-		})
-	}
-	wg.Wait()
-	return e.keep(ctx, "docker", finds, errs, false)
-}
-
 // containerApp is a running container an adapter recognises, with the candidate it stands for.
 type containerApp struct {
-	a     adapter.Adapter
 	c     adapter.Candidate
 	label bool // the URL comes from the container's "observarr.url" label
 }
 
-// containerApps returns the recognised running containers of cs, in order, without contacting any of them.
+// containerApps returns the running containers of cs whose app an adapter recognises, in order, without contacting
+// any of them: those that name a registered type in their "observarr.type" label, or else whose image an adapter
+// recognises (adapter.ImageMatcher; the first in the registry's order wins). The URL is
+// http://<container name>:<port>, the port being the adapter's default port when the container exposes it, else
+// its first TCP port; an "observarr.url" label replaces the URL. A container whose name is not a valid Docker name
+// is skipped.
 func (e *Engine) containerApps(cs []collect.Container) ([]containerApp, []SourceError) {
 	var matchers []adapter.Adapter
 	for _, a := range e.adapters() {
@@ -434,18 +391,19 @@ func (e *Engine) containerApps(cs []collect.Container) ([]containerApp, []Source
 			continue
 		}
 		_, label := c.Labels["observarr.url"]
-		out = append(out, containerApp{a: a, label: label,
+		out = append(out, containerApp{label: label,
 			c: adapter.Candidate{Type: a.Info().Type, Name: a.Info().Name, BaseURL: base, Container: c.Name}})
 	}
 	return out, errs
 }
 
-// Local lists the apps found on this server without contacting any of them: every running container of cs an
-// adapter recognises (as Docker does, but not fingerprinted, so each is unverified) and every config folder under
-// root (as ConfigFolders; root "" skips them). A host-less config find with a key is joined to the container of its
-// type when each is the only one of that type and the ports agree: the suggestion then has the container's address
-// and the folder's key, and the API sends that key to that address only. Earlier suggestions for the same app keep
-// their id, so a list the UI already shows stays valid when it lists again.
+// Local lists the apps found on this server without contacting any of them, so each is unverified: every running
+// container of cs an adapter recognises (see containerApps) and every config folder under root (see configFinds;
+// root "" skips them). A host-less config find with a key is joined to the container of its type when each is the
+// only one of that type, the ports agree and the folder and container names match (one holds the other, ignoring
+// case): the suggestion then has the container's address and the folder's key, and the API sends that key to that
+// address only. Earlier suggestions for the same app keep their id, so a list the UI already shows stays valid when
+// it lists again.
 func (e *Engine) Local(ctx context.Context, cs []collect.Container, root string) (Result, error) {
 	apps, errs := e.containerApps(cs)
 	var cfinds []find
@@ -475,8 +433,7 @@ func (e *Engine) Local(ctx context.Context, cs []collect.Container, root string)
 	for _, f := range cfinds {
 		is := containers[f.c.Type]
 		if f.c.BaseURL.Hostname() != "" || f.c.APIKey == "" || len(is) != 1 || hostless[f.c.Type] != 1 ||
-			apps[is[0]].c.BaseURL.Port() != f.c.BaseURL.Port() {
-			f.source = "config"
+			apps[is[0]].c.BaseURL.Port() != f.c.BaseURL.Port() || !sameName(f.folder, apps[is[0]].c.Container) {
 			finds = append(finds, f)
 			continue
 		}
@@ -494,6 +451,13 @@ func (e *Engine) Local(ctx context.Context, cs []collect.Container, root string)
 		}
 	}
 	return e.keep(ctx, "local", finds, errs, true)
+}
+
+// sameName reports whether a config folder and a container are named for the same app: one name holds the other,
+// ignoring case (e.g. "tv" and "TV" or "tv-app").
+func sameName(folder, container string) bool {
+	a, b := strings.ToLower(folder), strings.ToLower(container)
+	return strings.Contains(a, b) || strings.Contains(b, a)
 }
 
 // containerName matches the names Docker gives containers, at most 63 characters (a DNS label). Anything else
@@ -549,27 +513,6 @@ func containerURL(c collect.Container, defaultPort int) (*url.URL, error) {
 	return &url.URL{Scheme: "http", Host: net.JoinHostPort(c.Name, strconv.Itoa(port)), Path: "/"}, nil
 }
 
-// verify fingerprints c's app at its URL, where the adapter can.
-func (e *Engine) verify(ctx context.Context, a adapter.Adapter, c adapter.Candidate) find {
-	f := find{c: c}
-	fp, ok := a.(adapter.Fingerprinter)
-	if !ok {
-		f.unverified = reasonUnchecked
-		return f
-	}
-	pctx, cancel := context.WithTimeout(ctx, e.probeTimeout)
-	defer cancel()
-	switch match, version, err := fp.Fingerprint(pctx, adapter.Target{BaseURL: c.BaseURL, HTTP: e.httpc}); {
-	case err != nil:
-		f.unverified = reasonUnreachable
-	case !match:
-		f.unverified = reasonOtherApp
-	default:
-		f.version = version
-	}
-	return f
-}
-
 // adapters returns every registered adapter in the registry's order (by name).
 func (e *Engine) adapters() []adapter.Adapter {
 	infos := e.reg.Infos()
@@ -583,7 +526,8 @@ func (e *Engine) adapters() []adapter.Adapter {
 
 // keep drops finds that are already registered services, dismissed, or duplicates, stores the
 // rest as suggestions and returns them sorted by type, then URL. A fresh find replaces an earlier
-// suggestion for the same app; with reuse it keeps that suggestion's id.
+// suggestion for the same app; with reuse it keeps that suggestion's id, and an earlier verified
+// suggestion stays as it is, only its expiry renewed.
 func (e *Engine) keep(ctx context.Context, source string, finds []find, errs []SourceError, reuse bool) (Result, error) {
 	// The run's own context may have ended (a timed-out scan still returns what it found).
 	ctx = context.WithoutCancel(ctx)
@@ -595,13 +539,31 @@ func (e *Engine) keep(ctx context.Context, source string, finds []find, errs []S
 	if err != nil {
 		return Result{}, err
 	}
+	hostless := make(map[string]int) // per type, the host-less finds
+	for _, f := range finds {
+		if f.c.BaseURL.Hostname() == "" {
+			hostless[f.c.Type]++
+		}
+	}
 	linked := make(map[string]bool) // containers a service is linked to already
+	saved := make(map[string]*savedApps)
 	for _, svc := range svcs {
 		if u, err := url.Parse(svc.BaseURL); err == nil {
 			skip[svc.Type+" "+normalizeURL(u)] = true
 		}
 		if svc.Container != "" {
 			linked[svc.Container] = true
+		}
+		if hostless[svc.Type] > 0 {
+			s := saved[svc.Type]
+			if s == nil {
+				s = &savedApps{}
+				saved[svc.Type] = s
+			}
+			s.n++
+			if key, err := e.openKey(svc); err == nil && key != "" {
+				s.keys = append(s.keys, key)
+			}
 		}
 	}
 
@@ -617,21 +579,22 @@ func (e *Engine) keep(ctx context.Context, source string, finds []find, errs []S
 	}
 	for _, f := range finds {
 		key := dismissKey(f.c)
-		if skip[key] || linked[f.c.Container] {
+		if skip[key] || linked[f.c.Container] ||
+			f.c.BaseURL.Hostname() == "" && saved[f.c.Type].holds(f.c.APIKey, hostless[f.c.Type]) {
 			continue
 		}
 		skip[key] = true // once per run
-		id := ""
-		for oldID, old := range e.entries {
-			if old.key == key {
-				if reuse && id == "" {
-					id = oldID
-				}
-				delete(e.entries, oldID) // a fresh find replaces an earlier one
+		id := newID()
+		if old := e.entryFor(key); old != nil {
+			if reuse && old.s.Verified { // a listing never replaces what was confirmed by contacting the app
+				old.expires = e.now().Add(suggestionTTL)
+				res.Suggestions = append(res.Suggestions, old.s)
+				continue
 			}
-		}
-		if id == "" {
-			id = newID()
+			if reuse {
+				id = old.s.ID
+			}
+			delete(e.entries, old.s.ID) // a fresh find replaces an earlier one
 		}
 		ent := &entry{c: f.c, key: key, expires: e.now().Add(suggestionTTL)}
 		ent.c.BaseURL = cloneURL(f.c.BaseURL)
@@ -656,6 +619,40 @@ func (e *Engine) keep(ctx context.Context, source string, finds []find, errs []S
 	res.Suggestions = slices.DeleteFunc(res.Suggestions, func(s Suggestion) bool { return e.entries[s.ID] == nil })
 	sortSuggestions(res.Suggestions)
 	return res, nil
+}
+
+// savedApps are the saved services of one type: how many, and the keys of those that have one.
+type savedApps struct {
+	n    int
+	keys []string
+}
+
+// holds reports whether a host-less find with key stands for one of s, found among finds host-less finds of its
+// type: a saved key is that key, or, when keys cannot tell (the find or every saved service has none), s is the
+// only saved service of the type and the find the only host-less one. A nil s holds nothing.
+func (s *savedApps) holds(key string, finds int) bool {
+	if s == nil {
+		return false
+	}
+	if key != "" && len(s.keys) > 0 {
+		return slices.ContainsFunc(s.keys, func(k string) bool { return sameKey(k, key) })
+	}
+	return s.n == 1 && finds == 1
+}
+
+// sameKey compares two keys in constant time.
+func sameKey(a, b string) bool {
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+}
+
+// entryFor returns the entry with dismissal key key, or nil; there is at most one. e.mu must be held.
+func (e *Engine) entryFor(key string) *entry {
+	for _, ent := range e.entries {
+		if ent.key == key {
+			return ent
+		}
+	}
+	return nil
 }
 
 // Suggestions returns every current suggestion, sorted by type, then URL.
@@ -696,17 +693,29 @@ func (e *Engine) Take(ctx context.Context, id string) (adapter.Candidate, error)
 	return ent.candidate(), e.st.Dismiss(ctx, ent.key)
 }
 
-// Forget removes every suggestion of type typ at u (compared normalised), e.g. once a service was
-// added there by hand or from another suggestion. Host-less suggestions never match.
-func (e *Engine) Forget(typ string, u *url.URL) {
-	key := typ + " " + normalizeURL(u)
+// Forget removes the suggestions for a service of type typ just added at u with key apiKey ("" for none), e.g. by
+// hand or from another suggestion: every one of that type at u (compared normalised), and every host-less one of
+// that type that found apiKey. Those are recorded like Take records a host-less find, so they stay suppressed.
+func (e *Engine) Forget(ctx context.Context, typ string, u *url.URL, apiKey string) error {
+	at := typ + " " + normalizeURL(u)
+	var hostless []string
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	for id, ent := range e.entries {
-		if ent.key == key {
+		switch {
+		case ent.key == at:
 			delete(e.entries, id)
+		case apiKey != "" && ent.c.Type == typ && ent.c.BaseURL.Hostname() == "" && sameKey(ent.c.APIKey, apiKey):
+			delete(e.entries, id)
+			hostless = append(hostless, ent.key)
 		}
 	}
+	e.mu.Unlock()
+	for _, key := range hostless {
+		if err := e.st.Dismiss(ctx, key); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Dismiss records that suggestion id should not be suggested again and removes it. It returns the
