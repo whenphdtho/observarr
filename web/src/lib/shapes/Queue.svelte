@@ -17,7 +17,7 @@
   {:else}
     <p class="row">
       <span class="label">Queue</span>
-      {#if data}<span class="count num">{data.total}</span>{/if}
+      {#if data}<span class="count">{data.total}</span>{/if}
       <span class="muted age">{age}</span>
     </p>
     {#if reading.error}
@@ -37,13 +37,12 @@
               aria-label={`${item.title}: ${formatPercent(item.progress)} done`}>
               <i style:width={formatPercent(item.progress)}></i>
             </div>
-            <div class="meta">
-              <span class="chip status" class:ok={item.status === 'downloading'} class:warn={!!item.problem}
-                title={item.status}>{item.status}</span>
-              <span class="chip num" title={`${formatBytes(item.leftBytes)} left of ${formatBytes(item.sizeBytes)}`}>
+            <div class="facts">
+              <span class="status" class:warn-text={!!item.problem} title={item.status}>{item.status}</span>
+              <span title={`${formatBytes(item.leftBytes)} left of ${formatBytes(item.sizeBytes)}`}>
                 {formatBytes(item.leftBytes)} left
               </span>
-              {#if item.eta}<span class="chip num" title={`ETA ${item.eta}`}>{item.eta}</span>{/if}
+              {#if item.eta}<span title={`ETA ${item.eta}`}>{item.eta}</span>{/if}
             </div>
             {#if item.problem}
               <p class="problem">{item.problem}</p>
@@ -57,23 +56,17 @@
 
 <style>
   .queue { display: grid; gap: 6px; }
-  .row { display: flex; align-items: center; gap: 8px; min-width: 0; padding-top: 12px; border-top: 1px solid var(--border); }
-  .label { font-size: 13px; font-weight: 600; }
-  .count {
-    min-width: 20px; height: 20px; padding: 0 6px; border-radius: 99px; display: inline-grid; place-items: center;
-    font-size: 11.5px; font-weight: 650; background: var(--surface2); color: var(--text2);
-  }
-  .age { margin-left: auto; font-size: 12px; white-space: nowrap; }
-  .error { font-size: 13px; }
+  .row { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding-top: 12px; border-top: 1px solid var(--border); }
+  .label { font-size: var(--t-base); font-weight: 600; }
+  .count { font-size: var(--t-sm); color: var(--muted); }
+  .age { margin-left: auto; font-size: var(--t-sm); white-space: nowrap; }
+  .error { font-size: var(--t-base); }
   .items { list-style: none; margin: 0; padding: 0; display: grid; }
-  .items li { display: grid; gap: 7px; min-width: 0; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .items li { display: grid; gap: 6px; min-width: 0; padding: 10px 0; border-bottom: 1px solid var(--border); }
   .items li:last-child { border-bottom: 0; padding-bottom: 0; }
   .head { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
-  .title { flex: 1; font-weight: 550; font-size: 13.5px; }
-  .pct { font-size: 12.5px; color: var(--text2); flex: none; }
-  /* Each chip shrinks and ellipsizes rather than wrapping, so the row stays on one line. */
-  .meta { display: flex; gap: 6px; min-width: 0; }
-  .meta .chip { flex: 0 1 auto; }
+  .title { flex: 1; font-weight: 550; font-size: var(--t-base); }
+  .pct { font-size: var(--t-sm); color: var(--text2); flex: none; }
   .status { text-transform: capitalize; }
-  .problem { color: var(--warn); overflow-wrap: anywhere; font-size: 12.5px; }
+  .problem { color: var(--warn); overflow-wrap: anywhere; font-size: var(--t-sm); }
 </style>

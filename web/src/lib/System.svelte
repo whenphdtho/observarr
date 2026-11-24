@@ -122,19 +122,19 @@
 
   {#if host}
     <div class="kpis">
-      <Kpi icon="cpu" label="CPU" value={formatPct(host.cpuPercent)} sub={`${host.cpus} core${host.cpus === 1 ? '' : 's'}`}
+      <Kpi label="CPU" value={formatPct(host.cpuPercent)} sub={`${host.cpus} core${host.cpus === 1 ? '' : 's'}`}
         bar={Math.min(100, host.cpuPercent)} barTone={host.cpuPercent >= 90 ? 'warn' : ''} />
-      <Kpi icon="memory-stick" label="Memory" value={formatBytes(host.memUsed)}
+      <Kpi label="Memory" value={formatBytes(host.memUsed)}
         sub={`of ${formatBytes(host.memTotal)} · ${barPercent(host.memUsed, host.memTotal)}%`}
         bar={barPercent(host.memUsed, host.memTotal)} barTone={barPercent(host.memUsed, host.memTotal) >= 90 ? 'warn' : ''} />
       {#if host.swapTotal === 0}
-        <Kpi icon="database" label="Swap" value="—" sub="No swap" />
+        <Kpi label="Swap" value="—" sub="No swap" />
       {:else}
-        <Kpi icon="database" label="Swap" value={formatBytes(host.swapUsed)}
+        <Kpi label="Swap" value={formatBytes(host.swapUsed)}
           sub={`of ${formatBytes(host.swapTotal)} · ${barPercent(host.swapUsed, host.swapTotal)}%`}
           bar={barPercent(host.swapUsed, host.swapTotal)} />
       {/if}
-      <Kpi icon="clock" label="Uptime" value={formatDuration(host.uptimeNs)}
+      <Kpi label="Uptime" value={formatDuration(host.uptimeNs)}
         sub={`load ${host.load.map((l) => l.toFixed(2)).join(' · ')}`} />
     </div>
 
@@ -143,9 +143,9 @@
     {#if disks.length > 0 || net.length > 0}
       <div class="pair" class:single={disks.length === 0 || net.length === 0}>
         {#if disks.length > 0}
-          <section class="card" aria-labelledby="disks-title">
+          <section class="section" aria-labelledby="disks-title">
             <div class="card-head">
-              <h2 id="disks-title"><Icon name="hard-drive" size={16} />Disks</h2>
+              <h2 id="disks-title">Disks</h2>
               <a class="meta" href="#/storage">Details in Storage</a>
             </div>
             <ul class="rows">
@@ -163,9 +163,9 @@
           </section>
         {/if}
         {#if net.length > 0}
-          <section class="card" aria-labelledby="net-title">
+          <section class="section" aria-labelledby="net-title">
             <div class="card-head">
-              <h2 id="net-title"><Icon name="arrow-down-up" size={16} />Interfaces</h2>
+              <h2 id="net-title">Interfaces</h2>
               <a class="meta" href="#/network">Mbit/s · by app</a>
             </div>
             <ul class="rows">
@@ -184,9 +184,9 @@
     {/if}
   {/if}
 
-  <section class="card containers" aria-labelledby="containers-title">
+  <section class="section containers" aria-labelledby="containers-title">
     <div class="card-head">
-      <h2 id="containers-title"><Icon name="box" size={16} />Containers</h2>
+      <h2 id="containers-title">Containers</h2>
       {#if allContainers}
         <span class="meta num">{containers.length === allContainers ? allContainers : `${containers.length} of ${allContainers}`}</span>
       {/if}
@@ -209,7 +209,7 @@
       </div>
       <div class="table-wrap">
         <!-- The explicit roles below are redundant by default, but table/thead/tbody/tr collapse to
-             block or grid in a narrow layout (to stack rows as cards); some screen readers then drop
+             block or grid in a narrow layout (to stack rows as blocks); some screen readers then drop
              the element's table semantics unless a matching role is still set explicitly. -->
         <!-- svelte-ignore a11y_no_redundant_roles -->
         <table class="data" role="table">
@@ -299,9 +299,9 @@
 </div>
 
 <style>
-  .system { display: grid; gap: 16px; }
+  .system { display: grid; gap: 28px; }
 
-  .pair { display: grid; gap: 16px; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; }
+  .pair { display: grid; gap: 28px 32px; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; }
   .pair.single { grid-template-columns: minmax(0, 1fr); }
 
   a.meta { text-decoration: none; }
@@ -309,9 +309,10 @@
   .rows { list-style: none; margin: 0; padding: 0; }
   .rows li {
     display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border);
-    font-size: 13px; min-width: 0;
+    font-size: var(--t-base); min-width: 0;
   }
-  .rows li:last-child { border-bottom: 0; }
+  .rows li:first-child { padding-top: 0; }
+  .rows li:last-child { border-bottom: 0; padding-bottom: 0; }
   .rows .name { font-weight: 550; }
   .rate { white-space: nowrap; color: var(--text2); }
   .rows li.disk-row { align-items: center; }
@@ -332,11 +333,11 @@
     .pair { grid-template-columns: minmax(0, 1fr); }
   }
 
-  /* Narrow: the shared card layout of .data, arranged for a container: a name line and a state
+  /* Narrow: the shared block layout of .data, arranged for a container: a name line and a state
      line; CPU %, Restarts and Up since side by side; Memory, Network and Block I/O each on a line
      of their own, as their figures are too long to share one. */
   @container (max-width: 759px) {
-    .mobile-sort { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 10px; }
+    .mobile-sort { display: flex; align-items: center; gap: 8px; font-size: var(--t-base); margin-bottom: 10px; }
     .mobile-sort label { white-space: nowrap; flex-shrink: 0; color: var(--muted); }
     .mobile-sort select { flex: 1; min-width: 0; }
     tbody tr {

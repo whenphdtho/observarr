@@ -81,12 +81,6 @@
     }
   }
 
-  function settingIcon(state) {
-    if (state === 'warn') return 'triangle-alert';
-    if (state === 'info') return 'info';
-    return 'circle-check';
-  }
-
   function share(count, total) {
     return total > 0 ? Math.max(2, Math.round((count / total) * 100)) : 0;
   }
@@ -110,27 +104,27 @@
   {/if}
 
   <div class="kpis">
-    <Kpi icon="user-x" label="Failed sign-ins" value={failed ? formatCount(failed.attempts) : '—'}
+    <Kpi label="Failed sign-ins" value={failed ? formatCount(failed.attempts) : '—'}
       tone={failed?.attempts ? 'warn' : ''}
       sub={!failed ? 'Loading…' : failed.addresses ? `${failed.addresses} address${failed.addresses === 1 ? '' : 'es'} · 24 h` : 'None in 24 h'} />
-    <Kpi icon="lock" label="Locked out" value={view ? view.lockouts.length : '—'}
+    <Kpi label="Locked out" value={view ? view.lockouts.length : '—'}
       unit={view?.lockouts.length === 1 ? 'address' : 'addresses'}
       tone={view?.lockouts.length ? 'warn' : ''}
       sub={!view ? 'Loading…' : view.lockouts.length ? `longest ${formatLeft(view.lockouts[0].seconds)} left` : 'No lockouts'} />
-    <Kpi icon="users" label="Active sessions" value={view ? view.sessionCount : '—'}
+    <Kpi label="Active sessions" value={view ? view.sessionCount : '—'}
       sub={!view ? 'Loading…' : others ? `${others} besides yours` : 'Only yours'} />
     {#if blockers.length}
-      <Kpi icon="ban" label="Active bans" value={bans.any ? formatCount(bans.bans, bans.capped) : '—'}
+      <Kpi label="Active bans" value={bans.any ? formatCount(bans.bans, bans.capped) : '—'}
         sub={bans.any ? `by ${blockers.length === 1 ? blockers[0].name : `${blockers.length} services`}` : 'Waiting for the first check…'} />
     {:else}
-      <Kpi icon="log-in" label="Last sign-in" value={lastSignIn ? lastSignIn.user : '—'}
+      <Kpi label="Last sign-in" value={lastSignIn ? lastSignIn.user : '—'}
         sub={lastSignIn ? `${formatAge(lastSignIn.at, $now)}${lastSignIn.address ? ` · ${lastSignIn.address}` : ''}` : 'None yet'} />
     {/if}
   </div>
 
-  <section class="card" aria-labelledby="attempts-title">
+  <section class="section" aria-labelledby="attempts-title">
     <div class="card-head">
-      <h2 id="attempts-title"><Icon name="user-x" size={16} />Sign-in attempts</h2>
+      <h2 id="attempts-title">Sign-in attempts</h2>
       <span class="meta">failed · last 24 h</span>
     </div>
     {#if !failed}
@@ -160,7 +154,7 @@
               {@const users = [...(g.setupToken ? ['setup token'] : []), ...g.users].join(', ') + (g.moreUsers ? ` +${g.moreUsers}` : '')}
               <!-- svelte-ignore a11y_no_redundant_roles -->
               <tr role="row">
-                <td role="cell" data-label="Address" class="lead" title={g.address}><span class="ellipsis mono">{g.address}</span></td>
+                <td role="cell" data-label="Address" class="lead" title={g.address}><span class="ellipsis">{g.address}</span></td>
                 <td role="cell" data-label="Attempts" class="r">{formatCount(g.attempts)}</td>
                 <td role="cell" data-label="Last attempt" title={formatTime(g.last)}>
                   <span class="ellipsis">{formatAge(g.last, $now)}</span>
@@ -168,11 +162,11 @@
                 <td role="cell" data-label="User names" title={users}><span class="ellipsis">{users}</span></td>
                 <td role="cell" data-label="Status">
                   {#if lock}
-                    <span class="chip warn dotted" title={`Locked out for ${formatLeft(lock.seconds)} more`}>
-                      Locked · {formatLeft(lock.seconds)}
+                    <span class="state-word warn-text" title={`Locked out for ${formatLeft(lock.seconds)} more`}>
+                      <span class="dot warn" aria-hidden="true"></span>Locked · {formatLeft(lock.seconds)}
                     </span>
                   {:else}
-                    <span class="chip">Can retry</span>
+                    <span class="muted">Can retry</span>
                   {/if}
                 </td>
               </tr>
@@ -211,9 +205,9 @@
     {#each blockers as svc (svc.id)}
       {@const reading = svc.readings?.security}
       {@const data = reading?.data}
-      <section class="card" aria-labelledby={`blocked-${svc.id}`}>
+      <section class="section" aria-labelledby={`blocked-${svc.id}`}>
         <div class="card-head">
-          <h2 id={`blocked-${svc.id}`}><Icon name="shield" size={16} /><span class="ellipsis" title={`Blocked by ${svc.name}`}>Blocked by {svc.name}</span></h2>
+          <h2 id={`blocked-${svc.id}`}><span class="ellipsis" title={`Blocked by ${svc.name}`}>Blocked by {svc.name}</span></h2>
           {#if reading}<span class="meta" title={formatTime(reading.at)}>{formatAge(reading.at, $now)}</span>{/if}
         </div>
         {#if !reading}
@@ -236,11 +230,11 @@
             </div>
             <div class="fig types">
               <span class="muted">By type</span>
-              <span class="chips">
+              <span class="facts types-list">
                 {#each data.byType as t (t.name)}
-                  <span class="chip num" title={`${t.name}: ${formatCount(t.count)}`}>{t.name} {formatCount(t.count)}</span>
+                  <span title={`${t.name}: ${formatCount(t.count)}`}>{t.name} <b class="num">{formatCount(t.count)}</b></span>
                 {:else}
-                  <span class="muted">—</span>
+                  <span>—</span>
                 {/each}
               </span>
             </div>
@@ -276,7 +270,7 @@
                     <li title={`${sc.name}: ${formatCount(sc.count)}`}>
                       <span class="ellipsis name">{sc.name}</span>
                       <span class="num">{formatCount(sc.count)}</span>
-                      <span class="bar warn" aria-hidden="true"><i style:width={`${share(sc.count, data.local)}%`}></i></span>
+                      <span class="bar" aria-hidden="true"><i style:width={`${share(sc.count, data.local)}%`}></i></span>
                     </li>
                   {/each}
                 </ul>
@@ -310,9 +304,9 @@
                     <!-- svelte-ignore a11y_no_redundant_roles -->
                     <tr role="row">
                       <td role="cell" data-label="Address" class="lead" title={`${d.value} (${d.scope})`}>
-                        <span class="ellipsis mono">{d.value}</span>
+                        <span class="ellipsis">{d.value}</span>
                       </td>
-                      <td role="cell" data-label="Type"><span class="chip" class:fail={d.type === 'ban'}>{d.type}</span></td>
+                      <td role="cell" data-label="Type">{d.type}</td>
                       <td role="cell" data-label="Scenario" title={d.scenario}><span class="ellipsis">{d.scenario || '—'}</span></td>
                       <td role="cell" data-label="Origin" title={d.origin}><span class="ellipsis">{d.origin}</span></td>
                       <td role="cell" data-label="Ends" title={formatTime(d.until)}>
@@ -336,9 +330,9 @@
   {/if}
 
   <div class="pair">
-    <section class="card" aria-labelledby="sessions-title">
+    <section class="section" aria-labelledby="sessions-title">
       <div class="card-head">
-        <h2 id="sessions-title"><Icon name="users" size={16} />Active sessions</h2>
+        <h2 id="sessions-title">Active sessions</h2>
         {#if view}<span class="meta num">{view.sessionCount}</span>{/if}
       </div>
       {#if !view}
@@ -349,7 +343,7 @@
             <li>
               <span class="who">
                 <span class="ellipsis name" title={s.user}>{s.user}</span>
-                {#if s.current}<span class="chip ok">This browser</span>{/if}
+                {#if s.current}<span class="tag">this browser</span>{/if}
               </span>
               <span class="muted when" title={`Signed in ${formatTime(s.created)}, ends ${formatTime(s.expires)}`}>
                 signed in {formatAge(s.created, $now)} · ends {formatUntil(s.expires, $now)}
@@ -369,9 +363,9 @@
       {/if}
     </section>
 
-    <section class="card" aria-labelledby="signins-title">
+    <section class="section" aria-labelledby="signins-title">
       <div class="card-head">
-        <h2 id="signins-title"><Icon name="log-in" size={16} />Recent sign-ins</h2>
+        <h2 id="signins-title">Recent sign-ins</h2>
       </div>
       {#if !view}
         <p class="waiting">Loading…</p>
@@ -383,7 +377,7 @@
             <li>
               <span class="who">
                 <span class="ellipsis name" title={s.user}>{s.user}</span>
-                {#if s.via !== 'password'}<span class="chip">{s.via === 'proxy' ? 'via proxy' : 'setup'}</span>{/if}
+                {#if s.via !== 'password'}<span class="tag">{s.via === 'proxy' ? 'via proxy' : 'setup'}</span>{/if}
               </span>
               <span class="muted when" title={formatTime(s.at)}>
                 {formatAge(s.at, $now)}{s.address ? ` · ${s.address}` : ''}
@@ -395,11 +389,11 @@
     </section>
   </div>
 
-  <section class="card" aria-labelledby="access-title">
+  <section class="section" aria-labelledby="access-title">
     <div class="card-head">
-      <h2 id="access-title"><Icon name="shield-check" size={16} />Access settings</h2>
+      <h2 id="access-title">Access settings</h2>
       {#if view}
-        <span class="chip" class:ok={warnings === 0} class:warn={warnings > 0}>
+        <span class="meta" class:warn-text={warnings > 0}>
           {warnings === 0 ? 'No warnings' : `${warnings} warning${warnings === 1 ? '' : 's'}`}
         </span>
       {/if}
@@ -410,7 +404,7 @@
       <ul class="checks">
         {#each view.settings as s (s.id)}
           <li class={s.state}>
-            <span class="state" aria-hidden="true"><Icon name={settingIcon(s.state)} size={16} /></span>
+            <span class="dot {s.state === 'warn' ? 'warn' : s.state === 'info' ? '' : 'ok'}" aria-hidden="true"></span>
             <span class="visually-hidden">{s.state === 'warn' ? 'Warning' : s.state === 'info' ? 'Note' : 'OK'}: </span>
             <span class="text">
               <span class="line">
@@ -439,26 +433,23 @@
 </dialog>
 
 <style>
-  .security { display: grid; gap: 16px; }
-  .note { font-size: 12.5px; margin-top: 10px; }
-  .mono { font-variant-numeric: tabular-nums; }
-  h3 { font-size: 12.5px; font-weight: 600; color: var(--text2); margin: 16px 0 8px; }
+  .security { display: grid; gap: 28px; }
+  .note { font-size: var(--t-sm); margin-top: 10px; }
+  h3 { font-size: var(--t-sm); font-weight: 600; color: var(--text2); margin: 20px 0 8px; }
 
-  .figures { display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .fig {
-    display: grid; gap: 2px; align-content: space-between; min-width: 0; padding: 10px 12px; border-radius: var(--r-md); background: var(--surface2);
-    font-size: 12.5px;
-  }
-  .fig b { font-size: 18px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .chips { display: flex; gap: 4px; flex-wrap: wrap; min-width: 0; padding-top: 3px; }
+  /* The figures of a blocker: label over value, side by side, no boxes. */
+  .figures { display: grid; gap: 12px 24px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .fig { display: grid; gap: 2px; align-content: start; min-width: 0; font-size: var(--t-sm); }
+  .fig b { font-size: var(--t-lg); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .types-list { font-size: var(--t-base); color: var(--text2); padding-top: 3px; }
+  .types-list b { font-size: inherit; font-weight: 600; color: var(--text); }
 
-  .pair { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
-  .card .pair h3 { margin-top: 18px; }
-  .bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; }
+  .pair { display: grid; gap: 28px 32px; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .section .pair { gap: 0 32px; }
+  .bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
   .bars li {
-    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; font-size: 13px; min-width: 0;
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; font-size: var(--t-base); min-width: 0;
   }
-  .bars .name { font-weight: 500; }
   .bars .num { color: var(--text2); white-space: nowrap; }
   .bars .bar { grid-column: 1 / -1; }
 
@@ -466,30 +457,26 @@
 
   .list { list-style: none; margin: 0; padding: 0; }
   .list li {
-    display: grid; gap: 2px; padding: 9px 0; border-bottom: 1px solid var(--border); min-width: 0; font-size: 13px;
+    display: grid; gap: 1px; padding: 8px 0; border-bottom: 1px solid var(--border); min-width: 0; font-size: var(--t-base);
   }
+  .list li:first-child { padding-top: 0; }
   .list li:last-child { border-bottom: 0; }
-  .who { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .who { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
   .who .name { font-weight: 550; flex: 0 1 auto; }
-  .who .chip { flex: none; }
-  .when { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .action { display: grid; gap: 8px; justify-items: start; margin-top: 14px; font-size: 13px; }
+  .tag { flex: none; font-size: var(--t-sm); color: var(--muted); }
+  .when { font-size: var(--t-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .action { display: grid; gap: 8px; justify-items: start; margin-top: 14px; font-size: var(--t-base); }
 
-  .checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px 24px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .checks li { display: flex; gap: 11px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--border); min-width: 0; }
+  .checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 0 32px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .checks li { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-bottom: 1px solid var(--border); min-width: 0; }
   .checks li:last-child { border-bottom: 0; }
-  .checks .state {
-    width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; flex: none;
-    background: var(--ok-soft); color: var(--ok);
-  }
-  .checks .info .state { background: var(--surface2); color: var(--text2); }
-  .checks .warn .state { background: var(--warn-soft); color: var(--warn); }
-  .checks .text { display: grid; gap: 2px; min-width: 0; flex: 1; }
+  .checks .dot { margin-top: 7px; }
+  .checks .text { display: grid; gap: 1px; min-width: 0; flex: 1; }
   .checks .line { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-  .checks .label { font-weight: 550; font-size: 13.5px; white-space: nowrap; }
-  .checks .value { margin-left: auto; font-size: 12.5px; color: var(--text2); }
+  .checks .label { font-weight: 550; font-size: var(--t-base); white-space: nowrap; }
+  .checks .value { margin-left: auto; font-size: var(--t-sm); color: var(--text2); }
   .checks .warn .value { color: var(--warn); }
-  .checks .detail { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+  .checks .detail { font-size: var(--t-sm); color: var(--muted); overflow-wrap: anywhere; }
 
   dialog p { margin: 8px 0 14px; }
 
@@ -497,7 +484,7 @@
     .pair, .checks { grid-template-columns: minmax(0, 1fr); }
     .figures { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
-  /* Narrow: each row is a small card. The address leads, with its state (lockout, decision type) beside it. */
+  /* Narrow: each row is a block of its own. The address leads, with its state (lockout, decision type) beside it. */
   @container (max-width: 759px) {
     .attempts tbody tr {
       grid-template-columns: minmax(0, 4fr) minmax(0, 5fr);

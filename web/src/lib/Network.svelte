@@ -93,14 +93,6 @@
     return `↓ ${formatMbit(s.rx)} · ↑ ${formatMbit(s.tx)}`;
   }
 
-  // The gauge: an arc of 240°, open at the bottom; value is 0–1.
-  function arc(value) {
-    const r = 70;
-    const a0 = (150 * Math.PI) / 180;
-    const a1 = a0 + ((240 * Math.PI) / 180) * Math.max(0.0001, value);
-    const p = (a) => `${(90 + r * Math.cos(a)).toFixed(2)},${(90 + r * Math.sin(a)).toFixed(2)}`;
-    return `M${p(a0)}A${r},${r} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${p(a1)}`;
-  }
 </script>
 
 <div class="network">
@@ -112,21 +104,21 @@
     </div>
   {:else}
     <div class="kpis">
-      <Kpi icon="arrow-down" label="Download" value={formatMbit(nowRx)} unit="Mbit/s"
+      <Kpi label="Download" value={formatMbit(nowRx)} unit="Mbit/s"
         sub={`peak ${formatMbit(Math.max(summary?.peakRx ?? 0, nowRx))} Mbit/s today`} />
-      <Kpi icon="arrow-up" label="Upload" value={formatMbit(nowTx)} unit="Mbit/s"
+      <Kpi label="Upload" value={formatMbit(nowTx)} unit="Mbit/s"
         sub={`peak ${formatMbit(Math.max(summary?.peakTx ?? 0, nowTx))} Mbit/s today`} />
-      <Kpi icon="gauge" label="Today" value={totalParts(todayTotal)[0]} unit={totalParts(todayTotal)[1]}
+      <Kpi label="Today" value={totalParts(todayTotal)[0]} unit={totalParts(todayTotal)[1]}
         sub={budget?.period === 'day' ? `limit ${formatTotal(budget.limitBytes)}` :
           `↓ ${formatTotal(today.rx)} · ↑ ${formatTotal(today.tx)}`}
         tone={usedTone} />
-      <Kpi icon="activity" label="Top now" value={top ? formatMbit(top.rx + top.tx) : '—'} unit={top ? 'Mbit/s' : ''}
+      <Kpi label="Top now" value={top ? formatMbit(top.rx + top.tx) : '—'} unit={top ? 'Mbit/s' : ''}
         sub={top ? top.label : 'No app traffic now'} />
     </div>
 
-    <section class="card" aria-labelledby="flow-title">
+    <section class="section" aria-labelledby="flow-title">
       <div class="card-head">
-        <h2 id="flow-title"><Icon name="arrow-down-up" size={16} />Where the traffic goes</h2>
+        <h2 id="flow-title">Where the traffic goes</h2>
         <div class="seg" role="group" aria-label="Time range">
           <button type="button" aria-pressed={range === '5m'} onclick={() => { range = '5m'; }}>Live · 5 min</button>
           <button type="button" aria-pressed={range === '24h'} onclick={() => { range = '24h'; }}>24 hours</button>
@@ -166,9 +158,9 @@
     </section>
 
     <div class="pair">
-      <section class="card" aria-labelledby="apps-title">
+      <section class="section" aria-labelledby="apps-title">
         <div class="card-head">
-          <h2 id="apps-title"><Icon name="box" size={16} />By app</h2>
+          <h2 id="apps-title">By app</h2>
           <span class="meta">now · since midnight</span>
         </div>
         {#if rows.length === 0}
@@ -209,21 +201,19 @@
         {/if}
       </section>
 
-      <section class="card" aria-labelledby="budget-title">
+      <section class="section" aria-labelledby="budget-title">
         <div class="card-head">
-          <h2 id="budget-title"><Icon name="gauge" size={16} />{budget ? `${period === 'daily' ? 'Daily' : 'Monthly'} budget` : 'Today'}</h2>
+          <h2 id="budget-title">{budget ? `${period === 'daily' ? 'Daily' : 'Monthly'} budget` : 'Today'}</h2>
           {#if budget}<span class="meta">{budget.period === 'day' ? 'since midnight' : 'this month'}</span>{/if}
         </div>
         {#if budget}
-          <div class="gauge {usedTone}" role="img"
+          <p class="pct num {usedTone ? `${usedTone}-text` : ''}">
+            {Math.round((budget.usedBytes / budget.limitBytes) * 100)}%<small>of {period} budget</small>
+          </p>
+          <span class="bar budget-bar {usedTone}" role="img"
             aria-label={`${Math.round(used * 100)}% of the ${period} budget used: ${formatTotal(budget.usedBytes)} of ${formatTotal(budget.limitBytes)}`}>
-            <svg viewBox="0 0 180 150" aria-hidden="true">
-              <path class="track" d={arc(1)} />
-              <path class="fill" d={arc(used)} />
-            </svg>
-            <span class="pct num">{Math.round((budget.usedBytes / budget.limitBytes) * 100)}%</span>
-            <span class="muted">of {period} budget</span>
-          </div>
+            <i style:width={`${used * 100}%`}></i>
+          </span>
           <p class="used num">{formatPart(budget.usedBytes, budget.limitBytes, ' of ')} used</p>
         {:else}
           <dl class="totals">
@@ -239,44 +229,39 @@
 </div>
 
 <style>
-  .network { display: grid; gap: 16px; }
+  .network { display: grid; gap: 28px; }
   .card-head { flex-wrap: wrap; }
   .pad { padding: 24px 0; }
 
   .flow { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 24px; align-items: start; }
   .legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; min-width: 0; }
-  .legend li { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; min-width: 0; font-size: 13px; }
-  .legend .legend-head { font-size: 12px; color: var(--muted); justify-content: space-between; padding-top: 0; }
-  .legend .sw { margin-top: 4px; }
+  .legend li { display: flex; align-items: flex-start; gap: 10px; padding: 5px 0; min-width: 0; font-size: var(--t-base); }
+  .legend .legend-head { font-size: var(--t-sm); color: var(--muted); justify-content: space-between; padding-top: 0; }
+  .legend .sw { margin-top: 6px; }
   .who { display: grid; min-width: 0; flex: 1; line-height: 1.35; }
   .who .name { font-weight: 550; }
-  .who .muted, .fig .muted { font-size: 12px; }
+  .who .muted, .fig .muted { font-size: var(--t-sm); }
   .fig { display: grid; justify-items: end; line-height: 1.35; white-space: nowrap; flex: none; }
-  .note { margin-top: 14px; font-size: 12.5px; color: var(--muted); }
+  .note { margin-top: 12px; font-size: var(--t-sm); color: var(--muted); max-width: 90ch; }
 
-  .pair { display: grid; gap: 16px; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; }
+  .pair { display: grid; gap: 28px 32px; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; }
   .app { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 550; }
-  .share { display: block; height: 3px; margin-top: 6px; border-radius: 99px; background: var(--surface3); overflow: hidden; max-width: 220px; }
-  .share i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+  .share { display: block; height: 2px; margin-top: 6px; border-radius: 1px; background: var(--surface3); overflow: hidden; max-width: 220px; }
+  .share i { display: block; height: 100%; background: var(--bar); }
 
-  .gauge { position: relative; display: grid; justify-items: center; max-width: 200px; margin: 0 auto; }
-  .gauge svg { width: 100%; height: auto; }
-  .gauge path { fill: none; stroke-width: 12; stroke-linecap: round; }
-  .track { stroke: var(--surface3); }
-  .fill { stroke: var(--accent); }
-  .gauge.warn .fill { stroke: var(--warn); }
-  .gauge.fail .fill { stroke: var(--fail); }
-  .gauge .pct { position: absolute; top: 38%; font-size: 28px; font-weight: 600; letter-spacing: -0.02em; }
-  .gauge .muted { position: absolute; top: 62%; font-size: 12.5px; }
-  .used { text-align: center; font-size: 13px; color: var(--text2); margin-top: -6px; }
+  .pct { font-size: var(--t-2xl); font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; white-space: nowrap; }
+  .pct small { font-size: var(--t-base); font-weight: 450; color: var(--muted); margin-left: 8px; letter-spacing: 0; }
+  .budget-bar { display: block; margin: 10px 0 8px; }
+  .used { font-size: var(--t-base); color: var(--text2); }
 
   .totals { margin: 0; display: grid; }
-  .totals div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .totals div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: var(--t-base); }
+  .totals div:first-child { padding-top: 0; }
   .totals dt { color: var(--text2); }
   .totals dd { margin: 0; font-weight: 550; white-space: nowrap; }
   .totals .sum { border-bottom: 0; }
-  .totals .sum dd { font-size: 15px; font-weight: 600; }
-  .hint { margin-top: 10px; font-size: 12.5px; overflow-wrap: anywhere; }
+  .totals .sum dd { font-weight: 600; }
+  .hint { margin-top: 10px; font-size: var(--t-sm); overflow-wrap: anywhere; }
 
   @container (max-width: 760px) {
     .flow { grid-template-columns: minmax(0, 1fr); }

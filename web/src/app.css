@@ -7,8 +7,8 @@
 
 :root {
   color-scheme: dark;
-  /* Neutrals: one violet-tinted family. --rail is the side columns, --surface the cards,
-     --surface2/3 raised controls and tracks. */
+  /* Neutrals: one violet-tinted family. --rail is the side columns, --surface the few boxed
+     units (app cards, the figure strip, dialogs), --surface2/3 raised controls and tracks. */
   --bg: #100f18;
   --rail: #13121c;
   --surface: #181723;
@@ -21,28 +21,36 @@
   --text: #ecebf3;
   --text2: #aeabbf;
   --muted: #8b889d;
-  --dim: #5f5c70; /* decorative only (icons, idle dots), never text */
-  /* One accent: selection, primary action, progress. */
+  --dim: #5f5c70; /* decorative only (icons, idle dots, separators), never text */
+  /* One accent: the primary action, the current view, focus and selection. */
   --accent: #ef7b55;
   --accent-hi: #f48f6d;
   --accent-ink: #1d0f0a;
-  --accent-soft: rgba(239, 123, 85, 0.13);
   --accent-text: #f39a7c;
-  /* Data series and state. */
+  /* Data series and state. Each state colour keeps at least 4.5:1 on --bg and --surface. */
   --down: #45c4b0;
   --up: #9c8cf0;
   --ok: #4fc48b;
   --warn: #e3a650;
   --fail: #ec6c7d;
-  --ok-soft: rgba(79, 196, 139, 0.12);
-  --warn-soft: rgba(227, 166, 80, 0.13);
-  --fail-soft: rgba(236, 108, 125, 0.13);
+  /* Progress and share bars: neutral, so colour is left for warnings. */
+  --bar: #8b889d;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --r-lg: 16px;
-  --r-md: 12px;
-  --r-sm: 10px;
+  /* Two radii: boxes (app cards, dialogs, the figure strip) and controls. */
+  --r-lg: 8px;
+  --r: 6px;
+  /* Type scale: axis and dock labels, meta, body, emphasis, section, page title, lead figures. */
+  --t-xs: 11px;
+  --t-sm: 12px;
+  --t-base: 13px;
+  --t-md: 14px;
+  --t-lg: 16px;
+  --t-xl: 20px;
+  --t-2xl: 28px;
   font: 14px/1.5 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  font-feature-settings: 'cv11', 'ss01';
+  /* Tabular figures everywhere: live values must not jitter as they change. */
+  font-feature-settings: 'cv11', 'ss01', 'tnum';
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   scrollbar-width: thin;
@@ -55,38 +63,37 @@ h1, h2, h3, p { margin: 0; }
 
 /* Buttons: primary (accent) by default, .quiet for everything secondary, .ibtn for icon-only. */
 button {
-  font: inherit; font-size: 13px; font-weight: 550; display: inline-flex; align-items: center; justify-content: center;
-  gap: 7px; padding: 7px 13px; border-radius: var(--r-sm); cursor: pointer; white-space: nowrap;
+  font: inherit; font-size: var(--t-base); font-weight: 550; display: inline-flex; align-items: center; justify-content: center;
+  gap: 7px; padding: 6px 12px; border-radius: var(--r); cursor: pointer; white-space: nowrap;
   color: var(--accent-ink); background: var(--accent); border: 1px solid var(--accent);
   transition: background 140ms var(--ease), border-color 140ms var(--ease), color 140ms var(--ease);
 }
 button:hover:not(:disabled) { background: var(--accent-hi); border-color: var(--accent-hi); }
 button:disabled { opacity: 0.55; cursor: default; }
-button.quiet { color: var(--text); background: var(--surface2); border-color: var(--border2); }
-button.quiet:hover:not(:disabled) { background: var(--surface3); border-color: var(--border2); }
+button.quiet { color: var(--text); background: transparent; border-color: var(--border2); }
+button.quiet:hover:not(:disabled) { background: var(--surface2); border-color: var(--border2); }
 button.ibtn {
-  width: 34px; height: 34px; padding: 0; flex: none;
+  width: 32px; height: 32px; padding: 0; flex: none;
   color: var(--text2); background: transparent; border-color: var(--border);
 }
 button.ibtn:hover:not(:disabled) { color: var(--text); background: var(--surface2); border-color: var(--border); }
-button.ibtn.danger:hover:not(:disabled) { color: var(--fail); }
 
 input, select, textarea {
-  font: inherit; font-size: 13.5px; color: var(--text); background: var(--bg); border: 1px solid var(--field-border);
-  border-radius: 8px; padding: 8px 10px; width: 100%;
+  font: inherit; font-size: var(--t-base); color: var(--text); background: var(--bg); border: 1px solid var(--field-border);
+  border-radius: var(--r); padding: 7px 10px; width: 100%;
 }
 input[type='checkbox'] { width: 16px; height: 16px; accent-color: var(--accent); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-a { color: var(--accent-text); }
+a { color: var(--accent-text); text-underline-offset: 3px; }
 
 dialog {
   background: var(--rail); color: var(--text); border: 1px solid var(--border2); border-radius: var(--r-lg);
-  padding: 22px; width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto;
-  box-shadow: 0 24px 48px -24px rgba(0, 0, 0, 0.7);
+  padding: 20px; width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto;
+  box-shadow: 0 16px 40px -16px rgba(0, 0, 0, 0.7);
 }
 dialog::backdrop { background: rgba(8, 7, 14, 0.6); }
-dialog h2 { font-size: 16px; font-weight: 620; }
-dialog label { display: grid; gap: 6px; font-size: 13px; color: var(--text2); }
+dialog h2 { font-size: var(--t-lg); font-weight: 600; }
+dialog label { display: grid; gap: 6px; font-size: var(--t-base); color: var(--text2); }
 dialog .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 
 /* Shared pieces used by several views. */
@@ -96,38 +103,46 @@ dialog .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap:
 .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 /* Error and warning text is never truncated: a long unbreakable token wraps inside its box. */
 .error { color: var(--fail); overflow-wrap: anywhere; }
+/* Colour on a word only where it needs attention. */
+.warn-text { color: var(--warn); }
+.fail-text { color: var(--fail); }
 .visually-hidden {
   position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
 }
+/* A box for an object that is a unit of its own: an app, the sign-in form. */
 .card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
-  padding: 18px 20px; min-width: 0;
+  padding: 16px 18px; min-width: 0;
 }
-.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; min-width: 0; }
-.card-head h2 { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 9px; min-width: 0; }
-.card-head h2 .icon { color: var(--muted); }
-/* Right-aligned note in a card head: a count, a unit, a time span. */
-.card-head .meta { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* A section of a view: set apart by a hairline above and the space around it, not by a box. */
+.section { min-width: 0; padding-top: 14px; border-top: 1px solid var(--border); }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; min-width: 0; }
+.card-head h2 { font-size: var(--t-md); font-weight: 600; display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* Right-aligned note in a section head: a count, a unit, a time span. */
+.card-head .meta { font-size: var(--t-sm); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* A row of key figures (Kpi.svelte): four across, two on narrower layouts, one on the smallest. */
-.kpis { display: grid; gap: 16px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+/* A row of key figures (Kpi.svelte): one strip split by hairlines, four across, two on narrower
+   layouts, one on the smallest. The 1px gap lets the strip's border colour show as the dividers. */
+.kpis {
+  display: grid; gap: 1px; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: hidden;
+  background: var(--border); border: 1px solid var(--border); border-radius: var(--r-lg);
+}
 @container (max-width: 820px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 720px) { .kpis { gap: 10px; } }
 @media (max-width: 359px) { .kpis { grid-template-columns: minmax(0, 1fr); } }
 
 /* Segmented control: a group of aria-pressed buttons, one of them on. */
-.seg {
-  display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--r-sm); flex: none;
-  background: var(--surface); border: 1px solid var(--border);
+.seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--r); flex: none; border: 1px solid var(--border); }
+.seg button {
+  padding: 3px 10px; border-radius: 4px; font-weight: 500; font-size: var(--t-sm); color: var(--muted);
+  background: transparent; border: 0;
 }
-.seg button { padding: 4px 12px; border-radius: 7px; font-weight: 500; color: var(--text2); background: transparent; border: 0; }
 .seg button:hover:not(:disabled) { background: var(--surface2); border: 0; color: var(--text); }
 .seg button[aria-pressed='true'] { background: var(--surface3); color: var(--text); }
 
 /* Something to set up or know: the notices of the host and container sources. */
 .banner {
-  display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: var(--r-lg);
-  background: var(--warn-soft); border: 1px solid rgba(227, 166, 80, 0.28); color: var(--text2); font-size: 13px;
+  display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: var(--r-lg);
+  border: 1px solid rgba(227, 166, 80, 0.35); color: var(--text2); font-size: var(--t-base);
 }
 .banner > .icon { color: var(--warn); margin-top: 1px; }
 .banner-text { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
@@ -137,17 +152,17 @@ dialog .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap:
 }
 
 /* No figures yet, or none to show. */
-.waiting { color: var(--muted); font-size: 13px; }
+.waiting { color: var(--muted); font-size: var(--t-base); }
 
 /* Data tables: a quiet header, numbers right-aligned in tabular figures. On narrow layouts each
-   row becomes a small card whose cells name their column (data-label). */
+   row becomes a block whose cells name their column (data-label), split from the next by a hairline. */
 .table-wrap { margin: 0 -8px; overflow-x: auto; }
-table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
-.data th, .data td { padding: 9px 8px; text-align: left; border-bottom: 1px solid var(--border); min-width: 0; }
+table.data { width: 100%; border-collapse: collapse; font-size: var(--t-base); }
+.data th, .data td { padding: 8px; text-align: left; border-bottom: 1px solid var(--border); min-width: 0; }
 .data tbody tr:last-child td { border-bottom: 0; }
-.data th { white-space: nowrap; color: var(--muted); font-weight: 500; font-size: 12px; padding-top: 4px; }
+.data th { white-space: nowrap; color: var(--muted); font-weight: 500; font-size: var(--t-sm); padding-top: 2px; }
 .data .r { text-align: right; }
-.data td.r { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.data td.r { white-space: nowrap; }
 .data th button {
   padding: 0; gap: 4px; border: 0; border-radius: 4px; background: transparent; color: inherit;
   font: inherit; font-weight: inherit;
@@ -158,72 +173,65 @@ table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
   .data, .data tr, .data th, .data td { display: block; width: 100%; }
   /* display: none, not just hidden: header buttons must not stay reachable by keyboard. */
   .data thead { display: none; }
-  .data tbody { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr)); }
+  .data tbody { display: grid; }
   .data tbody tr {
-    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; padding: 10px 12px;
-    border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface2); min-width: 0;
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; padding: 10px 0;
+    border-bottom: 1px solid var(--border); min-width: 0;
   }
+  .data tbody tr:last-child { border-bottom: 0; }
   .data td { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 2px 0; border: 0; }
-  .data td::before { content: attr(data-label); color: var(--muted); font-size: 12px; flex-shrink: 0; }
+  .data td::before { content: attr(data-label); color: var(--muted); font-size: var(--t-sm); flex-shrink: 0; }
   .data td.lead { display: grid; justify-content: stretch; grid-column: 1 / -1; font-weight: 600; }
   .data td.r { text-align: left; }
   .data td.lead::before { display: none; }
 }
 
 /* Colour key of a chart series. */
-.sw { width: 10px; height: 10px; border-radius: 3px; flex: none; display: inline-block; }
+.sw { width: 8px; height: 8px; border-radius: 2px; flex: none; display: inline-block; }
 
 /* The brand mark; its size is set where it is used. */
-.mark {
-  display: grid; place-items: center; flex: none;
-  background: linear-gradient(135deg, #f8a171, var(--accent) 45%, #e65a6e);
-}
+.mark { display: grid; place-items: center; flex: none; background: var(--accent); }
 .mark svg { fill: none; stroke: var(--accent-ink); stroke-width: 2; stroke-linejoin: round; }
 .mark circle { fill: var(--accent-ink); stroke: none; }
 
-/* Icon tile: a rounded square holding an icon, optionally with a status dot in its corner. */
+/* Icon tile: a square holding an app's icon, optionally with a status dot in its corner. */
 .tile-icon {
-  width: 38px; height: 38px; border-radius: var(--r-sm); display: grid; place-items: center; flex: none;
+  width: 36px; height: 36px; border-radius: var(--r); display: grid; place-items: center; flex: none;
   position: relative; background: var(--surface2); color: var(--text2);
 }
-.tile-icon.ok { background: var(--ok-soft); color: var(--ok); }
-.tile-icon.warn { background: var(--warn-soft); color: var(--warn); }
-.tile-icon.fail { background: var(--fail-soft); color: var(--fail); }
 .status-dot {
-  position: absolute; right: -3px; bottom: -3px; width: 11px; height: 11px; border-radius: 50%;
-  border: 2.5px solid var(--rail); background: var(--dim);
+  position: absolute; right: -3px; bottom: -3px; width: 10px; height: 10px; border-radius: 50%;
+  border: 2px solid var(--rail); background: var(--dim);
 }
+/* A status dot before plain text: the word says the state, the dot repeats it at a glance. */
 .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--dim); }
 .status-dot.ok, .dot.ok { background: var(--ok); }
 .status-dot.warn, .dot.warn { background: var(--warn); }
 .status-dot.fail, .dot.fail { background: var(--fail); }
+.state-word { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 
 /* Thin progress bar. What it shows is always also given as text next to it. */
-.bar { height: 4px; border-radius: 99px; background: var(--surface3); overflow: hidden; }
-.bar > i { display: block; height: 100%; border-radius: 99px; background: var(--accent); transition: width 200ms var(--ease); }
+.bar { height: 4px; border-radius: 2px; background: var(--surface3); overflow: hidden; }
+.bar > i { display: block; height: 100%; border-radius: 2px; background: var(--bar); transition: width 200ms var(--ease); }
 .bar.warn > i { background: var(--warn); }
 .bar.fail > i { background: var(--fail); }
 
-/* Chips: small labels for a status, an ETA, a size. */
-.chip {
-  display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px; border-radius: 6px; max-width: 100%;
-  font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  background: var(--surface2); color: var(--text2); border: 1px solid var(--border);
+/* Small facts after a title, split by middle dots: "Downloading · 1.6 GiB left · 00:00:53". The
+   row keeps one line; each fact gives way with an ellipsis. */
+.facts {
+  display: flex; gap: 0 6px; min-width: 0; font-size: var(--t-sm); color: var(--muted); white-space: nowrap; overflow: hidden;
 }
-.chip.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
-.chip.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
-.chip.fail { background: var(--fail-soft); color: var(--fail); border-color: transparent; }
-/* A state chip leads with a dot in its colour. */
-.chip.dotted::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.facts > * { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.facts > * + *::before { content: '·'; margin-right: 6px; color: var(--muted); }
 
 .empty {
-  border: 1px dashed var(--border2); border-radius: var(--r-lg); padding: 30px 24px; text-align: center;
+  border: 1px dashed var(--border2); border-radius: var(--r-lg); padding: 28px 24px; text-align: center;
   color: var(--muted); display: grid; justify-items: center; gap: 4px;
 }
 .empty .icon { color: var(--dim); margin-bottom: 4px; }
-.empty b { color: var(--text); font-size: 14.5px; font-weight: 600; }
+.empty b { color: var(--text); font-size: var(--t-md); font-weight: 600; }
 .empty button { margin-top: 10px; }
-.empty > span { max-width: 60ch; font-size: 13px; overflow-wrap: anywhere; }
+.empty > span { max-width: 60ch; font-size: var(--t-base); overflow-wrap: anywhere; }
 .empty .links { display: flex; gap: 6px 16px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,50 +1,41 @@
 <script>
-  import Icon from './icons/Icon.svelte';
-
-  // Kpi is one key figure in a .kpis row: an icon, a label, the value with its unit, a caption and
-  // optionally a bar (bar: 0–100, what it shows is also in the caption). href makes the tile a link.
-  // The value and caption keep one line; their full text is in the title.
-  let { icon, label, value, unit = '', sub = '', tone = '', bar = null, barTone = '', href = null } = $props();
+  // Kpi is one key figure in a .kpis strip: a label, the value with its unit, a caption and
+  // optionally a bar (bar: 0–100, what it shows is also in the caption). tone ('warn' or 'fail')
+  // colours the value when it needs attention; anything else leaves it plain. href makes the
+  // figure a link. The value and caption keep one line; their full text is in the title.
+  let { label, value, unit = '', sub = '', tone = '', bar = null, barTone = '', href = null } = $props();
 
   const full = $derived(unit ? `${value} ${unit}` : String(value));
 </script>
 
-<svelte:element this={href ? 'a' : 'div'} class="card kpi" class:link={!!href} {href}>
-  <span class="tile-icon {tone}" aria-hidden="true"><Icon name={icon} /></span>
-  <span class="text">
-    <span class="label ellipsis">{label}</span>
-    <span class="value num" title={full}>{value}{#if unit}<small>{unit}</small>{/if}</span>
-    {#if sub}<span class="sub ellipsis" title={sub}>{sub}</span>{/if}
-    {#if bar !== null}
-      <span class="bar {barTone}" aria-hidden="true"><i style:width={`${Math.min(100, Math.max(0, bar))}%`}></i></span>
-    {/if}
+<svelte:element this={href ? 'a' : 'div'} class="kpi" class:link={!!href} {href}>
+  <span class="label ellipsis">{label}</span>
+  <span class="value num {tone === 'warn' || tone === 'fail' ? `${tone}-text` : ''}" title={full}>
+    {value}{#if unit}<small>{unit}</small>{/if}
   </span>
+  {#if sub}<span class="sub ellipsis" title={sub}>{sub}</span>{/if}
+  {#if bar !== null}
+    <span class="bar {barTone}" aria-hidden="true"><i style:width={`${Math.min(100, Math.max(0, bar))}%`}></i></span>
+  {/if}
 </svelte:element>
 
 <style>
-  .kpi { display: flex; gap: 13px; align-items: flex-start; padding: 15px 16px; color: var(--text); text-decoration: none; }
-  .link { transition: border-color 140ms var(--ease), background 140ms var(--ease); }
-  .link:hover { border-color: var(--border2); background: var(--surface2); }
-  .text { display: grid; min-width: 0; flex: 1; }
-  .label { font-size: 12.5px; color: var(--muted); font-weight: 500; }
+  .kpi {
+    display: grid; align-content: start; min-width: 0; padding: 12px 16px 14px; background: var(--bg);
+    color: var(--text); text-decoration: none;
+  }
+  .link { transition: background 140ms var(--ease); }
+  .link:hover { background: var(--surface); }
+  .link:focus-visible { outline-offset: -2px; }
+  .label { font-size: var(--t-sm); color: var(--muted); }
   .value {
-    font-size: 20px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.3;
+    font-size: var(--t-xl); font-weight: 600; letter-spacing: -0.01em; line-height: 1.35; margin-top: 2px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .value small { font-size: 12.5px; font-weight: 500; color: var(--muted); margin-left: 4px; letter-spacing: 0; }
-  .sub { font-size: 12.5px; color: var(--muted); }
+  .value small { font-size: var(--t-sm); font-weight: 450; color: var(--muted); margin-left: 4px; letter-spacing: 0; }
+  .sub { font-size: var(--t-sm); color: var(--muted); }
   .bar { margin-top: 8px; }
-
-  /* Four tiles narrower than about 250px each (a 1280–1536px window with the rail shown), and
-     phones: the icon moves to the top right corner, so the figures keep the tile's full width. */
-  @container (min-width: 821px) and (max-width: 1040px) {
-    .kpi { position: relative; }
-    .tile-icon { position: absolute; top: 12px; right: 12px; width: 30px; height: 30px; }
-    .label { padding-right: 36px; }
-  }
   @media (max-width: 720px) {
-    .kpi { position: relative; padding: 13px 14px; }
-    .tile-icon { position: absolute; top: 11px; right: 11px; width: 30px; height: 30px; }
-    .label { padding-right: 36px; }
+    .kpi { padding: 10px 12px 12px; }
   }
 </style>

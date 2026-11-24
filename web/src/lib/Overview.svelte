@@ -2,7 +2,6 @@
   import HostChart from './HostChart.svelte';
   import Rail from './Rail.svelte';
   import Kpi from './Kpi.svelte';
-  import Icon from './icons/Icon.svelte';
   import { onMount } from 'svelte';
   import { api } from './api.js';
   import { snapshot } from './data.js';
@@ -54,40 +53,39 @@
 
   <div class="kpis">
     {#if $synced}
-      <Kpi href="#/apps" icon="activity" tone={servicesTone} label="Services" value={up} unit={`of ${services.length} up`}
+      <Kpi href="#/apps" tone={servicesTone} label="Services" value={up} unit={`of ${services.length} up`}
         sub={services.length === 0 ? 'No services yet' : up === services.length ? 'All services up' : `${services.length - up} not up`} />
-      <Kpi href="#/apps" icon="download" label="Downloads" value={active} unit="active"
+      <Kpi href="#/apps" label="Downloads" value={active} unit="active"
         sub={`${queued} in queue${queued === 1 ? '' : 's'}`} />
     {:else}
       <!-- Until the first snapshot an empty list means "not known yet": no counts, no all-clear. -->
-      <Kpi href="#/apps" icon="activity" label="Services" value="—" sub="Loading…" />
-      <Kpi href="#/apps" icon="download" label="Downloads" value="—" sub="Loading…" />
+      <Kpi href="#/apps" label="Services" value="—" sub="Loading…" />
+      <Kpi href="#/apps" label="Downloads" value="—" sub="Loading…" />
     {/if}
     {#if host}
-      <Kpi href="#/system" icon="cpu" label="CPU" value={formatPct(host.cpuPercent)}
+      <Kpi href="#/system" label="CPU" value={formatPct(host.cpuPercent)}
         sub={`${host.cpus} core${host.cpus === 1 ? '' : 's'} · load ${host.load[0].toFixed(2)}`}
         bar={Math.min(100, host.cpuPercent)} barTone={host.cpuPercent >= 90 ? 'warn' : ''} />
-      <Kpi href="#/system" icon="memory-stick" label="Memory" value={memParts[0]} unit={memParts[1]}
+      <Kpi href="#/system" label="Memory" value={memParts[0]} unit={memParts[1]}
         sub={`of ${formatBytes(host.memTotal)} · ${memPct}%`} bar={memPct} barTone={memPct >= 90 ? 'warn' : ''} />
     {:else}
-      <Kpi href="#/system" icon="cpu" label="CPU" value="—" sub="No host figures" />
-      <Kpi href="#/system" icon="memory-stick" label="Memory" value="—" sub="No host figures" />
+      <Kpi href="#/system" label="CPU" value="—" sub="No host figures" />
+      <Kpi href="#/system" label="Memory" value="—" sub="No host figures" />
     {/if}
   </div>
 
-  <section class="card" aria-labelledby="attention-title">
+  <section class="section" aria-labelledby="attention-title">
     <div class="card-head">
-      <h2 id="attention-title"><Icon name="triangle-alert" size={16} />Needs attention</h2>
-      {#if $synced && issues.length}<span class="chip warn">{issues.length}</span>{/if}
+      <h2 id="attention-title">Needs attention</h2>
+      {#if $synced && issues.length}<span class="meta num">{issues.length}</span>{/if}
     </div>
     {#if !$synced}
       <p class="waiting">Waiting for the first reading…</p>
     {:else if issues.length === 0}
-      <div class="all-good">
-        <Icon name="circle-check" size={26} />
-        <b>All good</b>
-        <span>No service down, no warnings, no stuck downloads.</span>
-      </div>
+      <p class="all-good">
+        <span class="dot ok" aria-hidden="true"></span>
+        <span><b>All good.</b> <span class="muted">No service down, no warnings, no stuck downloads.</span></span>
+      </p>
     {:else}
       <ul class="issues">
         {#each issues as item (item.key)}
@@ -110,21 +108,21 @@
 </div>
 
 <style>
-  .overview { display: grid; gap: 16px; }
-  .all-good { display: grid; justify-items: center; gap: 2px; padding: 18px 12px 12px; text-align: center; color: var(--muted); font-size: 13px; }
-  .all-good :global(.icon) { color: var(--ok); margin-bottom: 6px; }
-  .all-good b { color: var(--text); font-size: 14.5px; font-weight: 600; }
+  .overview { display: grid; gap: 28px; }
+  .all-good { display: flex; align-items: center; gap: 10px; font-size: var(--t-base); }
+  .all-good b { font-weight: 600; }
   .issues { list-style: none; margin: 0; padding: 0; }
-  .issues li { display: flex; gap: 11px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--border); min-width: 0; }
-  .issues li:last-child { border-bottom: 0; padding-bottom: 2px; }
+  .issues li { display: flex; gap: 11px; align-items: flex-start; padding: 9px 0; border-bottom: 1px solid var(--border); min-width: 0; }
+  .issues li:first-child { padding-top: 0; }
+  .issues li:last-child { border-bottom: 0; padding-bottom: 0; }
   .issues .dot { margin-top: 7px; }
-  .issue { display: grid; gap: 2px; min-width: 0; flex: 1; color: var(--text); text-decoration: none; }
-  .issue:hover .title { text-decoration: underline; text-underline-offset: 3px; }
-  .title { font-weight: 550; font-size: 13.5px; }
-  .detail { font-size: 12.5px; color: var(--text2); overflow-wrap: anywhere; }
+  .issue { display: grid; gap: 1px; min-width: 0; flex: 1; color: var(--text); text-decoration: none; }
+  .issue:hover .title { text-decoration: underline; }
+  .title { font-weight: 550; font-size: var(--t-base); }
+  .detail { font-size: var(--t-sm); color: var(--text2); overflow-wrap: anywhere; }
 
   .inline-rail { display: none; }
   @media (max-width: 1199px) {
-    .inline-rail { display: block; padding: 4px 4px 0; }
+    .inline-rail { display: block; padding-top: 14px; border-top: 1px solid var(--border); }
   }
 </style>

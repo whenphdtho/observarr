@@ -21,7 +21,7 @@
     <p class="row">
       <span class="label">Blocked</span>
       {#if data}
-        <span class="count num" title={`${formatCount(bans, data.capped)} active bans`}>{formatCount(bans, data.capped)}</span>
+        <span class="count" title={`${formatCount(bans, data.capped)} active bans`}>{formatCount(bans, data.capped)}</span>
       {/if}
       <span class="muted age">{age}</span>
     </p>
@@ -34,7 +34,7 @@
         <p class="last" {title}>
           <span class="muted what">Latest</span>
           <span class="value num ellipsis">{last.value}</span>
-          <span class="chip ellipsis scenario">{last.scenario || last.type}</span>
+          <span class="muted ellipsis scenario">{last.scenario || last.type}</span>
         </p>
       {:else}
         <p class="waiting">No decisions made here yet.</p>
@@ -45,17 +45,14 @@
 
 <style>
   .security { display: grid; gap: 6px; }
-  .row { display: flex; align-items: center; gap: 8px; min-width: 0; padding-top: 12px; border-top: 1px solid var(--border); }
-  .label { font-size: 13px; font-weight: 600; }
-  .count {
-    min-width: 20px; height: 20px; padding: 0 6px; border-radius: 99px; display: inline-grid; place-items: center;
-    font-size: 11.5px; font-weight: 650; background: var(--surface2); color: var(--text2);
-  }
-  .age { margin-left: auto; font-size: 12px; white-space: nowrap; }
-  .error { font-size: 13px; }
-  .split { font-size: 12.5px; }
-  .last { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; }
-  .what { flex: none; font-size: 12.5px; }
+  .row { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding-top: 12px; border-top: 1px solid var(--border); }
+  .label { font-size: var(--t-base); font-weight: 600; }
+  .count { font-size: var(--t-sm); color: var(--muted); }
+  .age { margin-left: auto; font-size: var(--t-sm); white-space: nowrap; }
+  .error { font-size: var(--t-base); }
+  .split { font-size: var(--t-sm); }
+  .last { display: flex; align-items: baseline; gap: 8px; min-width: 0; font-size: var(--t-base); }
+  .what { flex: none; font-size: var(--t-sm); }
   .value { flex: 0 1 auto; font-weight: 550; }
-  .scenario { flex: 0 1 auto; margin-left: auto; }
+  .scenario { flex: 0 1 auto; margin-left: auto; font-size: var(--t-sm); }
 </style>

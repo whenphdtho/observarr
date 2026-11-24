@@ -80,10 +80,7 @@
 <article class="card service" class:open={expanded} id={`service-${service.id}`} tabindex="-1"
   aria-labelledby={`service-name-${service.id}`}>
   <header>
-    <span class="tile-icon" aria-hidden="true">
-      <Icon name={adapter?.icon} />
-      <span class="status-dot {status}"></span>
-    </span>
+    <span class="tile-icon" aria-hidden="true"><Icon name={adapter?.icon} /></span>
     <div class="ident">
       <h2 id={`service-name-${service.id}`} class="ellipsis" title={service.name}>{service.name}</h2>
       <p class="muted ellipsis" title={`${adapter?.name ?? service.type} · ${service.url}`}>
@@ -91,8 +88,8 @@
       </p>
     </div>
     <div class="badges">
-      <span class="chip dotted state {pill.tone}">{pill.text}</span>
-      {#if version}<span class="chip num version" title={`version ${version}`}>v{version}</span>{/if}
+      <span class="state-word" class:fail-text={pill.tone === 'fail'}><span class="dot {status}" aria-hidden="true"></span>{pill.text}</span>
+      {#if version}<span class="version muted ellipsis" title={`version ${version}`}>v{version}</span>{/if}
     </div>
   </header>
 
@@ -182,57 +179,53 @@
 
 <style>
   .service {
-    display: grid; grid-template-rows: auto auto 1fr auto; gap: 12px; scroll-margin-top: 16px; padding: 16px 18px 12px;
+    display: grid; grid-template-rows: auto auto 1fr auto; gap: 10px; scroll-margin-top: 16px; padding: 14px 16px 10px;
   }
   .service.open { grid-column: 1 / -1; grid-template-rows: none; }
   .service:focus { outline: none; }
   .service:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   header { display: flex; align-items: center; gap: 12px; min-width: 0; }
-  header .tile-icon { border: 1px solid var(--border); }
-  header .status-dot { border-color: var(--surface); }
   .ident { display: grid; min-width: 0; flex: 1; line-height: 1.35; }
-  h2 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
-  .ident p { font-size: 12.5px; }
-  .badges { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 0 1 auto; }
-  .badges .state { flex: none; font-weight: 550; }
+  h2 { font-size: var(--t-md); font-weight: 600; }
+  .ident p { font-size: var(--t-sm); }
+  /* State and version sit on the name's line. */
+  .badges {
+    display: flex; align-items: baseline; gap: 10px; min-width: 0; flex: 0 1 auto; align-self: flex-start;
+    padding-top: 2px; font-size: var(--t-sm);
+  }
+  .badges .state-word { flex: none; color: var(--text2); }
+  .badges .state-word.fail-text { color: var(--fail); }
   .badges .version { flex: 0 1 auto; max-width: 110px; }
 
-  .summary { font-size: 13px; color: var(--text2); }
+  .summary { font-size: var(--t-base); color: var(--text2); }
   .summary.warn { color: var(--warn); }
   .summary.fail { color: var(--fail); }
 
   /* The lead row has one fixed height, whatever it holds, so collapsed cards line up. */
-  .lead {
-    height: 46px; display: grid; align-content: center; gap: 8px; min-width: 0; padding: 0 12px;
-    border-radius: var(--r-sm); background: var(--surface2);
-  }
+  .lead { height: 40px; display: grid; align-content: center; gap: 7px; min-width: 0; }
   .lead-head { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
-  .lead-title { flex: 1; font-size: 13px; font-weight: 550; }
-  .pct { flex: none; font-size: 12.5px; color: var(--text2); }
-  .lead .bar { background: var(--surface3); }
-  .lead-warning { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12.5px; color: var(--text2); }
+  .lead-title { flex: 1; font-size: var(--t-base); }
+  .pct { flex: none; font-size: var(--t-sm); color: var(--text2); }
+  .lead-warning { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--t-sm); color: var(--text2); }
   .lead-warning :global(.icon) { color: var(--warn); }
   .lead-warning.level-error :global(.icon) { color: var(--fail); }
-  .lead-note { font-size: 12.5px; color: var(--muted); }
+  .lead-note { font-size: var(--t-sm); color: var(--muted); }
   .lead-note.fail { color: var(--fail); }
 
-  .details { display: grid; gap: 14px; min-width: 0; }
-  .widgets { display: grid; gap: 4px 28px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); align-items: start; }
+  .details { display: grid; gap: 12px; min-width: 0; }
+  .widgets { display: grid; gap: 4px 32px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); align-items: start; }
   .widget { min-width: 0; }
-  .container-line {
-    display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 10px; border-radius: var(--r-sm);
-    background: var(--surface2); font-size: 12.5px; color: var(--text2);
-  }
+  .container-line { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--t-sm); color: var(--text2); }
   .container-line :global(.icon) { color: var(--muted); }
   .container-line .state { flex: 1 1 auto; }
   .container-line .num { flex: none; color: var(--muted); }
 
   footer {
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; margin: 0 -6px;
-    padding-top: 8px; border-top: 1px solid var(--border);
+    padding-top: 6px; border-top: 1px solid var(--border);
   }
   .toggle {
-    padding: 5px 8px; gap: 6px; color: var(--text2); background: transparent; border-color: transparent; font-weight: 500;
+    padding: 4px 8px; gap: 6px; color: var(--text2); background: transparent; border-color: transparent; font-weight: 500;
   }
   .toggle:hover:not(:disabled) { color: var(--text); background: var(--surface2); border-color: transparent; }
   .toggle :global(.icon) { transition: transform 160ms var(--ease); }

@@ -146,16 +146,16 @@
 <style>
   .apps { display: grid; gap: 16px; }
   .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .count { margin-right: auto; font-size: 13.5px; font-weight: 600; }
+  .count { margin-right: auto; font-size: var(--t-base); font-weight: 600; }
   /* Cards of one row share its height; an expanded card takes a whole row of its own. */
   .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
 
   .onboarding { display: grid; gap: 12px; padding: 22px 22px 16px; }
   .intro { display: flex; gap: 14px; align-items: flex-start; min-width: 0; }
-  .intro .mark { width: 36px; height: 36px; border-radius: 10px; }
+  .intro .mark { width: 36px; height: 36px; border-radius: var(--r); }
   .intro-text { display: grid; gap: 4px; min-width: 0; flex: 1; }
-  .intro h2 { font-size: 16px; font-weight: 620; letter-spacing: -0.01em; }
-  .intro p { font-size: 13px; max-width: 62ch; }
+  .intro h2 { font-size: var(--t-lg); font-weight: 620; letter-spacing: -0.01em; }
+  .intro p { font-size: var(--t-base); max-width: 62ch; }
   .done { flex: none; }
   .more { border-top: 1px solid var(--border); padding-top: 12px; }
   .link {

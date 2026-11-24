@@ -18,12 +18,12 @@
   let { user, onlogout } = $props();
 
   const VIEWS = [
-    { id: 'overview', hash: '', label: 'Overview', icon: 'house', sub: 'Your apps and host at a glance' },
-    { id: 'network', hash: '#/network', label: 'Network', icon: 'network', sub: 'Throughput, traffic by app and budget' },
-    { id: 'apps', hash: '#/apps', label: 'Apps', icon: 'layout-grid', sub: 'Health and queue of every service' },
-    { id: 'system', hash: '#/system', label: 'System', icon: 'server', sub: 'Host, disks and containers' },
-    { id: 'storage', hash: '#/storage', label: 'Storage', icon: 'hard-drive', sub: 'Disks, mounts and caches' },
-    { id: 'security', hash: '#/security', label: 'Security', icon: 'shield', sub: 'Sign-ins, sessions and blocked addresses' },
+    { id: 'overview', hash: '', label: 'Overview', icon: 'house' },
+    { id: 'network', hash: '#/network', label: 'Network', icon: 'network' },
+    { id: 'apps', hash: '#/apps', label: 'Apps', icon: 'layout-grid' },
+    { id: 'system', hash: '#/system', label: 'System', icon: 'server' },
+    { id: 'storage', hash: '#/storage', label: 'Storage', icon: 'hard-drive' },
+    { id: 'security', hash: '#/security', label: 'Security', icon: 'shield' },
   ];
 
   // The view is remembered in the URL hash (#/network, #/apps, #/system), so a reload or a shared link keeps it.
@@ -56,7 +56,6 @@
   }
 
   // openAddApps opens the Add apps page as a history entry of its own, so Back returns to the cards.
-  const ADD_SUB = 'Found on this server, on your network, or by hand';
   function openAddApps() {
     history.pushState({ fromApps: true }, '', window.location.pathname + window.location.search + ADD_APPS);
     view = 'apps';
@@ -170,14 +169,7 @@
   <main class="center" bind:this={mainEl}>
     <div class="wrap">
       <header class="top">
-        <div class="titles">
-          <h1>{addingApps ? 'Add apps' : current.label}</h1>
-          {#if addingApps}
-            <p class="sub ellipsis" title={ADD_SUB}>{ADD_SUB}</p>
-          {:else}
-            <p class="sub ellipsis" title={current.sub}>{current.sub}</p>
-          {/if}
-        </div>
+        <h1 class="ellipsis">{addingApps ? 'Add apps' : current.label}</h1>
         <p class="live" class:stale={$reconnecting} role="status">
           <i aria-hidden="true"></i>
           <span>{$reconnecting ? 'Reconnecting…' : 'Live'}</span>
@@ -220,52 +212,49 @@
   .wrap { max-width: 1160px; margin: 0 auto; padding: 24px 32px 48px; container-type: inline-size; }
 
   .brand {
-    display: flex; align-items: center; gap: 11px; padding: 0 10px 22px;
-    font-size: 16px; font-weight: 650; letter-spacing: -0.01em;
+    display: flex; align-items: center; gap: 10px; padding: 0 10px 22px;
+    font-size: var(--t-md); font-weight: 650;
   }
-  .mark { width: 30px; height: 30px; border-radius: 9px; }
+  .mark { width: 26px; height: 26px; border-radius: var(--r); }
 
   .search {
-    display: flex; align-items: center; gap: 9px; margin-bottom: 18px; padding: 0 11px; color: var(--muted);
-    background: var(--surface); border: 1px solid var(--border2); border-radius: var(--r-sm);
+    display: flex; align-items: center; gap: 9px; margin-bottom: 18px; padding: 0 10px; color: var(--muted);
+    border: 1px solid var(--border2); border-radius: var(--r);
   }
   .search:focus-within { border-color: var(--accent); }
-  .search input { flex: 1; min-width: 0; padding: 8px 0; border: 0; border-radius: 0; background: transparent; outline: none; }
+  .search input { flex: 1; min-width: 0; padding: 7px 0; border: 0; border-radius: 0; background: transparent; outline: none; }
   .search input::placeholder { color: var(--muted); }
   .search input::-webkit-search-cancel-button { display: none; }
   .search kbd {
-    font: 550 11px 'Inter', sans-serif; color: var(--muted); border: 1px solid var(--border2); border-radius: 5px; padding: 0 5px;
+    font: 500 var(--t-xs) 'Inter', sans-serif; color: var(--muted); border: 1px solid var(--border2); border-radius: 4px; padding: 0 5px;
   }
 
-  .cap { padding: 4px 10px 8px; font-size: 12.5px; color: var(--muted); font-weight: 550; }
+  .cap { padding: 4px 10px 6px; font-size: var(--t-sm); color: var(--muted); }
   .vbtn {
-    display: flex; align-items: center; gap: 11px; padding: 8px 10px; margin-bottom: 2px; border-radius: var(--r-sm);
-    color: var(--text2); font-weight: 500; font-size: 13.5px; text-decoration: none; white-space: nowrap;
+    display: flex; align-items: center; gap: 10px; padding: 7px 10px; margin-bottom: 1px; border-radius: var(--r);
+    color: var(--text2); font-weight: 500; font-size: var(--t-base); text-decoration: none; white-space: nowrap;
     transition: background 140ms var(--ease), color 140ms var(--ease);
   }
+  .vbtn :global(.icon) { color: var(--muted); }
   .vbtn:hover { background: var(--surface); color: var(--text); }
   .vbtn[aria-current='page'] { background: var(--surface2); color: var(--text); }
   .vbtn[aria-current='page'] :global(.icon) { color: var(--accent); }
 
-  .acct { margin-top: auto; display: flex; align-items: center; gap: 11px; padding: 12px 10px 0; border-top: 1px solid var(--border); }
+  .acct { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 12px 10px 0; border-top: 1px solid var(--border); }
   .av {
-    width: 32px; height: 32px; border-radius: 9px; background: var(--surface3); display: grid; place-items: center;
-    font-weight: 600; font-size: 13px; flex: none;
+    width: 28px; height: 28px; border-radius: 50%; background: var(--surface3); display: grid; place-items: center;
+    font-weight: 600; font-size: var(--t-sm); flex: none;
   }
-  .nm { display: grid; min-width: 0; flex: 1; line-height: 1.3; font-weight: 550; }
-  .nm .muted { font-size: 12px; font-weight: 400; }
+  .nm { display: grid; min-width: 0; flex: 1; line-height: 1.3; font-weight: 550; font-size: var(--t-base); }
+  .nm .muted { font-size: var(--t-sm); font-weight: 400; }
   .acct .ibtn { border-color: transparent; }
 
-  .top { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; min-width: 0; }
-  .titles { min-width: 0; flex: 1; }
-  h1 { font-size: 21px; font-weight: 620; letter-spacing: -0.015em; }
-  .sub { color: var(--muted); font-size: 13px; margin-top: 1px; }
-  .live {
-    display: inline-flex; align-items: center; gap: 4px; flex: none; padding: 5px 11px; border-radius: 99px;
-    border: 1px solid var(--border); font-size: 12.5px; color: var(--text2); white-space: nowrap;
-  }
+  .top { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; min-width: 0; }
+  h1 { flex: 1; font-size: var(--t-xl); font-weight: 600; letter-spacing: -0.01em; }
+  .live { display: inline-flex; align-items: center; gap: 4px; flex: none; font-size: var(--t-sm); color: var(--muted); white-space: nowrap; }
   .live i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); margin-right: 4px; }
   .live.stale i { background: var(--warn); }
+  .live.stale { color: var(--warn); }
 
   /* Below 1200px the right column's content moves into the Overview. */
   @media (max-width: 1199px) {
@@ -296,13 +285,11 @@
     nav .cap { display: none; }
     .vbtn {
       flex: 1 1 0; min-width: 0; min-height: 48px; flex-direction: column; justify-content: center; gap: 3px;
-      padding: 7px 2px; margin: 0; font-size: 11px;
+      padding: 7px 2px; margin: 0; font-size: var(--t-xs);
     }
     .vlabel { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-    .vbtn[aria-current='page'] { background: var(--accent-soft); color: var(--accent-text); }
-    .vbtn[aria-current='page'] :global(.icon) { color: var(--accent-text); }
-    .top { margin: 10px 0 18px; }
-    h1 { font-size: 20px; }
+    .vbtn[aria-current='page'] { background: transparent; color: var(--text); }
+    .top { margin: 10px 0 16px; }
   }
   @media (max-width: 400px) {
     .live .ago { display: none; }

@@ -1,18 +1,13 @@
-<script module>
-  let nextId = 0;
-</script>
-
 <script>
   import { monotonePath } from './curve.js';
   import { niceCeil, timeTicks, clock } from './chart.js';
 
-  // AreaChart draws one or more series over time as smooth lines with a fading fill, with y-axis
+  // AreaChart draws one or more series over time as smooth lines over a faint flat fill, with y-axis
   // labels and a time axis. times are milliseconds since epoch, one per value;
   // each series is { values, color } with color a CSS colour (e.g. "var(--down)"). max fixes the
   // top of the y axis (e.g. 100 for a percentage); otherwise it is rounded up from the data.
   let { times, series, max = null, format, label, height = 190 } = $props();
 
-  const id = `chart${nextId++}`;
   const PAD = { top: 8, right: 6, bottom: 24, left: 52 };
   let width = $state(0);
 
@@ -45,14 +40,6 @@
 <div class="chart" bind:clientWidth={width} style:height={`${height}px`}>
   {#if width > 0 && times.length > 1}
     <svg {width} {height} role="img" aria-label={label}>
-      <defs>
-        {#each series as s, i (i)}
-          <linearGradient id={`${id}-${i}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" style:stop-color={s.color} stop-opacity="0.3" />
-            <stop offset="1" style:stop-color={s.color} stop-opacity="0" />
-          </linearGradient>
-        {/each}
-      </defs>
       {#each yTicks as v (v)}
         <line class="grid" x1={PAD.left} x2={PAD.left + plotW} y1={y(v)} y2={y(v)} />
         <text class="label" x={PAD.left - 10} y={y(v)} text-anchor="end" dominant-baseline="middle">{format(v)}</text>
@@ -64,7 +51,7 @@
       {/each}
       {#each series as s, i (i)}
         {@const line = linePath(s.values)}
-        <path d={areaPath(line)} fill={`url(#${id}-${i})`} />
+        <path class="area" d={areaPath(line)} style:fill={s.color} />
         <path class="line" d={line} style:stroke={s.color} />
       {/each}
     </svg>
@@ -76,8 +63,10 @@
 <style>
   .chart { width: 100%; min-width: 0; }
   svg { display: block; overflow: visible; }
-  .grid { stroke: var(--border); stroke-dasharray: 3 4; }
-  .label { fill: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
-  .line { fill: none; stroke-width: 1.75; stroke-linejoin: round; stroke-linecap: round; }
+  .grid { stroke: var(--border); }
+  .label { fill: var(--muted); font-size: var(--t-xs); }
+  /* One clean line per series over a barely-there flat fill. */
+  .area { fill-opacity: 0.04; }
+  .line { fill: none; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
   .waiting { display: grid; place-items: center; height: 100%; }
 </style>

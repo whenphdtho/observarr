@@ -122,7 +122,7 @@
       </span>
     </div>
     {#if sug.keyFound}
-      <span class="chip key" title={`API key found in ${sug.keySource}`}>key found</span>
+      <span class="key" title={`API key found in ${sug.keySource}`}>key found</span>
     {/if}
     <div class="buttons">
       <button type="button" class:quiet={open} bind:this={addEl} aria-expanded={open} aria-controls={open ? `${uid}-form` : undefined}
@@ -193,26 +193,26 @@
   .row { display: flex; align-items: center; gap: 12px; min-width: 0; }
   .row .tile-icon { width: 34px; height: 34px; }
   .info { display: grid; min-width: 0; flex: 1; line-height: 1.35; }
-  .name { font-weight: 600; font-size: 13.5px; }
-  .meta { font-size: 12.5px; color: var(--muted); }
-  .key { flex: 0 1 auto; }
+  .name { font-weight: 600; font-size: var(--t-base); }
+  .meta { font-size: var(--t-sm); color: var(--muted); }
+  .key { flex: 0 1 auto; font-size: var(--t-sm); color: var(--muted); white-space: nowrap; }
   .buttons { display: flex; gap: 8px; flex: none; }
   .buttons button { min-width: 74px; }
   .mini {
-    display: grid; gap: 12px; margin: 12px 0 2px 46px; padding: 14px; border-radius: var(--r-md);
+    display: grid; gap: 12px; margin: 12px 0 2px 46px; padding: 14px; border-radius: var(--r-lg);
     background: var(--surface2); border: 1px solid var(--border); grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
   }
   .mini input:not([type='checkbox']) { background: var(--bg); }
-  label { display: grid; gap: 6px; font-size: 13px; color: var(--text2); align-content: start; min-width: 0; }
+  label { display: grid; gap: 6px; font-size: var(--t-base); color: var(--text2); align-content: start; min-width: 0; }
   label.check { grid-column: 1 / -1; display: flex; align-items: flex-start; gap: 8px; color: var(--text); }
   label.check input { flex: none; margin-top: 2px; }
   label.check span { overflow-wrap: anywhere; }
-  .hint { font-size: 12px; }
+  .hint { font-size: var(--t-sm); }
   .wide { grid-column: 1 / -1; }
   .form-foot { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  .state { flex: 1 1 200px; display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; }
+  .state { flex: 1 1 200px; display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--t-base); }
   .form-foot button { margin-left: auto; }
-  .row-error { margin: 8px 0 0 46px; font-size: 13px; }
+  .row-error { margin: 8px 0 0 46px; font-size: var(--t-base); }
   .spinner {
     width: 14px; height: 14px; border-radius: 50%; flex: none;
     border: 2px solid var(--field-border); border-top-color: var(--accent); animation: spin 0.8s linear infinite;

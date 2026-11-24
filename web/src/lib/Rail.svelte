@@ -67,27 +67,27 @@
   <ul class="sys">
     {#if containers.length}
       <li><a class="srow" href="#/system">
-        <span class="dot" class:ok={running === containers.length} class:warn={running < containers.length}></span>
+        <span class="dot" class:warn={running < containers.length}></span>
         <span class="ellipsis">Containers</span><b class="num">{running}/{containers.length}</b>
       </a></li>
     {/if}
     {#if host}
       <li><a class="srow" href="#/system">
-        <span class="dot {host.cpuPercent >= 90 ? 'warn' : 'ok'}"></span><span class="ellipsis">Host CPU</span><b class="num">{formatPct(host.cpuPercent)}</b>
+        <span class="dot" class:warn={host.cpuPercent >= 90}></span><span class="ellipsis">Host CPU</span><b class="num">{formatPct(host.cpuPercent)}</b>
       </a></li>
       <li><a class="srow" href="#/system">
-        <span class="dot {memPct >= 90 ? 'warn' : 'ok'}"></span><span class="ellipsis">Memory used</span><b class="num">{formatBytes(host.memUsed)}</b>
+        <span class="dot" class:warn={memPct >= 90}></span><span class="ellipsis">Memory used</span><b class="num">{formatBytes(host.memUsed)}</b>
       </a></li>
       {#if disk}
         <li><a class="srow" href="#/system" title={disk.path}>
-          <span class="dot {diskLow ? 'warn' : 'ok'}"></span><span class="ellipsis">Disk free · {disk.path}</span>
+          <span class="dot" class:warn={diskLow}></span><span class="ellipsis">Disk free · {disk.path}</span>
           <b class="num">{formatBytes(disk.avail)}</b>
         </a></li>
       {/if}
     {/if}
     {#if mounts.readings > 0}
       <li><a class="srow" href="#/storage">
-        <span class="dot {mounts.healthy === mounts.listed ? 'ok' : 'warn'}"></span><span class="ellipsis">Mounts healthy</span>
+        <span class="dot" class:warn={mounts.healthy < mounts.listed}></span><span class="ellipsis">Mounts healthy</span>
         <b class="num">{mounts.healthy}/{mounts.listed}{#if mounts.total > mounts.listed}
           <em>+{mounts.total - mounts.listed} not listed</em>{/if}</b>
       </a></li>
@@ -123,46 +123,44 @@
 </section>
 
 <style>
-  .rail-section + .rail-section { margin-top: 22px; }
+  .rail-section + .rail-section { margin-top: 24px; }
   .cap {
-    display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px;
-    font-size: 13px; font-weight: 600;
+    display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px;
+    font-size: var(--t-base); font-weight: 600;
   }
-  .cap em { font-style: normal; color: var(--muted); font-weight: 450; font-size: 12px; white-space: nowrap; }
-  .none { font-size: 13px; }
+  .cap em { font-style: normal; color: var(--muted); font-weight: 400; font-size: var(--t-sm); white-space: nowrap; }
+  .none { font-size: var(--t-base); }
   ul { list-style: none; margin: 0; padding: 0; }
   .app {
     width: calc(100% + 16px); margin: 0 -8px; padding: 6px 8px; justify-content: flex-start; gap: 12px;
-    background: transparent; border: 0; border-radius: var(--r-sm); color: var(--text); font-weight: 400;
-    font-size: 13.5px; text-align: left;
+    background: transparent; border: 0; border-radius: var(--r); color: var(--text); font-weight: 400;
+    font-size: var(--t-base); text-align: left;
   }
   .app:hover:not(:disabled) { background: var(--surface); }
-  .app .tile-icon { width: 36px; height: 36px; border: 1px solid var(--border); }
+  .app .tile-icon { width: 32px; height: 32px; }
   .text { display: grid; min-width: 0; flex: 1; line-height: 1.35; }
   .name { font-weight: 550; }
-  .line { font-size: 12px; color: var(--muted); }
-  .line .ok { color: var(--ok); }
+  .line { font-size: var(--t-sm); color: var(--muted); }
   .line .warn { color: var(--warn); }
   .line .fail { color: var(--fail); }
   .go { color: var(--dim); opacity: 0; transition: opacity 140ms; display: grid; }
   .app:hover .go, .app:focus-visible .go { opacity: 1; }
 
   .srow {
-    display: flex; align-items: center; gap: 10px; padding: 8px; margin: 0 -8px; border-radius: var(--r-sm);
-    font-size: 13px; color: var(--text2); text-decoration: none; min-width: 0;
+    display: flex; align-items: center; gap: 10px; padding: 6px 8px; margin: 0 -8px; border-radius: var(--r);
+    font-size: var(--t-base); color: var(--text2); text-decoration: none; min-width: 0;
   }
   .srow:hover { background: var(--surface); }
   .srow .ellipsis { flex: 1; }
   .srow b { color: var(--text); font-weight: 550; white-space: nowrap; }
-  .srow b em { font-style: normal; color: var(--muted); font-weight: 450; font-size: 12px; }
+  .srow b em { font-style: normal; color: var(--muted); font-weight: 400; font-size: var(--t-sm); }
 
   .budget {
-    margin-top: 14px; display: grid; gap: 8px; padding: 14px 16px; border-radius: var(--r-lg);
-    background: var(--surface); border: 1px solid var(--border); color: var(--text2); text-decoration: none;
-    font-size: 13px;
+    margin: 10px -8px 0; display: grid; gap: 6px; padding: 8px; border-radius: var(--r);
+    color: var(--text2); text-decoration: none; font-size: var(--t-base);
   }
-  .budget:hover { border-color: var(--border2); }
+  .budget:hover { background: var(--surface); }
   .row1 { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-  .row1 b { color: var(--text); font-weight: 600; white-space: nowrap; }
-  .small { font-size: 12px; }
+  .row1 b { color: var(--text); font-weight: 550; white-space: nowrap; }
+  .small { font-size: var(--t-sm); }
 </style>

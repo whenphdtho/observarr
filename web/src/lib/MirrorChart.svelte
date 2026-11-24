@@ -91,11 +91,11 @@
 <style>
   .chart { width: 100%; min-width: 0; }
   svg { display: block; overflow: visible; }
-  .grid { stroke: var(--border); stroke-dasharray: 3 4; }
-  .grid.zero { stroke: var(--border2); stroke-dasharray: none; }
-  .label { fill: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
-  .side { fill: var(--text2); font-size: 11.5px; font-weight: 550; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
-  /* A thin line in the card's colour keeps neighbouring bands apart. */
-  .band { stroke: var(--surface); stroke-width: 1; stroke-linejoin: round; fill-opacity: 0.85; }
+  .grid { stroke: var(--border); }
+  .grid.zero { stroke: var(--field-border); }
+  .label { fill: var(--muted); font-size: var(--t-xs); }
+  .side { fill: var(--text2); font-size: var(--t-xs); font-weight: 550; paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
+  /* A thin line in the page's colour keeps neighbouring bands apart. */
+  .band { stroke: var(--bg); stroke-width: 1; stroke-linejoin: round; fill-opacity: 0.85; }
   .waiting { display: grid; place-items: center; height: 100%; }
 </style>

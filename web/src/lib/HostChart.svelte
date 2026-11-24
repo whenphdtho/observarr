@@ -1,6 +1,5 @@
 <script>
   import AreaChart from './AreaChart.svelte';
-  import Icon from './icons/Icon.svelte';
   import { history, snapshot } from './data.js';
   import { serviceList } from './live.js';
   import { formatMbit, formatPct } from './format.js';
@@ -26,9 +25,9 @@
   }
 </script>
 
-<section class="card host-chart" aria-labelledby="host-chart-title">
+<section class="section" aria-labelledby="host-chart-title">
   <div class="card-head">
-    <h2 id="host-chart-title"><Icon name="activity" size={16} />{showNet ? 'Throughput' : 'Host activity'}</h2>
+    <h2 id="host-chart-title">{showNet ? 'Throughput' : 'Host activity'}</h2>
     {#if hasNet}
       <div class="seg" role="group" aria-label="Chart">
         <button type="button" aria-pressed={mode === 'net'} onclick={() => { mode = 'net'; }}>Network</button>
@@ -88,21 +87,20 @@
 </section>
 
 <style>
-  .host-chart { padding-bottom: 8px; }
   .card-head { flex-wrap: wrap; }
   .pad { padding: 24px 0 18px; }
-  .nums { display: flex; gap: 12px 32px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 12px; min-width: 0; }
-  .num-block { display: grid; gap: 6px; min-width: 0; }
-  .legend { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text2); font-weight: 500; }
+  .nums { display: flex; gap: 12px 32px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 10px; min-width: 0; }
+  .num-block { display: grid; gap: 4px; min-width: 0; }
+  .legend { display: flex; align-items: center; gap: 7px; font-size: var(--t-sm); color: var(--text2); }
   .sw.down { background: var(--down); }
   .sw.up { background: var(--up); }
-  .big { font-size: 32px; font-weight: 600; letter-spacing: -0.025em; line-height: 1; white-space: nowrap; }
-  .mid { font-size: 17px; font-weight: 600; line-height: 1.4; white-space: nowrap; }
-  small { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 5px; letter-spacing: 0; }
-  .peak { margin-left: auto; display: grid; justify-items: end; gap: 2px; font-size: 13px; white-space: nowrap; }
-  .peak small { font-size: 12px; margin-left: 4px; }
-  .peak .muted { font-size: 12px; }
-  .top { font-size: 12.5px; color: var(--text2); margin: -2px 0 10px; }
+  .big { font-size: var(--t-2xl); font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; white-space: nowrap; }
+  .mid { font-size: var(--t-lg); font-weight: 600; line-height: 1.4; white-space: nowrap; }
+  small { font-size: var(--t-base); font-weight: 450; color: var(--muted); margin-left: 5px; letter-spacing: 0; }
+  .peak { margin-left: auto; display: grid; justify-items: end; gap: 2px; font-size: var(--t-base); white-space: nowrap; }
+  .peak small { font-size: var(--t-sm); margin-left: 4px; }
+  .peak .muted { font-size: var(--t-sm); }
+  .top { font-size: var(--t-sm); color: var(--text2); margin: 0 0 10px; }
   .top .muted { margin-right: 10px; }
   .top .item + .item { margin-left: 14px; }
   .top b { color: var(--text); font-weight: 550; }

@@ -80,17 +80,17 @@
     </a>
   </div>
 
-  <section class="card" aria-labelledby="found-title">
+  <section class="section" aria-labelledby="found-title">
     <div class="card-head">
-      <h2 id="found-title"><Icon name="server" size={17} />Found on this server</h2>
+      <h2 id="found-title">Found on this server</h2>
       <span class="meta">Nothing is contacted until you add it</span>
     </div>
     <FoundList adapters={$adapters} {taken} />
   </section>
 
-  <section class="card" aria-labelledby="elsewhere-title">
+  <section class="section" aria-labelledby="elsewhere-title">
     <div class="card-head">
-      <h2 id="elsewhere-title"><Icon name="radar" size={17} />Look elsewhere</h2>
+      <h2 id="elsewhere-title">Look elsewhere</h2>
     </div>
 
     <div class="fold">
@@ -162,9 +162,9 @@
     {/if}
   </section>
 
-  <section class="card" aria-labelledby="manual-title">
+  <section class="section" aria-labelledby="manual-title">
     <div class="card-head">
-      <h2 id="manual-title"><Icon name="plus" size={17} />Add manually</h2>
+      <h2 id="manual-title">Add manually</h2>
     </div>
     <p class="visually-hidden" role="status">{manualNotice}</p>
     {#key manualKey}
@@ -189,11 +189,11 @@
 {/snippet}
 
 <style>
-  .add-apps { display: grid; gap: 16px; }
-  .toolbar { display: flex; align-items: center; }
+  .add-apps { display: grid; gap: 28px; }
+  .toolbar { display: flex; align-items: center; margin-bottom: -12px; }
   .back {
-    display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 550; color: var(--text2);
-    text-decoration: none; padding: 4px 8px 4px 4px; border-radius: 8px;
+    display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-base); font-weight: 550; color: var(--text2);
+    text-decoration: none; padding: 4px 8px 4px 4px; border-radius: var(--r);
   }
   .back:hover { color: var(--text); background: var(--surface2); }
   .back :global(.icon) { transform: rotate(180deg); }
@@ -203,28 +203,28 @@
   .card-head + .fold { border-top: 0; }
   .fold-btn {
     width: 100%; justify-content: flex-start; align-items: flex-start; gap: 10px; padding: 12px 4px; text-align: left;
-    background: transparent; border: 0; color: var(--text); border-radius: 8px; white-space: normal;
+    background: transparent; border: 0; color: var(--text); border-radius: var(--r); white-space: normal;
   }
   .fold-btn:hover:not(:disabled) { background: var(--surface2); border: 0; }
   .fold-btn :global(.icon) { margin-top: 2px; color: var(--muted); transition: transform 160ms var(--ease); }
   .fold-btn[aria-expanded='true'] :global(.icon) { transform: rotate(90deg); }
   .fold-text { display: grid; gap: 1px; min-width: 0; font-weight: 400; }
-  .fold-text b { font-weight: 600; font-size: 13.5px; }
-  .fold-text .muted { font-size: 12.5px; }
+  .fold-text b { font-weight: 600; font-size: var(--t-base); }
+  .fold-text .muted { font-size: var(--t-sm); }
   .fold-body { display: grid; gap: 10px; padding: 0 0 14px 29px; min-width: 0; }
   .scan { display: grid; gap: 10px; }
-  label { display: grid; gap: 6px; font-size: 13px; color: var(--text2); }
+  label { display: grid; gap: 6px; font-size: var(--t-base); color: var(--text2); }
   textarea { resize: vertical; min-height: 44px; }
   .scan-foot { display: flex; align-items: center; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
   .scan-foot .hint { margin-right: auto; }
-  .hint { font-size: 12px; }
+  .hint { font-size: var(--t-sm); }
   .rows { margin: 0; padding: 0; display: grid; }
-  .none { font-size: 13px; }
-  .problems { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+  .none { font-size: var(--t-base); }
+  .problems { font-size: var(--t-sm); color: var(--muted); margin-top: 8px; }
   .problems summary { cursor: pointer; width: fit-content; }
   .problems ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 2px; overflow-wrap: anywhere; }
   .problems b { color: var(--text2); font-weight: 550; }
-  .ok-text { color: var(--ok); font-size: 13px; margin-top: 10px; }
+  .ok-text { color: var(--ok); font-size: var(--t-base); margin-top: 10px; }
   .spinner {
     width: 14px; height: 14px; border-radius: 50%; flex: none;
     border: 2px solid var(--field-border); border-top-color: var(--accent); animation: spin 0.8s linear infinite;

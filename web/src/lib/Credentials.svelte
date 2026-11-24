@@ -81,10 +81,10 @@
   main { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 16px; }
   form { width: min(380px, 100%); display: grid; gap: 14px; padding: 26px 24px; }
   .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 2px; }
-  .mark { width: 36px; height: 36px; border-radius: 10px; }
-  h1 { font-size: 20px; font-weight: 650; letter-spacing: -0.015em; }
-  label { display: grid; gap: 6px; font-size: 13px; color: var(--text2); }
-  .hint { font-size: 12px; }
-  .notice { font-size: 13px; }
+  .mark { width: 36px; height: 36px; border-radius: var(--r); }
+  h1 { font-size: var(--t-xl); font-weight: 650; letter-spacing: -0.015em; }
+  label { display: grid; gap: 6px; font-size: var(--t-base); color: var(--text2); }
+  .hint { font-size: var(--t-sm); }
+  .notice { font-size: var(--t-base); }
   button { margin-top: 4px; padding: 9px 14px; }
 </style>

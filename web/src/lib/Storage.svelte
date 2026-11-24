@@ -1,7 +1,7 @@
 <script>
   import Kpi from './Kpi.svelte';
   import Icon from './icons/Icon.svelte';
-  import { snapshot, systemError, adapters, adapterFor } from './data.js';
+  import { snapshot, systemError, adapters } from './data.js';
   import { now } from './ticker.js';
   import { connectDocs } from './urls.js';
   import { formatBytes, formatRate, formatPercent, formatAge } from './format.js';
@@ -27,7 +27,7 @@
       `${formatBytes(m.cacheUsedBytes)} of ${formatBytes(m.cacheMaxBytes)}` : `${formatBytes(m.cacheUsedBytes)}, no limit`;
   }
 
-  function stateChip(m) {
+  function mountState(m) {
     if (m.state === 'mounted') return { text: 'mounted', tone: 'ok', title: `mounted at ${m.mountPoint}` };
     if (m.state === 'unmounted') return { text: 'not mounted', tone: 'fail', title: 'not mounted' };
     return {
@@ -61,31 +61,31 @@
 
   <div class="kpis">
     {#if disks.length > 0}
-      <Kpi icon="hard-drive" label="Disks used" value={formatBytes(totals.used)}
+      <Kpi label="Disks used" value={formatBytes(totals.used)}
         sub={`${formatBytes(totals.avail)} free · ${totals.pct}%`} bar={totals.pct}
         barTone={totals.pct >= 90 ? 'warn' : ''} />
     {:else}
-      <Kpi icon="hard-drive" label="Disks used" value="—" sub="No disks measured" />
+      <Kpi label="Disks used" value="—" sub="No disks measured" />
     {/if}
     {#if sum.readings > 0}
-      <Kpi icon="folder-sync" label="Mounts healthy" value={`${sum.healthy}/${sum.listed}`} tone={mountsTone}
+      <Kpi label="Mounts healthy" value={`${sum.healthy}/${sum.listed}`} tone={mountsTone}
         sub={mountsSub} />
-      <Kpi icon="database" label="Cache used" value={sum.caches ? formatBytes(sum.cacheUsed) : '—'} sub={cacheSub}
+      <Kpi label="Cache used" value={sum.caches ? formatBytes(sum.cacheUsed) : '—'} sub={cacheSub}
         bar={sum.cacheMax > 0 ? percentOf(sum.cacheUsed, sum.cacheMax) : null}
         barTone={sum.cacheMax > 0 && percentOf(sum.cacheUsed, sum.cacheMax) >= 90 ? 'warn' : ''} />
-      <Kpi icon="arrow-down-up" label="Transfer speed" value={formatRate(sum.speed)}
+      <Kpi label="Transfer speed" value={formatRate(sum.speed)}
         sub={sum.active ? `${plural(sum.active, 'transfer')} in progress` : 'Nothing transferring'} />
     {:else}
-      <Kpi icon="folder-sync" label="Mounts healthy" value="—" sub={sources.length ? 'Waiting for a reading' : 'No mount service'} />
-      <Kpi icon="database" label="Cache used" value="—" sub="No reading" />
-      <Kpi icon="arrow-down-up" label="Transfer speed" value="—" sub="No reading" />
+      <Kpi label="Mounts healthy" value="—" sub={sources.length ? 'Waiting for a reading' : 'No mount service'} />
+      <Kpi label="Cache used" value="—" sub="No reading" />
+      <Kpi label="Transfer speed" value="—" sub="No reading" />
     {/if}
   </div>
 
   {#if disks.length > 0}
-    <section class="card" aria-labelledby="storage-disks-title">
+    <section class="section" aria-labelledby="storage-disks-title">
       <div class="card-head">
-        <h2 id="storage-disks-title"><Icon name="hard-drive" size={16} />Disks</h2>
+        <h2 id="storage-disks-title">Disks</h2>
         <span class="meta num" title={`${formatBytes(totals.used)} used of ${formatBytes(totals.total)}`}>
           {formatBytes(totals.total)} in {plural(totals.count, 'file system')}
         </span>
@@ -97,7 +97,7 @@
             <div class="disk-head">
               <span class="ellipsis path" title={d.path}>{d.path}</span>
               <span class="muted num figures" title={`${formatBytes(p.used)} used, ${formatBytes(p.reserved)} reserved, ${formatBytes(p.avail)} free of ${formatBytes(d.total)}`}>
-                {formatBytes(p.used)} used · <span class="free">{formatBytes(p.avail)} free</span> · {p.pct}%
+                {formatBytes(p.used)} used · <span class="free">{formatBytes(p.avail)} free</span> · <span class:warn-text={p.pct >= 90}>{p.pct}%</span>
               </span>
             </div>
             <div class="stack" role="img"
@@ -141,14 +141,11 @@
   {#each sources as svc (svc.id)}
     {@const reading = svc.readings?.mounts}
     {@const data = reading?.data}
-    {@const adapter = adapterFor($adapters, svc.type)}
     {@const transfers = (data?.transfers ?? []).slice(0, TOP_TRANSFERS)}
-    <section class="card" aria-labelledby={`mounts-title-${svc.id}`}>
+    <section class="section" aria-labelledby={`mounts-title-${svc.id}`}>
       <div class="card-head">
         <h2 id={`mounts-title-${svc.id}`}>
-          <span class="svc-icon" aria-hidden="true">
-            <Icon name={adapter?.icon} size={16} /><span class="status-dot {serviceStatus(svc)}"></span>
-          </span>
+          <span class="dot {serviceStatus(svc)}" aria-hidden="true"></span>
           <span class="ellipsis" title={`Mounts & caches · ${svc.name}`}>Mounts &amp; caches · {svc.name}</span>
         </h2>
         {#if reading}<span class="meta" title={reading.at}>{formatAge(reading.at, $now)}</span>{/if}
@@ -164,7 +161,7 @@
         {:else}
           <ul class="mount-list">
             {#each data.mounts as m, i (`${m.remote}|${m.mountPoint ?? ''}|${i}`)}
-              {@const st = stateChip(m)}
+              {@const st = mountState(m)}
               {@const problem = mountProblem(m)}
               {@const pct = m.cache && m.cacheMaxBytes > 0 ? percentOf(m.cacheUsedBytes, m.cacheMaxBytes) : null}
               <li>
@@ -182,7 +179,7 @@
                       <span class="remote">{m.remote}</span>
                     </span>
                   {/if}
-                  <span class="chip dotted {st.tone}" title={st.title}>{st.text}</span>
+                  <span class="state" class:fail-text={st.tone === 'fail'} title={st.title}>{st.text}</span>
                 </div>
                 <div class="m-body">
                   <div class="m-cache">
@@ -202,20 +199,20 @@
                       <span class="cache-text muted" title="The app does not report a cache mode">Cache unknown</span>
                     {/if}
                   </div>
-                  <div class="chips">
-                    {#if m.outOfSpace}<span class="chip fail" title="The cache disk is out of space">out of space</span>{/if}
+                  <div class="facts">
+                    {#if m.outOfSpace}<span class="fail-text" title="The cache disk is out of space">out of space</span>{/if}
                     {#if m.erroredFiles > 0}
-                      <span class="chip fail num" title={`${m.erroredFiles} cached files could not be uploaded`}>{m.erroredFiles} errored</span>
+                      <span class="fail-text" title={`${m.erroredFiles} cached files could not be uploaded`}>{m.erroredFiles} errored</span>
                     {/if}
                     {#if m.uploadsInProgress > 0}
-                      <span class="chip ok num" title={`${m.uploadsInProgress} uploads in progress`}>↑ {m.uploadsInProgress} uploading</span>
+                      <span title={`${m.uploadsInProgress} uploads in progress`}>↑ {m.uploadsInProgress} uploading</span>
                     {/if}
                     {#if m.uploadsQueued > 0}
-                      <span class="chip warn num" title={`${m.uploadsQueued} uploads queued`}>{m.uploadsQueued} queued</span>
+                      <span title={`${m.uploadsQueued} uploads queued`}>{m.uploadsQueued} queued</span>
                     {/if}
-                    {#if m.cache && m.cacheMode}<span class="chip" title={`cache mode ${m.cacheMode}`}>{m.cacheMode}</span>{/if}
+                    {#if m.cache && m.cacheMode}<span title={`cache mode ${m.cacheMode}`}>{m.cacheMode}</span>{/if}
                     {#if m.cache}
-                      <span class="chip num" title={`${m.cachedFiles} files in the cache`}>{plural(m.cachedFiles, 'file')}</span>
+                      <span title={`${m.cachedFiles} files in the cache`}>{plural(m.cachedFiles, 'file')}</span>
                     {/if}
                   </div>
                 </div>
@@ -234,7 +231,7 @@
               {formatRate(data.speed)} · {data.activeTransfers} active
             </span>
             {#if data.errors > 0}
-              <span class="chip fail num" title={`${data.errors} transfer errors since the app started`}>{plural(data.errors, 'error')}</span>
+              <span class="t-errors fail-text" title={`${data.errors} transfer errors since the app started`}>{plural(data.errors, 'error')}</span>
             {/if}
           </p>
           {#if transfers.length === 0}
@@ -265,62 +262,58 @@
 </div>
 
 <style>
-  .storage { display: grid; gap: 16px; }
+  .storage { display: grid; gap: 28px; }
 
   .disks { display: grid; gap: 14px; }
   .disk { min-width: 0; }
-  .disk-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; min-width: 0; font-size: 13px; }
+  .disk-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 6px; min-width: 0; font-size: var(--t-base); }
   .path { font-weight: 550; flex: none; max-width: 60%; }
-  .figures { flex: 0 1 auto; min-width: 0; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .free { color: var(--ok); }
-  .stack { display: flex; gap: 2px; height: 14px; border-radius: 7px; overflow: hidden; background: var(--surface3); }
+  .figures { flex: 0 1 auto; min-width: 0; font-size: var(--t-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .free { color: var(--text2); }
+  .stack { display: flex; gap: 2px; height: 8px; border-radius: 2px; overflow: hidden; background: var(--surface3); }
   .stack > i { display: block; flex-basis: 0; min-width: 2px; transition: flex-grow 200ms var(--ease); }
-  .used { background: var(--accent); }
+  .used { background: var(--bar); }
   .used.warn { background: var(--warn); }
   .reserved { background: var(--dim); }
   .avail { background: var(--surface3); }
-  .legend { display: flex; gap: 16px; margin-top: 14px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+  .legend { display: flex; gap: 16px; margin-top: 12px; font-size: var(--t-sm); color: var(--muted); flex-wrap: wrap; }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
   .sw.avail { box-shadow: inset 0 0 0 1px var(--border2); }
 
-
-  .svc-icon { position: relative; display: inline-grid; color: var(--muted); flex: none; }
-  .svc-icon .status-dot { width: 9px; height: 9px; right: -4px; bottom: -3px; border-width: 2px; border-color: var(--surface); }
   .card-head h2 { min-width: 0; }
 
   .mount-list { list-style: none; margin: 0; padding: 0; display: grid; }
-  .mount-list li { display: grid; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--border); min-width: 0; }
+  .mount-list li { display: grid; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--border); min-width: 0; }
   .mount-list li:first-child { padding-top: 0; }
-  .m-head { display: flex; align-items: center; gap: 9px; min-width: 0; font-size: 13.5px; }
+  .m-head { display: flex; align-items: center; gap: 9px; min-width: 0; font-size: var(--t-base); }
   .route { flex: 1 1 auto; min-width: 0; }
   .remote { font-weight: 600; }
-  .point { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
-  .m-head .chip { flex: none; }
+  .point { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: var(--t-sm); }
+  .state { flex: none; font-size: var(--t-sm); color: var(--muted); }
   .m-body {
-    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 340px); grid-template-areas: 'chips cache';
-    align-items: center; gap: 8px 20px; padding-left: 16px;
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 340px); grid-template-areas: 'facts cache';
+    align-items: center; gap: 6px 20px; padding-left: 16px;
   }
   .m-cache { grid-area: cache; display: flex; align-items: center; justify-content: flex-end; gap: 12px; min-width: 0; }
   .m-cache .bar { flex: 1 1 auto; min-width: 48px; }
-  .cache-text { flex: 0 1 auto; min-width: 0; font-size: 12.5px; color: var(--text2); }
-  .chips { grid-area: chips; display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
-  .chips:empty { display: none; }
-  .chips .chip { flex: 0 1 auto; min-width: 0; }
-  .more { font-size: 12.5px; padding-top: 8px; }
+  .cache-text { flex: 0 1 auto; min-width: 0; font-size: var(--t-sm); color: var(--text2); }
+  .m-body .facts { grid-area: facts; }
+  .facts:empty { display: none; }
+  .more { font-size: var(--t-sm); padding-top: 8px; }
 
   .transfers { display: grid; gap: 8px; padding-top: 14px; }
-  .t-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
-  .label { font-size: 13px; font-weight: 600; flex: none; }
-  .t-figures { font-size: 12.5px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-  .t-head .chip { margin-left: auto; flex: none; }
-  .t-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; }
+  .t-head { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+  .label { font-size: var(--t-base); font-weight: 600; flex: none; }
+  .t-figures { font-size: var(--t-sm); color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .t-errors { margin-left: auto; flex: none; font-size: var(--t-sm); }
+  .t-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
   .t-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline; min-width: 0; }
-  .t-name { font-size: 13px; }
-  .t-pct { font-size: 12.5px; color: var(--text2); }
+  .t-name { font-size: var(--t-base); }
+  .t-pct { font-size: var(--t-sm); color: var(--text2); }
   .t-bar { grid-column: 1 / -1; }
 
   @container (max-width: 640px) {
-    .m-body { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'cache' 'chips'; padding-left: 0; }
+    .m-body { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'cache' 'facts'; padding-left: 0; }
     .m-cache { justify-content: flex-start; }
   }
 </style>
