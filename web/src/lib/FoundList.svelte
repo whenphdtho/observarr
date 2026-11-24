@@ -1,15 +1,27 @@
+<script module>
+  import { api } from './api.js';
+
+  // One listing at a time, shared by every FoundList on the page: the server answers a second one
+  // that starts meanwhile with 409.
+  let listing = null;
+
+  function listLocal() {
+    listing ??= api('GET', '/api/discovery/local').finally(() => { listing = null; });
+    return listing;
+  }
+</script>
+
 <script>
   import { onMount } from 'svelte';
-  import { api } from './api.js';
   import { adapterFor } from './data.js';
+  import { ADDING_APPS_DOCS } from './urls.js';
   import SuggestionRow from './SuggestionRow.svelte';
 
   // FoundList shows the apps found on this server — recognised Docker containers and config
   // folders — as soon as it appears. Listing them contacts no app (GET /api/discovery/local only
   // reads the container list and the folders); each row asks before anything is sent. `taken` are
-  // the names already in use; onadded(name) runs after each add, onempty() once the last row is
-  // gone.
-  let { adapters = [], taken = [], onadded, onempty } = $props();
+  // the names already in use; onempty() runs once the last row is gone.
+  let { adapters = [], taken = [], onempty } = $props();
 
   let loading = $state(true);
   let error = $state('');
@@ -21,11 +33,11 @@
 
   const setUp = $derived(sources.docker || sources.config);
 
-  export async function reload() {
+  async function reload() {
     loading = rows.length === 0;
     error = '';
     try {
-      const res = await api('GET', '/api/discovery/local');
+      const res = await listLocal();
       sources = res.sources;
       rows = res.suggestions;
       problems = res.errors ?? [];
@@ -54,7 +66,6 @@
   function added(id, name) {
     notice = `${name} added.`;
     remove(id);
-    onadded?.(name);
   }
 
   function dismissed(id) {
@@ -78,7 +89,7 @@
     <p class="found-status muted" tabindex="-1">
       Observarr can list the apps on this server when it can read the Docker container list or the apps' config
       folders. Both need a small change to how Observarr runs —
-      <a href="https://github.com/whenphdtho/observarr#adding-your-apps" target="_blank"
+      <a href={ADDING_APPS_DOCS} target="_blank"
         rel="noopener noreferrer">see “Adding your apps”</a>.
     </p>
   {:else if rows.length === 0}

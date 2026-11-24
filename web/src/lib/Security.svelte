@@ -9,7 +9,7 @@
   import { now } from './ticker.js';
   import { formatAge } from './format.js';
   import {
-    securityServices, activeBans, countOf, formatCount, formatLeft, formatUntil, formatTime,
+    securityServices, activeBans, formatCount, formatLeft, formatUntil, formatTime,
   } from './security.js';
 
   // Security shows how Observarr itself is protected (GET /api/security: failed sign-ins, lockouts,
@@ -228,11 +228,11 @@
             </div>
             <div class="fig">
               <span class="muted">Made here</span>
-              <b class="num">{formatCount(data.local)}</b>
+              <b class="num">{formatCount(data.local, data.capped)}</b>
             </div>
             <div class="fig">
               <span class="muted">From blocklists</span>
-              <b class="num">{formatCount(data.community)}</b>
+              <b class="num">{formatCount(data.community, data.capped)}</b>
             </div>
             <div class="fig types">
               <span class="muted">By type</span>

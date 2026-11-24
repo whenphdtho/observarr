@@ -21,8 +21,8 @@
   // The apps that can report mounts, by name, as the adapters list gives them.
   const mountApps = $derived($adapters.filter((a) => a.kinds?.includes('mounts')));
 
+  // cacheText is the figures of a mount that keeps a disk cache.
   function cacheText(m) {
-    if (!m.cache) return m.cacheMode ? `cache ${m.cacheMode}` : 'no cache';
     return m.cacheMaxBytes > 0 ?
       `${formatBytes(m.cacheUsedBytes)} of ${formatBytes(m.cacheMaxBytes)}` : `${formatBytes(m.cacheUsedBytes)}, no limit`;
   }
@@ -30,14 +30,23 @@
   function stateChip(m) {
     if (m.state === 'mounted') return { text: 'mounted', tone: 'ok', title: `mounted at ${m.mountPoint}` };
     if (m.state === 'unmounted') return { text: 'not mounted', tone: 'fail', title: 'not mounted' };
-    return { text: 'active', tone: '', title: 'in use; the app does not report where it is mounted' };
+    return {
+      text: 'in use', tone: '',
+      title: m.unlisted ?
+        'The remote is served but not mounted through the remote control; whether it is mounted otherwise is not reported' :
+        'The remote is served, but where or whether it is mounted is not reported',
+    };
   }
 
   function plural(n, word) {
     return `${n} ${word}${n === 1 ? '' : 's'}`;
   }
 
-  const mountsTone = $derived(sum.readings === 0 ? '' : sum.healthy < sum.total ? 'warn' : 'ok');
+  const mountsTone = $derived(sum.readings === 0 ? '' : sum.healthy < sum.listed ? 'warn' : 'ok');
+  const mountsSub = $derived(
+    [sum.healthy < sum.listed ? `${plural(sum.listed - sum.healthy, 'mount')} need a look` : 'All healthy',
+      sum.total > sum.listed ? `+${sum.total - sum.listed} not listed` : ''].filter(Boolean).join(' · '),
+  );
   const cacheSub = $derived(
     sum.caches === 0 ? 'No disk cache' :
       sum.cacheMax > 0 ? `of ${formatBytes(sum.cacheMax)} · ${percentOf(sum.cacheUsed, sum.cacheMax)}%` :
@@ -59,8 +68,8 @@
       <Kpi icon="hard-drive" label="Disks used" value="—" sub="No disks measured" />
     {/if}
     {#if sum.readings > 0}
-      <Kpi icon="folder-sync" label="Mounts healthy" value={`${sum.healthy}/${sum.total}`} tone={mountsTone}
-        sub={sum.healthy < sum.total ? `${plural(sum.total - sum.healthy, 'mount')} need a look` : 'All healthy'} />
+      <Kpi icon="folder-sync" label="Mounts healthy" value={`${sum.healthy}/${sum.listed}`} tone={mountsTone}
+        sub={mountsSub} />
       <Kpi icon="database" label="Cache used" value={sum.caches ? formatBytes(sum.cacheUsed) : '—'} sub={cacheSub}
         bar={sum.cacheMax > 0 ? percentOf(sum.cacheUsed, sum.cacheMax) : null}
         barTone={sum.cacheMax > 0 && percentOf(sum.cacheUsed, sum.cacheMax) >= 90 ? 'warn' : ''} />
@@ -161,25 +170,37 @@
               <li>
                 <div class="m-head">
                   <span class="dot {problem ? problem.tone : st.tone || 'unknown'}" aria-hidden="true"></span>
-                  <span class="route ellipsis" title={`${m.remote} → ${m.mountPoint || 'mount point not reported'}`}>
-                    <span class="remote">{m.remote}</span>
-                    <span class="muted" aria-hidden="true">→</span>
-                    <span class="visually-hidden">mounted at</span>
-                    {#if m.mountPoint}<span class="point">{m.mountPoint}</span>{:else}<span class="muted">mount point not reported</span>{/if}
-                  </span>
+                  {#if m.mountPoint}
+                    <span class="route ellipsis" title={`${m.remote} → ${m.mountPoint}`}>
+                      <span class="remote">{m.remote}</span>
+                      <span class="muted" aria-hidden="true">→</span>
+                      <span class="visually-hidden">mounted at</span>
+                      <span class="point">{m.mountPoint}</span>
+                    </span>
+                  {:else}
+                    <span class="route ellipsis" title={`${m.remote} · mount point unknown`}>
+                      <span class="remote">{m.remote}</span>
+                    </span>
+                  {/if}
                   <span class="chip dotted {st.tone}" title={st.title}>{st.text}</span>
                 </div>
                 <div class="m-body">
                   <div class="m-cache">
                     {#if pct !== null}
                       <div class="bar" class:warn={pct >= 90} class:fail={m.outOfSpace} role="img"
-                        aria-label={`cache ${cacheText(m)}, ${pct}%`}>
+                        aria-label={`Cache ${cacheText(m)}, ${pct}%`}>
                         <i style:width={`${m.outOfSpace ? 100 : pct}%`}></i>
                       </div>
                     {/if}
-                    <span class="num cache-text ellipsis" title={`cache ${cacheText(m)}`}>
-                      <span class="muted">Cache</span> {m.cache ? cacheText(m) : m.cacheMode || 'off'}
-                    </span>
+                    {#if m.cache}
+                      <span class="num cache-text ellipsis" title={`Cache ${cacheText(m)}`}>
+                        <span class="muted">Cache</span> {cacheText(m)}
+                      </span>
+                    {:else if m.cacheMode}
+                      <span class="cache-text muted" title={`Cache mode ${m.cacheMode}: nothing is cached on disk`}>No disk cache</span>
+                    {:else}
+                      <span class="cache-text muted" title="The app does not report a cache mode">Cache unknown</span>
+                    {/if}
                   </div>
                   <div class="chips">
                     {#if m.outOfSpace}<span class="chip fail" title="The cache disk is out of space">out of space</span>{/if}

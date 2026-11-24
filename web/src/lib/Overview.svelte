@@ -23,11 +23,11 @@
   const memPct = $derived(host && host.memTotal > 0 ? Math.round((host.memUsed / host.memTotal) * 100) : 0);
   const memParts = $derived(host ? formatBytes(host.memUsed).split(' ') : ['—', '']);
   // The server-wide sign-in limit is the one security state worth a line here; it is read every minute while the
-  // Overview is open, and a failed read just leaves it out.
+  // Overview is open (a small answer from memory), and a failed read just leaves it out.
   let lockedSec = $state(0);
   async function loadLock() {
     try {
-      lockedSec = (await api('GET', '/api/security')).serverLockedSec ?? 0;
+      lockedSec = (await api('GET', '/api/security/lock')).serverLockedSec;
     } catch {
       lockedSec = 0;
     }

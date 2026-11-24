@@ -58,9 +58,18 @@
   // openAddApps opens the Add apps page as a history entry of its own, so Back returns to the cards.
   const ADD_SUB = 'Found on this server, on your network, or by hand';
   function openAddApps() {
-    window.location.hash = ADD_APPS;
+    history.pushState({ fromApps: true }, '', window.location.pathname + window.location.search + ADD_APPS);
+    view = 'apps';
+    hash = ADD_APPS;
     mainEl?.scrollTo(0, 0);
     window.scrollTo(0, 0);
+  }
+
+  // backToApps returns to the cards: by going back when the page was opened from them, so no second entry of
+  // the cards is left in the history, else (e.g. after a reload) in place.
+  function backToApps() {
+    if (history.state?.fromApps) history.back();
+    else select('apps');
   }
 
   // jumpTo shows a service's card on the Apps view and moves focus to it.
@@ -181,7 +190,7 @@
       {:else if view === 'network'}
         <Network />
       {:else if view === 'apps' && addingApps}
-        <AddApps onback={() => select('apps')} />
+        <AddApps onback={backToApps} />
       {:else if view === 'apps'}
         <Apps {services} filtered={query.trim() !== ''} onadd={openAddApps} />
       {:else if view === 'security'}

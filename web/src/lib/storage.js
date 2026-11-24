@@ -46,17 +46,18 @@ export function mountServices(services) {
   return services.filter((s) => s.kinds?.includes('mounts'));
 }
 
-// mountSummary adds up the latest mounts readings of services: mounts healthy and in all, cache used and its
-// limit (limit 0 when any cache has none), transfer speed and transfers in progress. readings counts the
-// services with a usable reading.
+// mountSummary adds up the latest mounts readings of services: mounts healthy, listed and in all (a reading lists
+// only the first ones, so health is known for those only), cache used and its limit (limit 0 when any cache has
+// none), transfer speed and transfers in progress. readings counts the services with a usable reading.
 export function mountSummary(services) {
-  const out = { readings: 0, total: 0, healthy: 0, caches: 0, cacheUsed: 0, cacheMax: 0, unlimited: false,
+  const out = { readings: 0, total: 0, listed: 0, healthy: 0, caches: 0, cacheUsed: 0, cacheMax: 0, unlimited: false,
     speed: 0, active: 0 };
   for (const svc of services) {
     const data = svc.readings?.mounts?.data;
     if (!data || svc.readings.mounts.error) continue;
     out.readings += 1;
     out.total += data.total;
+    out.listed += data.mounts.length;
     out.speed += data.speed;
     out.active += data.activeTransfers;
     for (const m of data.mounts) {
@@ -67,7 +68,6 @@ export function mountSummary(services) {
       if (m.cacheMaxBytes > 0) out.cacheMax += m.cacheMaxBytes;
       else out.unlimited = true;
     }
-    // Mounts beyond those listed are counted in total but their health is unknown, so not healthy.
   }
   if (out.unlimited) out.cacheMax = 0;
   return out;

@@ -3,6 +3,7 @@
   import { widgets } from './shapes/index.js';
   import { formatPct, formatBytes, formatPercent, containerStatusClass } from './format.js';
   import { serviceStatus, cardSummary } from './status.js';
+  import { hostOf } from './urls.js';
   import Icon from './icons/Icon.svelte';
 
   // ServiceCard renders one service. Collapsed, it always has the same rows — header, one summary
@@ -34,14 +35,6 @@
       `${container.name}: ${container.state}${container.health ? ` (${container.health})` : ''}`,
   );
   const pill = $derived(!health ? { text: 'Checking', tone: '' } : service.up ? { text: 'Up', tone: 'ok' } : { text: 'Down', tone: 'fail' });
-
-  function hostOf(url) {
-    try {
-      return new URL(url).host;
-    } catch {
-      return url;
-    }
-  }
 
   function warningText(w) {
     return w.source ? `${w.source}: ${w.message}` : w.message;

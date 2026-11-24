@@ -94,7 +94,8 @@
     </div>
 
     <div class="fold">
-      <button type="button" class="fold-btn" aria-expanded={open.network} aria-controls="fold-network"
+      <button type="button" class="fold-btn" aria-expanded={open.network}
+        aria-controls={open.network ? 'fold-network' : undefined}
         onclick={() => { open.network = !open.network; }}>
         <Icon name="chevron-right" size={15} />
         <span class="fold-text">
@@ -125,7 +126,8 @@
 
     {#if linkedAvailable}
       <div class="fold">
-        <button type="button" class="fold-btn" aria-expanded={open.linked} aria-controls="fold-linked"
+        <button type="button" class="fold-btn" aria-expanded={open.linked}
+          aria-controls={open.linked ? 'fold-linked' : undefined}
           onclick={() => { open.linked = !open.linked; }}>
           <Icon name="chevron-right" size={15} />
           <span class="fold-text">
@@ -168,7 +170,7 @@
     {#key manualKey}
       <ServiceForm adapters={$adapters} {containers} ondone={manualDone} />
     {/key}
-    {#if manualNotice}<p class="ok-text">{manualNotice}</p>{/if}
+    {#if manualNotice}<p class="ok-text" aria-hidden="true">{manualNotice}</p>{/if}
   </section>
 </section>
 

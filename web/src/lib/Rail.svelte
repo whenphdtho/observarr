@@ -84,8 +84,9 @@
     {/if}
     {#if mounts.readings > 0}
       <li><a class="srow" href="#/storage">
-        <span class="dot {mounts.healthy === mounts.total ? 'ok' : 'warn'}"></span><span class="ellipsis">Mounts healthy</span>
-        <b class="num">{mounts.healthy}/{mounts.total}</b>
+        <span class="dot {mounts.healthy === mounts.listed ? 'ok' : 'warn'}"></span><span class="ellipsis">Mounts healthy</span>
+        <b class="num">{mounts.healthy}/{mounts.listed}{#if mounts.total > mounts.listed}
+          <em>+{mounts.total - mounts.listed} not listed</em>{/if}</b>
       </a></li>
     {/if}
     {#if bans.any}
@@ -150,6 +151,7 @@
   .srow:hover { background: var(--surface); }
   .srow .ellipsis { flex: 1; }
   .srow b { color: var(--text); font-weight: 550; white-space: nowrap; }
+  .srow b em { font-style: normal; color: var(--muted); font-weight: 450; font-size: 12px; }
 
   .budget {
     margin-top: 14px; display: grid; gap: 8px; padding: 14px 16px; border-radius: var(--r-lg);

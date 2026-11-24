@@ -26,7 +26,7 @@
       <span class="label">Mounts</span>
       {#if data}
         <span class="count num" class:warn={problems > 0}
-          title={`${sum.healthy} of ${data.total} mount${data.total === 1 ? '' : 's'} healthy${problems ? `, ${problems} need a look` : ''}`}>{sum.healthy}/{data.total}</span>
+          title={`${sum.healthy} of ${sum.listed} mount${sum.listed === 1 ? '' : 's'} healthy${problems ? `, ${problems} need a look` : ''}${sum.total > sum.listed ? `, +${sum.total - sum.listed} not listed` : ''}`}>{sum.healthy}/{sum.listed}</span>
       {/if}
       <span class="muted age">{age}</span>
     </p>
@@ -38,7 +38,7 @@
         <span class="chip num" title={`${formatRate(data.speed)}, ${data.activeTransfers} transfer${data.activeTransfers === 1 ? '' : 's'} in progress`}>
           <span aria-hidden="true">⇅</span> {formatRate(data.speed)}
         </span>
-        <a class="more" href="#/storage">Storage</a>
+        <a class="more" href="#/storage">Details in Storage</a>
       </div>
     {/if}
   {/if}

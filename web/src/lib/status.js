@@ -73,6 +73,14 @@ export function cardSummary(svc) {
   return { summary, lead };
 }
 
+// warningHref is the view that shows the details behind a service's health warnings.
+function warningHref(svc) {
+  const kinds = svc.kinds ?? [];
+  if (kinds.includes('mounts')) return '#/storage';
+  if (kinds.includes('security')) return '#/security';
+  return '#/apps';
+}
+
 // attention lists what needs a look, worst first: services down, health warnings and errors,
 // stuck queue items, and containers that are unhealthy, restarting or dead. Each entry is
 // { key, tone, title, detail, href }.
@@ -83,11 +91,12 @@ export function attention(services, containers) {
     if (health && !svc.up) {
       out.push({ key: `down-${svc.id}`, tone: 'fail', title: `${svc.name} is down`, detail: health.error || '', href: '#/apps' });
     }
+    const warnHref = warningHref(svc);
     for (const [i, w] of warnings(svc).entries()) {
       if (w.level === 'info') continue;
       out.push({
         key: `warn-${svc.id}-${i}`, tone: w.level === 'error' ? 'fail' : 'warn', title: svc.name,
-        detail: w.source ? `${w.source}: ${w.message}` : w.message, href: '#/apps',
+        detail: w.source ? `${w.source}: ${w.message}` : w.message, href: warnHref,
       });
     }
     for (const [i, it] of queueItems(svc).entries()) {

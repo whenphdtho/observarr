@@ -45,8 +45,10 @@ export function withHost(raw, host) {
   return `${scheme}://${host}${port ? ':' + port : ''}${path}`;
 }
 
-// The deployment guide on GitHub: the app does not serve its own docs, so links to them are absolute.
-export const DEPLOY_DOCS = 'https://github.com/whenphdtho/observarr/blob/main/docs/deploy.md';
+// The docs on GitHub: the app does not serve its own docs, so links to them are absolute.
+const REPO = 'https://github.com/whenphdtho/observarr';
+export const DEPLOY_DOCS = `${REPO}/blob/main/docs/deploy.md`;
+export const ADDING_APPS_DOCS = `${REPO}#adding-your-apps`;
 
 // connectDocs links to the guide's "Connect <app>" section, using GitHub's heading anchors.
 export function connectDocs(appName) {
