@@ -14,19 +14,27 @@
   --surface: #181723;
   --surface2: #1f1e2c;
   --surface3: #292738;
-  --border: #252333;
+  --border: #2a2839;
   --border2: #34313f;
+  /* Edge of a secondary button: at least 3:1 against the page so its shape is seen, not guessed. */
+  --btn-edge: #4a4759;
+  --btn-edge-hi: #5d5a6e;
   /* Form fields keep a stronger edge than --border2: they need >= 3:1 against the page. */
   --field-border: #66637a;
   --text: #ecebf3;
   --text2: #aeabbf;
-  --muted: #8b889d;
+  --muted: #9592a8;
   --dim: #5f5c70; /* decorative only (icons, idle dots, separators), never text */
   /* One accent: the primary action, the current view, focus and selection. */
   --accent: #ef7b55;
   --accent-hi: #f48f6d;
   --accent-ink: #1d0f0a;
   --accent-text: #f39a7c;
+  /* Problem rows: a faint wash of the state colour behind the row, the dot and words carry the state. */
+  --fail-wash: rgba(236, 108, 125, 0.08);
+  --warn-wash: rgba(227, 166, 80, 0.05);
+  --fail-edge: rgba(236, 108, 125, 0.4);
+  --warn-edge: rgba(227, 166, 80, 0.34);
   /* Data series and state. Each state colour keeps at least 4.5:1 on --bg and --surface. */
   --down: #45c4b0;
   --up: #9c8cf0;
@@ -60,6 +68,9 @@
 body { margin: 0; background: var(--bg); color: var(--text); caret-color: var(--accent); }
 ::selection { background: rgba(239, 123, 85, 0.32); color: #fff; }
 h1, h2, h3, p { margin: 0; }
+/* Disclosure summaries look like the controls they are. */
+summary { cursor: pointer; color: var(--text2); width: fit-content; border-radius: 4px; }
+summary:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
 
 /* Buttons: primary (accent) by default, .quiet for everything secondary, .ibtn for icon-only. */
 button {
@@ -69,14 +80,17 @@ button {
   transition: background 140ms var(--ease), border-color 140ms var(--ease), color 140ms var(--ease);
 }
 button:hover:not(:disabled) { background: var(--accent-hi); border-color: var(--accent-hi); }
+/* Pressed: a short dip in brightness, on every button whatever its fill. */
+button:active:not(:disabled) { filter: brightness(0.88); }
 button:disabled { opacity: 0.55; cursor: default; }
-button.quiet { color: var(--text); background: transparent; border-color: var(--border2); }
-button.quiet:hover:not(:disabled) { background: var(--surface2); border-color: var(--border2); }
+/* Secondary buttons keep a fill and an edge of their own, so they read as buttons, not as text. */
+button.quiet { color: var(--text); background: var(--surface2); border-color: var(--btn-edge); }
+button.quiet:hover:not(:disabled) { background: var(--surface3); border-color: var(--btn-edge-hi); }
 button.ibtn {
   width: 32px; height: 32px; padding: 0; flex: none;
   color: var(--text2); background: transparent; border-color: var(--border);
 }
-button.ibtn:hover:not(:disabled) { color: var(--text); background: var(--surface2); border-color: var(--border); }
+button.ibtn:hover:not(:disabled) { color: var(--text); background: var(--surface2); border-color: var(--border2); }
 
 input, select, textarea {
   font: inherit; font-size: var(--t-base); color: var(--text); background: var(--bg); border: 1px solid var(--field-border);
@@ -84,7 +98,21 @@ input, select, textarea {
 }
 input[type='checkbox'] { width: 16px; height: 16px; accent-color: var(--accent); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-a { color: var(--accent-text); text-underline-offset: 3px; }
+a { color: var(--accent-text); text-underline-offset: 3px; text-decoration-thickness: 1px; }
+a:hover { color: var(--accent-hi); }
+/* A link that leads to another view: accent words and a chevron, underlined on hover. */
+.go {
+  display: inline-flex; align-items: center; gap: 2px; color: var(--accent-text); font-size: var(--t-sm); font-weight: 550;
+  text-decoration: none; white-space: nowrap; border-radius: 4px;
+}
+.go:hover { color: var(--accent-hi); text-decoration: underline; }
+.go .icon { transition: transform 140ms var(--ease); }
+.go:hover .icon { transform: translateX(2px); }
+/* A whole row that is a link or button: a wash on hover, a chevron that brightens. */
+.row-link { cursor: pointer; transition: background 140ms var(--ease); }
+.row-link:hover { background: var(--surface2); }
+.row-link .chev { color: var(--muted); flex: none; display: grid; transition: color 140ms var(--ease), transform 140ms var(--ease); }
+.row-link:hover .chev, .row-link:focus-visible .chev { color: var(--text); transform: translateX(2px); }
 
 dialog {
   background: var(--rail); color: var(--text); border: 1px solid var(--border2); border-radius: var(--r-lg);
@@ -115,9 +143,11 @@ dialog .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap:
   padding: 16px 18px; min-width: 0;
 }
 /* A section of a view: set apart by a hairline above and the space around it, not by a box. */
-.section { min-width: 0; padding-top: 14px; border-top: 1px solid var(--border); }
-.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; min-width: 0; }
-.card-head h2 { font-size: var(--t-md); font-weight: 600; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.section { min-width: 0; padding-top: 18px; border-top: 1px solid var(--border); }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; min-width: 0; }
+.card-head h2 {
+  font-size: var(--t-lg); font-weight: 600; letter-spacing: -0.005em; display: flex; align-items: center; gap: 8px; min-width: 0;
+}
 /* Right-aligned note in a section head: a count, a unit, a time span. */
 .card-head .meta { font-size: var(--t-sm); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -131,13 +161,17 @@ dialog .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap:
 @media (max-width: 359px) { .kpis { grid-template-columns: minmax(0, 1fr); } }
 
 /* Segmented control: a group of aria-pressed buttons, one of them on. */
-.seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--r); flex: none; border: 1px solid var(--border); }
+.seg {
+  display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--r); flex: none;
+  background: var(--surface); border: 1px solid var(--border2);
+}
 .seg button {
-  padding: 3px 10px; border-radius: 4px; font-weight: 500; font-size: var(--t-sm); color: var(--muted);
+  padding: 3px 10px; border-radius: 4px; font-weight: 500; font-size: var(--t-sm); color: var(--text2);
   background: transparent; border: 0;
 }
 .seg button:hover:not(:disabled) { background: var(--surface2); border: 0; color: var(--text); }
-.seg button[aria-pressed='true'] { background: var(--surface3); color: var(--text); }
+.seg button[aria-pressed='true'] { background: var(--surface3); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35); }
+.seg button[aria-pressed='true']:hover:not(:disabled) { background: var(--surface3); }
 
 /* Something to set up or know: the notices of the host and container sources. */
 .banner {
@@ -167,7 +201,7 @@ table.data { width: 100%; border-collapse: collapse; font-size: var(--t-base); }
   padding: 0; gap: 4px; border: 0; border-radius: 4px; background: transparent; color: inherit;
   font: inherit; font-weight: inherit;
 }
-.data th button:hover:not(:disabled) { background: transparent; border: 0; color: var(--text); }
+.data th button:hover:not(:disabled) { background: transparent; border: 0; color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
 @container (max-width: 759px) {
   .table-wrap { margin: 0; }
   .data, .data tr, .data th, .data td { display: block; width: 100%; }

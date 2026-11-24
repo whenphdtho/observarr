@@ -146,7 +146,7 @@
           <section class="section" aria-labelledby="disks-title">
             <div class="card-head">
               <h2 id="disks-title">Disks</h2>
-              <a class="meta" href="#/storage">Details in Storage</a>
+              <a class="go" href="#/storage">Details in Storage<Icon name="chevron-right" size={14} /></a>
             </div>
             <ul class="rows">
               {#each disks as d (d.path)}
@@ -165,8 +165,8 @@
         {#if net.length > 0}
           <section class="section" aria-labelledby="net-title">
             <div class="card-head">
-              <h2 id="net-title">Interfaces</h2>
-              <a class="meta" href="#/network">Mbit/s · by app</a>
+              <h2 id="net-title">Interfaces <span class="unit">Mbit/s</span></h2>
+              <a class="go" href="#/network">By app in Network<Icon name="chevron-right" size={14} /></a>
             </div>
             <ul class="rows">
               {#each net as n (n.name)}
@@ -304,8 +304,7 @@
   .pair { display: grid; gap: 28px 32px; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; }
   .pair.single { grid-template-columns: minmax(0, 1fr); }
 
-  a.meta { text-decoration: none; }
-  a.meta:hover { color: var(--text); }
+  .unit { font-size: var(--t-sm); font-weight: 400; color: var(--muted); }
   .rows { list-style: none; margin: 0; padding: 0; }
   .rows li {
     display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border);

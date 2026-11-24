@@ -77,7 +77,7 @@
   }
 </script>
 
-<article class="card service" class:open={expanded} id={`service-${service.id}`} tabindex="-1"
+<article class="card service {status === 'fail' || status === 'warn' ? status : ''}" class:open={expanded} id={`service-${service.id}`} tabindex="-1"
   aria-labelledby={`service-name-${service.id}`}>
   <header>
     <span class="tile-icon" aria-hidden="true"><Icon name={adapter?.icon} /></span>
@@ -147,7 +147,7 @@
   {/if}
 
   <footer>
-    <button type="button" class="toggle" aria-expanded={expanded} aria-controls={expanded ? detailsId : undefined}
+    <button type="button" class="quiet toggle" aria-expanded={expanded} aria-controls={expanded ? detailsId : undefined}
       onclick={() => ontoggle?.(service.id)}>
       <Icon name="chevron-right" size={15} />
       {expanded ? 'Hide details' : 'Show details'}
@@ -179,11 +179,14 @@
 
 <style>
   .service {
-    display: grid; grid-template-rows: auto auto 1fr auto; gap: 10px; scroll-margin-top: 16px; padding: 14px 16px 10px;
+    display: grid; grid-template-rows: auto auto 1fr auto; gap: 10px; scroll-margin-top: 16px; padding: 14px 16px 12px;
   }
   .service.open { grid-column: 1 / -1; grid-template-rows: none; }
   .service:focus { outline: none; }
   .service:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  /* A card with a problem is edged in its state's colour; a healthy one keeps the quiet edge. */
+  .service.fail { border-color: var(--fail-edge); }
+  .service.warn { border-color: var(--warn-edge); }
   header { display: flex; align-items: center; gap: 12px; min-width: 0; }
   .ident { display: grid; min-width: 0; flex: 1; line-height: 1.35; }
   h2 { font-size: var(--t-md); font-weight: 600; }
@@ -221,14 +224,11 @@
   .container-line .num { flex: none; color: var(--muted); }
 
   footer {
-    display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; margin: 0 -6px;
-    padding-top: 6px; border-top: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0;
+    padding-top: 10px; border-top: 1px solid var(--border);
   }
-  .toggle {
-    padding: 4px 8px; gap: 6px; color: var(--text2); background: transparent; border-color: transparent; font-weight: 500;
-  }
-  .toggle:hover:not(:disabled) { color: var(--text); background: var(--surface2); border-color: transparent; }
-  .toggle :global(.icon) { transition: transform 160ms var(--ease); }
+  .toggle { padding: 5px 11px 5px 7px; gap: 4px; }
+  .toggle :global(.icon) { color: var(--text2); transition: transform 160ms var(--ease); }
   .toggle[aria-expanded='true'] :global(.icon) { transform: rotate(90deg); }
   .manage { display: flex; gap: 8px; margin-left: auto; }
   .manage button { padding: 5px 11px; }

@@ -221,7 +221,7 @@
     display: flex; align-items: center; gap: 9px; margin-bottom: 18px; padding: 0 10px; color: var(--muted);
     border: 1px solid var(--border2); border-radius: var(--r);
   }
-  .search:focus-within { border-color: var(--accent); }
+  .search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
   .search input { flex: 1; min-width: 0; padding: 7px 0; border: 0; border-radius: 0; background: transparent; outline: none; }
   .search input::placeholder { color: var(--muted); }
   .search input::-webkit-search-cancel-button { display: none; }
@@ -236,8 +236,9 @@
     transition: background 140ms var(--ease), color 140ms var(--ease);
   }
   .vbtn :global(.icon) { color: var(--muted); }
-  .vbtn:hover { background: var(--surface); color: var(--text); }
-  .vbtn[aria-current='page'] { background: var(--surface2); color: var(--text); }
+  .vbtn:hover { background: var(--surface2); color: var(--text); }
+  .vbtn:hover :global(.icon) { color: var(--text2); }
+  .vbtn[aria-current='page'] { background: var(--surface3); color: var(--text); font-weight: 600; }
   .vbtn[aria-current='page'] :global(.icon) { color: var(--accent); }
 
   .acct { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 12px 10px 0; border-top: 1px solid var(--border); }

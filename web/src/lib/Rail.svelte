@@ -43,7 +43,7 @@
         {@const line = serviceLine(svc)}
         {@const lineText = [line.text, line.detail].filter(Boolean).join(' · ')}
         <li>
-          <button type="button" class="app" onclick={() => onjump(svc.id)} aria-label={`${svc.name}: ${lineText}`}>
+          <button type="button" class="app row-link {status === 'fail' || status === 'warn' ? status : ''}" onclick={() => onjump(svc.id)} aria-label={`${svc.name}: ${lineText}`}>
             <span class="tile-icon" aria-hidden="true">
               <Icon name={adapterFor($adapters, svc.type)?.icon} size={17} />
               <span class="status-dot {status}"></span>
@@ -54,7 +54,7 @@
                 {line.text}{#if line.detail}{' · '}<span class={line.tone}>{line.detail}</span>{/if}
               </span>
             </span>
-            <span class="go" aria-hidden="true"><Icon name="chevron-right" size={14} /></span>
+            <span class="chev" aria-hidden="true"><Icon name="chevron-right" size={15} /></span>
           </button>
         </li>
       {/each}
@@ -66,46 +66,48 @@
   <h2 class="cap" id={`${uid}-system`}>System</h2>
   <ul class="sys">
     {#if containers.length}
-      <li><a class="srow" href="#/system">
+      <li><a class="srow row-link" href="#/system">
         <span class="dot" class:warn={running < containers.length}></span>
-        <span class="ellipsis">Containers</span><b class="num">{running}/{containers.length}</b>
+        <span class="ellipsis">Containers</span><b class="num" class:warn-text={running < containers.length}>{running}/{containers.length}</b>
       </a></li>
     {/if}
     {#if host}
-      <li><a class="srow" href="#/system">
-        <span class="dot" class:warn={host.cpuPercent >= 90}></span><span class="ellipsis">Host CPU</span><b class="num">{formatPct(host.cpuPercent)}</b>
+      <li><a class="srow row-link" href="#/system">
+        <span class="dot" class:warn={host.cpuPercent >= 90}></span><span class="ellipsis">Host CPU</span>
+        <b class="num" class:warn-text={host.cpuPercent >= 90}>{formatPct(host.cpuPercent)}</b>
       </a></li>
-      <li><a class="srow" href="#/system">
-        <span class="dot" class:warn={memPct >= 90}></span><span class="ellipsis">Memory used</span><b class="num">{formatBytes(host.memUsed)}</b>
+      <li><a class="srow row-link" href="#/system">
+        <span class="dot" class:warn={memPct >= 90}></span><span class="ellipsis">Memory used</span>
+        <b class="num" class:warn-text={memPct >= 90}>{formatBytes(host.memUsed)}</b>
       </a></li>
       {#if disk}
-        <li><a class="srow" href="#/system" title={disk.path}>
+        <li><a class="srow row-link" href="#/system" title={disk.path}>
           <span class="dot" class:warn={diskLow}></span><span class="ellipsis">Disk free · {disk.path}</span>
-          <b class="num">{formatBytes(disk.avail)}</b>
+          <b class="num" class:warn-text={diskLow}>{formatBytes(disk.avail)}</b>
         </a></li>
       {/if}
     {/if}
     {#if mounts.readings > 0}
-      <li><a class="srow" href="#/storage">
+      <li><a class="srow row-link" href="#/storage">
         <span class="dot" class:warn={mounts.healthy < mounts.listed}></span><span class="ellipsis">Mounts healthy</span>
-        <b class="num">{mounts.healthy}/{mounts.listed}{#if mounts.total > mounts.listed}
+        <b class="num" class:warn-text={mounts.healthy < mounts.listed}>{mounts.healthy}/{mounts.listed}{#if mounts.total > mounts.listed}
           <em>+{mounts.total - mounts.listed} not listed</em>{/if}</b>
       </a></li>
     {/if}
     {#if bans.any}
-      <li><a class="srow" href="#/security">
+      <li><a class="srow row-link" href="#/security">
         <span class="dot"></span><span class="ellipsis">Active bans</span>
         <b class="num">{formatCount(bans.bans, bans.capped)}</b>
       </a></li>
     {/if}
     {#if !host && !containers.length}
-      <li><a class="srow" href="#/system"><span class="dot"></span><span class="ellipsis">No host figures yet</span></a></li>
+      <li><a class="srow row-link" href="#/system"><span class="dot"></span><span class="ellipsis">No host figures yet</span></a></li>
     {/if}
   </ul>
 
   {#if traffic}
     {@const total = traffic.todayRx + traffic.todayTx}
-    <a class="budget" href="#/network">
+    <a class="budget row-link" href="#/network">
       {#if budget}
         {@const pct = Math.round((budget.usedBytes / budget.limitBytes) * 100)}
         <span class="row1">
@@ -136,30 +138,37 @@
     background: transparent; border: 0; border-radius: var(--r); color: var(--text); font-weight: 400;
     font-size: var(--t-base); text-align: left;
   }
-  .app:hover:not(:disabled) { background: var(--surface); }
+  .app:hover:not(:disabled) { background: var(--surface2); }
+  /* A service with a problem keeps a faint wash of its state colour, so it is found without reading. */
+  .app.fail { background: var(--fail-wash); }
+  .app.warn { background: var(--warn-wash); }
+  .app.fail:hover:not(:disabled) { background: rgba(236, 108, 125, 0.14); }
+  .app.warn:hover:not(:disabled) { background: rgba(227, 166, 80, 0.13); }
+  .app:focus-visible { outline-offset: 0; }
+  .apps { display: grid; gap: 2px; }
   .app .tile-icon { width: 32px; height: 32px; }
   .text { display: grid; min-width: 0; flex: 1; line-height: 1.35; }
   .name { font-weight: 550; }
   .line { font-size: var(--t-sm); color: var(--muted); }
   .line .warn { color: var(--warn); }
   .line .fail { color: var(--fail); }
-  .go { color: var(--dim); opacity: 0; transition: opacity 140ms; display: grid; }
-  .app:hover .go, .app:focus-visible .go { opacity: 1; }
 
   .srow {
     display: flex; align-items: center; gap: 10px; padding: 6px 8px; margin: 0 -8px; border-radius: var(--r);
     font-size: var(--t-base); color: var(--text2); text-decoration: none; min-width: 0;
   }
-  .srow:hover { background: var(--surface); }
+  .srow:hover { color: var(--text); }
+  .srow:focus-visible, .budget:focus-visible { outline-offset: 0; }
   .srow .ellipsis { flex: 1; }
   .srow b { color: var(--text); font-weight: 550; white-space: nowrap; }
+  .srow b.warn-text { color: var(--warn); }
   .srow b em { font-style: normal; color: var(--muted); font-weight: 400; font-size: var(--t-sm); }
 
   .budget {
     margin: 10px -8px 0; display: grid; gap: 6px; padding: 8px; border-radius: var(--r);
     color: var(--text2); text-decoration: none; font-size: var(--t-base);
   }
-  .budget:hover { background: var(--surface); }
+  .budget:hover { color: var(--text); }
   .row1 { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
   .row1 b { color: var(--text); font-weight: 550; white-space: nowrap; }
   .small { font-size: var(--t-sm); }

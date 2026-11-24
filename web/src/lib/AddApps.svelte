@@ -196,6 +196,7 @@
     text-decoration: none; padding: 4px 8px 4px 4px; border-radius: var(--r);
   }
   .back:hover { color: var(--text); background: var(--surface2); }
+  .back:focus-visible { outline-offset: 0; }
   .back :global(.icon) { transform: rotate(180deg); }
   .card-head { flex-wrap: wrap; }
 
@@ -206,7 +207,9 @@
     background: transparent; border: 0; color: var(--text); border-radius: var(--r); white-space: normal;
   }
   .fold-btn:hover:not(:disabled) { background: var(--surface2); border: 0; }
-  .fold-btn :global(.icon) { margin-top: 2px; color: var(--muted); transition: transform 160ms var(--ease); }
+  .fold-btn:hover:not(:disabled) b { text-decoration: underline; text-underline-offset: 3px; }
+  .fold-btn:focus-visible { outline-offset: 0; }
+  .fold-btn :global(.icon) { margin-top: 2px; color: var(--text2); transition: transform 160ms var(--ease); }
   .fold-btn[aria-expanded='true'] :global(.icon) { transform: rotate(90deg); }
   .fold-text { display: grid; gap: 1px; min-width: 0; font-weight: 400; }
   .fold-text b { font-weight: 600; font-size: var(--t-base); }

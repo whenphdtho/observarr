@@ -2,6 +2,7 @@
   import { now } from '../ticker.js';
   import { formatAge, formatBytes, formatRate } from '../format.js';
   import { mountSummary, mountProblem } from '../storage.js';
+  import Icon from '../icons/Icon.svelte';
 
   // Mounts renders one shape.Mounts reading compactly: mounts healthy of all, cache used of its limit and the
   // transfer speed. The Storage view shows the details. It knows nothing about which app produced it.
@@ -40,7 +41,7 @@
             <span aria-hidden="true">⇅</span> {formatRate(data.speed)}
           </span>
         </span>
-        <a class="more" href="#/storage">Details in Storage</a>
+        <a class="go more" href="#/storage">Details in Storage<Icon name="chevron-right" size={14} /></a>
       </div>
     {/if}
   {/if}
@@ -56,5 +57,5 @@
   .error { font-size: var(--t-base); }
   .meta { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
   .meta .facts { flex: 0 1 auto; color: var(--text2); }
-  .more { margin-left: auto; flex: none; font-size: var(--t-sm); white-space: nowrap; }
+  .more { margin-left: auto; flex: none; }
 </style>
