@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -26,19 +27,23 @@ const (
 // host and container figures, then a "service" or "removed" event per change, a "system" event per new sample (at
 // most one per systemEvery; a newer sample replaces one not sent yet), and a ping comment now and then so proxies
 // keep the connection open. The stream ends when the client leaves, when the server shuts down (the request context
-// ends), when the session is found gone at a ping (logged out or expired), or when the hub drops the subscription
-// because the client fell behind; the browser then reconnects and gets a fresh snapshot.
+// ends), when its session is ended by another one's "sign out others", when the session is found gone at a ping
+// (logged out or expired), or when the hub drops the subscription because the client fell behind; the browser then
+// reconnects and gets a fresh snapshot.
 func (s *Server) events(w http.ResponseWriter, r *http.Request, sess store.Session) {
 	if r.Method != http.MethodGet { // the "GET" route also matches HEAD, which would hold a slot for nothing
 		writeError(w, http.StatusNotFound, "unknown API endpoint")
 		return
 	}
-	if !s.openStream(sess.CSRF) {
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	slot, ok := s.openStream(sess.CSRF, cancel)
+	if !ok {
 		w.Header().Set("Retry-After", "5")
 		writeError(w, http.StatusServiceUnavailable, "too many live connections; try again shortly")
 		return
 	}
-	defer s.closeStream(sess.CSRF)
+	defer s.closeStream(sess.CSRF, slot)
 
 	// Subscribe before taking the snapshot: a change in between then arrives twice, which is harmless since
 	// every event carries the whole service, instead of not at all.
@@ -97,7 +102,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, sess store.Sessi
 	for {
 		var msg []byte
 		select {
-		case <-r.Context().Done():
+		case <-ctx.Done():
 			return
 		case ev, ok := <-events:
 			if !ok {
@@ -129,30 +134,50 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, sess store.Sessi
 	}
 }
 
+// streamSlot is one open live event stream; end stops it.
+type streamSlot struct{ end context.CancelFunc }
+
 // openStream takes a stream slot for the session whose CSRF token is key (unique per session), or reports false
-// when the server or the session has none left.
-func (s *Server) openStream(key string) bool {
+// when the server or the session has none left. end stops the stream.
+func (s *Server) openStream(key string, end context.CancelFunc) (*streamSlot, bool) {
 	s.streamsMu.Lock()
 	defer s.streamsMu.Unlock()
-	if s.sessionStreams[key] >= maxSessionStreams || s.streams.Load() >= maxStreams {
-		return false
+	if len(s.sessionStreams[key]) >= maxSessionStreams || s.streams.Load() >= maxStreams {
+		return nil, false
 	}
 	if s.sessionStreams == nil {
-		s.sessionStreams = map[string]int{}
+		s.sessionStreams = map[string]map[*streamSlot]bool{}
 	}
-	s.sessionStreams[key]++
+	if s.sessionStreams[key] == nil {
+		s.sessionStreams[key] = map[*streamSlot]bool{}
+	}
+	slot := &streamSlot{end: end}
+	s.sessionStreams[key][slot] = true
 	s.streams.Add(1)
-	return true
+	return slot, true
 }
 
 // closeStream gives back a slot openStream took.
-func (s *Server) closeStream(key string) {
+func (s *Server) closeStream(key string, slot *streamSlot) {
 	s.streamsMu.Lock()
 	defer s.streamsMu.Unlock()
-	if s.sessionStreams[key]--; s.sessionStreams[key] == 0 {
+	if delete(s.sessionStreams[key], slot); len(s.sessionStreams[key]) == 0 {
 		delete(s.sessionStreams, key)
 	}
 	s.streams.Add(-1)
+}
+
+// endOtherStreams stops the streams of every session but the one whose CSRF token is keep.
+func (s *Server) endOtherStreams(keep string) {
+	s.streamsMu.Lock()
+	defer s.streamsMu.Unlock()
+	for key, slots := range s.sessionStreams {
+		if key != keep {
+			for slot := range slots {
+				slot.end()
+			}
+		}
+	}
 }
 
 // change encodes a hub event into buf.

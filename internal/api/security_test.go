@@ -46,6 +46,30 @@ func TestSecurityNeedsSession(t *testing.T) {
 	if code, _, _ := c.do("POST", "/api/security/sign-out-others", "", nil); code != 401 {
 		t.Fatalf("POST without a session = %d, want 401", code)
 	}
+	if code, _, _ := c.do("GET", "/api/security/lock", "", nil); code != 401 {
+		t.Fatalf("GET /api/security/lock without a session = %d, want 401", code)
+	}
+}
+
+func TestSecurityLock(t *testing.T) {
+	c := newServer(t, config.Config{})
+	c.do("POST", "/api/setup", adminSetup, nil)
+	lock := func() any {
+		code, data, _ := c.do("GET", "/api/security/lock", "", nil)
+		if code != 200 {
+			t.Fatalf("GET /api/security/lock = %d %v", code, data)
+		}
+		return data["serverLockedSec"]
+	}
+	if got := lock(); got != float64(0) {
+		t.Fatalf("serverLockedSec = %v, want 0", got)
+	}
+	for i := range auth.GlobalAttempts {
+		c.srv.Limiter.Attempt(netip.AddrFrom4([4]byte{198, 51, 100, byte(i)}).String())
+	}
+	if got, ok := lock().(float64); !ok || got <= 0 || got > auth.GlobalWindow.Seconds() {
+		t.Fatalf("serverLockedSec after a flood = %v", got)
+	}
 }
 
 func TestSecurityFailedSignInsAndLockouts(t *testing.T) {

@@ -20,6 +20,7 @@ type ServiceState struct {
 	Type     string                       `json:"type"`
 	Name     string                       `json:"name"`
 	URL      string                       `json:"url"`
+	HasKey   bool                         `json:"hasKey"` // a key is saved; never the key itself
 	Kinds    []shape.Kind                 `json:"kinds"`
 	Up       bool                         `json:"up"` // last health probe succeeded
 	Readings map[shape.Kind]shape.Reading `json:"readings"`
@@ -85,7 +86,7 @@ func NewHub() *Hub {
 	}
 }
 
-// Put adds a service or replaces its metadata (Type, Name, URL, Kinds, Container). Existing readings and
+// Put adds a service or replaces its metadata (Type, Name, URL, HasKey, Kinds, Container). Existing readings and
 // Up are kept. It always emits a "service" event, since metadata changes (e.g. a rename) are
 // always worth telling subscribers about.
 func (h *Hub) Put(s ServiceState) {
@@ -104,6 +105,7 @@ func (h *Hub) Put(s ServiceState) {
 	e.state.Type = s.Type
 	e.state.Name = s.Name
 	e.state.URL = s.URL
+	e.state.HasKey = s.HasKey
 	e.state.Kinds = slices.Clone(s.Kinds)
 	e.state.Container = cloneBrief(s.Container)
 

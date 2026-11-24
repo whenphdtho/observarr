@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"math"
@@ -239,7 +240,8 @@ func (s *Server) updateService(w http.ResponseWriter, r *http.Request, sess stor
 	// A saved key goes only to the address it was entered for: moving it to another host needs it again.
 	oldURL, err := url.Parse(old.BaseURL)
 	if oldKey != "" && p.APIKey == nil && (err != nil || origin(oldURL) != origin(sp.target.BaseURL)) {
-		writeError(w, http.StatusBadRequest, "enter the API key again when changing the address")
+		label := cmp.Or(strings.ToLower(sp.adapter.Info().KeyLabel), "API key")
+		writeError(w, http.StatusBadRequest, "enter the "+label+" again when changing the address")
 		return
 	}
 	keyChanged := keyErr != nil || in.APIKey != oldKey
@@ -354,8 +356,8 @@ func (s *Server) stateOf(svc store.Service) state.ServiceState {
 	if a, ok := s.Registry.Get(svc.Type); ok {
 		kinds = a.Info().Kinds
 	}
-	return state.ServiceState{ID: svc.ID, Type: svc.Type, Name: svc.Name, URL: svc.BaseURL, Kinds: kinds,
-		Readings: map[shape.Kind]shape.Reading{}, Container: brief(svc.Container, s.systemSnapshot().Containers)}
+	return state.ServiceState{ID: svc.ID, Type: svc.Type, Name: svc.Name, URL: svc.BaseURL, HasKey: len(svc.SealedKey) > 0,
+		Kinds: kinds, Readings: map[shape.Kind]shape.Reading{}, Container: brief(svc.Container, s.systemSnapshot().Containers)}
 }
 
 // brief is what the service card shows of container name, from the sampler's containers; nil for no link.

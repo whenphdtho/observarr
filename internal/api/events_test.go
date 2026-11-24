@@ -226,3 +226,28 @@ func TestEventsEndAtLogout(t *testing.T) {
 	}
 	eventually(t, "the handler ends", func() bool { return e.srv.streams.Load() == 0 })
 }
+
+// Signing out the other sessions ends their streams at once, not at their next session check (an hour away here);
+// the caller's own stream stays open.
+func TestEventsEndWhenSignedOutByAnother(t *testing.T) {
+	e := newServicesEnv(t, func(s *Server) { s.pingEvery = time.Hour })
+	other := newClientFor(e.client)
+	if code, _, _ := other.do("POST", "/api/login", admin, nil); code != 200 {
+		t.Fatal("login failed")
+	}
+	own, ended := e.openEvents(timeout(t)), other.openEvents(timeout(t))
+	own.until("snapshot", nil)
+	ended.until("snapshot", nil)
+	if code, _ := e.send("POST", "/api/security/sign-out-others", ""); code != 200 {
+		t.Fatalf("sign out others = %d", code)
+	}
+	for {
+		if _, _, ok := ended.next(); !ok {
+			break
+		}
+	}
+	if err := ended.sc.Err(); err != nil {
+		t.Fatalf("stream failed (%v) instead of ending", err)
+	}
+	eventually(t, "the ended stream's slot is free", func() bool { return e.srv.streams.Load() == 1 })
+}

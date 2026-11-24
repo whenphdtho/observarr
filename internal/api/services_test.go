@@ -164,7 +164,7 @@ func newServicesEnv(t *testing.T, options ...func(*Server)) *servicesEnv {
 	e := &servicesEnv{
 		app: &fakeApp{info: adapter.Info{Type: "fake", Name: "Fake", DefaultPort: appPort, NeedsAPIKey: true,
 			Kinds: []shape.Kind{shape.KindHealth}, Icon: "box"}},
-		keyless: &fakeApp{info: adapter.Info{Type: "keyless", Name: "Keyless", DefaultPort: appPort,
+		keyless: &fakeApp{info: adapter.Info{Type: "keyless", Name: "Keyless", DefaultPort: appPort, KeyLabel: "Token",
 			Kinds: []shape.Kind{shape.KindHealth}}},
 		appURL:  appURL,
 		appPort: appPort,
@@ -528,12 +528,17 @@ func TestPatchRemovesKey(t *testing.T) {
 	e := newServicesEnv(t)
 	code, data := e.send("POST", "/api/services", fmt.Sprintf(`{"type":"keyless","name":"Open","url":%q,"apiKey":%q}`,
 		e.appURL+"/open", testKey))
-	if code != 201 {
+	if code != 201 || data["hasKey"] != true {
 		t.Fatalf("create = %d %v", code, data)
 	}
 	id := int64(data["id"].(float64))
+	// An optional key is also needed again for another address; the error names it as the adapter does.
+	if code, data := e.send("PATCH", e.path(id), fmt.Sprintf(`{"url":%q}`, newAppServer(t).URL+"/open")); code != 400 ||
+		data["error"] != "enter the token again when changing the address" {
+		t.Fatalf("patch url without the key = %d %v, want 400", code, data)
+	}
 	detects := e.keyless.detects.Load()
-	if code, data := e.send("PATCH", e.path(id), `{"apiKey":""}`); code != 200 {
+	if code, data := e.send("PATCH", e.path(id), `{"apiKey":""}`); code != 200 || data["hasKey"] != false {
 		t.Fatalf("remove key = %d %v", code, data)
 	}
 	if svc, _ := e.srv.Store.ServiceByID(context.Background(), id); svc.SealedKey != nil {

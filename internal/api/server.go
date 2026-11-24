@@ -53,7 +53,7 @@ type Server struct {
 	listingLocal atomic.Bool       // the apps on this server are being listed (GET /api/discovery/local)
 
 	streamsMu      sync.Mutex
-	sessionStreams map[string]int // open live event streams per session, keyed by its CSRF token
+	sessionStreams map[string]map[*streamSlot]bool // open live event streams per session, keyed by its CSRF token
 
 	failMu   sync.Mutex
 	failures map[failKey]failCount // the failures each group's latest audit row counts
@@ -97,6 +97,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/system/history", s.requireSession(s.systemHistory))
 	mux.Handle("GET /api/network", s.requireSession(s.network))
 	mux.Handle("GET /api/security", s.requireSession(s.security))
+	mux.Handle("GET /api/security/lock", s.requireSession(s.securityLock))
 	mux.Handle("POST /api/security/sign-out-others", s.requireSession(s.signOutOthers))
 	mux.Handle("GET /api/discovery", s.requireSession(s.discoveryState))
 	mux.Handle("GET /api/discovery/local", s.requireSession(s.discoverLocal))
