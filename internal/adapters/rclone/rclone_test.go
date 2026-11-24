@@ -415,8 +415,8 @@ func TestProbeHealthWarnsOfCacheProblems(t *testing.T) {
 	if h.Version != "1.71.2" {
 		t.Errorf("Version = %q", h.Version)
 	}
-	want := []shape.Warning{ // in vfs/list's order
-		{Level: shape.LevelWarning, Source: "media-crypt:", Message: "1 cached file could not be uploaded"},
+	want := []shape.Warning{ // in vfs/list's order; a whole remote loses its colon so "source: message" reads well
+		{Level: shape.LevelWarning, Source: "media-crypt", Message: "1 cached file could not be uploaded"},
 		{Level: shape.LevelError, Source: "cloud:backup", Message: "the cache disk is out of space"},
 	}
 	if !slices.Equal(h.Warnings, want) {

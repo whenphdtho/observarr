@@ -16,6 +16,10 @@ const reconnecting = writable(false);
 // lastEvent is when the stream last delivered an event (ms since epoch), 0 before the first.
 const lastEvent = writable(0);
 
+// synced is true once the stream has delivered its first service snapshot, false before it and after close():
+// until then an empty service list means "not known yet", not "no services".
+const synced = writable(false);
+
 const RECONNECT_HINT_DELAY = 3000;
 // A browser EventSource retries on its own only while the connection merely drops; once the
 // server (or a proxy in front of it) answers with a non-2xx status — a 503 over the stream cap,
@@ -54,6 +58,7 @@ function applySnapshot(list) {
   const next = {};
   for (const svc of list) next[svc.id] = svc;
   servicesById.set(next);
+  synced.set(true);
 }
 
 function applyService(svc) {
@@ -151,6 +156,7 @@ function close() {
   retryDelay = RETRY_BASE;
   disarmReconnectHint();
   lastEvent.set(0);
+  synced.set(false);
   servicesById.set({});
   systemSnapshot.set(null);
 }
@@ -167,6 +173,6 @@ export const serviceList = derived(servicesById, (byId) =>
   Object.values(byId).sort((a, b) => a.name.localeCompare(b.name)),
 );
 
-export { reconnecting, lastEvent, systemSnapshot };
+export { reconnecting, lastEvent, synced, systemSnapshot };
 
 export const live = { open, close, setOnSignedOut };

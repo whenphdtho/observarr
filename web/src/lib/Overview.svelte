@@ -6,6 +6,7 @@
   import { onMount } from 'svelte';
   import { api } from './api.js';
   import { snapshot } from './data.js';
+  import { synced } from './live.js';
   import { downloading, attention } from './status.js';
   import { mountAttention } from './storage.js';
   import { formatLeft } from './security.js';
@@ -52,10 +53,16 @@
   <HostChart />
 
   <div class="kpis">
-    <Kpi href="#/apps" icon="activity" tone={servicesTone} label="Services" value={up} unit={`of ${services.length} up`}
-      sub={services.length === 0 ? 'No services yet' : up === services.length ? 'All services up' : `${services.length - up} not up`} />
-    <Kpi href="#/apps" icon="download" label="Downloads" value={active} unit="active"
-      sub={`${queued} in queue${queued === 1 ? '' : 's'}`} />
+    {#if $synced}
+      <Kpi href="#/apps" icon="activity" tone={servicesTone} label="Services" value={up} unit={`of ${services.length} up`}
+        sub={services.length === 0 ? 'No services yet' : up === services.length ? 'All services up' : `${services.length - up} not up`} />
+      <Kpi href="#/apps" icon="download" label="Downloads" value={active} unit="active"
+        sub={`${queued} in queue${queued === 1 ? '' : 's'}`} />
+    {:else}
+      <!-- Until the first snapshot an empty list means "not known yet": no counts, no all-clear. -->
+      <Kpi href="#/apps" icon="activity" label="Services" value="—" sub="Loading…" />
+      <Kpi href="#/apps" icon="download" label="Downloads" value="—" sub="Loading…" />
+    {/if}
     {#if host}
       <Kpi href="#/system" icon="cpu" label="CPU" value={formatPct(host.cpuPercent)}
         sub={`${host.cpus} core${host.cpus === 1 ? '' : 's'} · load ${host.load[0].toFixed(2)}`}
@@ -71,9 +78,11 @@
   <section class="card" aria-labelledby="attention-title">
     <div class="card-head">
       <h2 id="attention-title"><Icon name="triangle-alert" size={16} />Needs attention</h2>
-      {#if issues.length}<span class="chip warn">{issues.length}</span>{/if}
+      {#if $synced && issues.length}<span class="chip warn">{issues.length}</span>{/if}
     </div>
-    {#if issues.length === 0}
+    {#if !$synced}
+      <p class="waiting">Waiting for the first reading…</p>
+    {:else if issues.length === 0}
       <div class="all-good">
         <Icon name="circle-check" size={26} />
         <b>All good</b>

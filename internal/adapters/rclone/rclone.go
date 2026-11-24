@@ -210,14 +210,21 @@ func probeHealth(ctx context.Context, t adapter.Target) (any, error) {
 		}
 		switch m := v.m; {
 		case m.OutOfSpace:
-			h.Warnings = append(h.Warnings, shape.Warning{Level: shape.LevelError, Source: m.Remote,
+			h.Warnings = append(h.Warnings, shape.Warning{Level: shape.LevelError, Source: warningSource(m.Remote),
 				Message: "the cache disk is out of space"})
 		case m.ErroredFiles > 0:
-			h.Warnings = append(h.Warnings, shape.Warning{Level: shape.LevelWarning, Source: m.Remote,
+			h.Warnings = append(h.Warnings, shape.Warning{Level: shape.LevelWarning, Source: warningSource(m.Remote),
 				Message: plural(m.ErroredFiles, "cached file") + " could not be uploaded"})
 		}
 	}
 	return h, nil
+}
+
+// warningSource is a remote as a warning's source. A warning reads "source: message", so the trailing colon of a
+// whole remote ("media-crypt:") is dropped to avoid "media-crypt::"; a remote with a path ("cloud:archive") is
+// kept as it is.
+func warningSource(remote string) string {
+	return strings.TrimSuffix(remote, ":")
 }
 
 func plural(n int64, word string) string {

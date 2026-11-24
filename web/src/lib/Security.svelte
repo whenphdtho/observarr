@@ -110,9 +110,9 @@
   {/if}
 
   <div class="kpis">
-    <Kpi icon="user-x" label="Failed sign-ins · 24 h" value={failed ? formatCount(failed.attempts) : '—'}
+    <Kpi icon="user-x" label="Failed sign-ins" value={failed ? formatCount(failed.attempts) : '—'}
       tone={failed?.attempts ? 'warn' : ''}
-      sub={!failed ? 'Loading…' : failed.addresses ? `from ${failed.addresses} address${failed.addresses === 1 ? '' : 'es'}` : 'None'} />
+      sub={!failed ? 'Loading…' : failed.addresses ? `${failed.addresses} address${failed.addresses === 1 ? '' : 'es'} · 24 h` : 'None in 24 h'} />
     <Kpi icon="lock" label="Locked out" value={view ? view.lockouts.length : '—'}
       unit={view?.lockouts.length === 1 ? 'address' : 'addresses'}
       tone={view?.lockouts.length ? 'warn' : ''}

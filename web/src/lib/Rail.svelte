@@ -5,6 +5,7 @@
   import { formatBytes, formatPct, formatTotal, formatPart } from './format.js';
   import { mountServices, mountSummary } from './storage.js';
   import { securityServices, activeBans, formatCount } from './security.js';
+  import { synced } from './live.js';
 
   // Rail is every service at a glance plus a short system summary and today's traffic. It sits in the right column on
   // wide screens and inside the Overview on narrower ones. onjump(id) shows a service's card.
@@ -31,7 +32,9 @@
     Apps
     {#if services.length}<em>{online === services.length ? 'all online' : `${online} of ${services.length} online`}</em>{/if}
   </h2>
-  {#if services.length === 0}
+  {#if !$synced}
+    <p class="muted none">Loading…</p>
+  {:else if services.length === 0}
     <p class="muted none">No services to show.</p>
   {:else}
     <ul class="apps">
