@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/whenphdtho/observarr/actions/workflows/ci.yml/badge.svg)](https://github.com/whenphdtho/observarr/actions/workflows/ci.yml)
 
-<img src="docs/images/demo.webp" width="880" alt="Observarr demo: signing in to the Overview with live throughput, the Network view live and over 24 hours, the Apps view with Big Buck Bunny downloading, adding Lidarr from a Docker suggestion, the System view, and the same views on a phone">
+<img src="docs/images/demo.webp" width="880" alt="Observarr demo: signing in to the Overview with live throughput, the Network view live and over 24 hours, the Apps view with Radarr's card expanded, adding Lidarr found as a Docker container, the Storage view with rclone mounts and transfers, the Security view with failed sign-ins and CrowdSec bans, the System view, and Overview, Storage and Security on a phone">
 
 <sub>▶ [Watch in full quality (MP4)](docs/images/demo.mp4)</sub>
 
@@ -35,14 +35,15 @@ and its containers are doing — all from one small container. Status: early dev
 - **Security view:** failed sign-ins by address, lockouts, active sessions (with a one-click "sign out all
   other sessions"), recent sign-ins and a checklist of your access settings with plain-language warnings. Connect
   CrowdSec with a read-only bouncer key to see what it blocks: active bans, local versus blocklist decisions,
-  top scenarios and the latest decisions made on your machine.
+  top scenarios and the latest decisions made on your machine. See
+  [Connect CrowdSec](docs/deploy.md#connect-crowdsec).
 - **Read-only by design:** host figures come from read-only mounts, container data from a Docker socket proxy
   that only answers GET requests.
 - **One container:** a Go binary with the Svelte UI embedded and SQLite for storage, running non-root on a
   distroless image. Saved API keys are encrypted at rest. Works on a phone, too.
 
 <p align="center">
-  <img src="docs/images/overview.png" alt="Overview: a Throughput card with live download and upload, the containers moving the most traffic and a network chart, four key figures (services up, downloads, CPU, memory), a Needs attention list with a Radarr health warning and an import problem, and a rail with every app, the host's figures and today's traffic against the budget">
+  <img src="docs/images/overview.png" alt="Overview: a Throughput card with live download and upload, the containers moving the most traffic and a network chart, four key figures (services up, downloads, CPU, memory), a Needs attention list with two rclone cache problems, a Radarr health warning and an import problem, and a rail with every app, the host's figures and today's traffic against the budget">
   <br>
   <sub>Overview: throughput, key figures and everything that needs attention</sub>
 </p>
@@ -50,11 +51,19 @@ and its containers are doing — all from one small container. Status: early dev
 <table>
   <tr>
     <td width="50%"><img src="docs/images/network.png" alt="Network view: download, upload, today's total and top-now tiles, a mirrored stacked chart of where the traffic goes per container over the last five minutes, a By app table and a daily budget gauge"></td>
-    <td width="50%"><img src="docs/images/apps.png" alt="Apps view: four equal-height collapsed cards for Lidarr, Prowlarr, Radarr and Sonarr, each with Up and version chips, a summary line such as 2 downloading, 2 queued, 1 warning, and its leading download with progress"></td>
+    <td width="50%"><img src="docs/images/apps.png" alt="Apps view: six collapsed cards for CrowdSec, Lidarr, Media mounts (rclone), Prowlarr, Radarr and Sonarr, each with Up and version chips, a summary line such as 2 downloading, 2 queued, 1 warning, and its leading download or warning"></td>
   </tr>
   <tr>
     <td align="center"><sub>Network: where the traffic goes, by app</sub></td>
     <td align="center"><sub>Apps: one collapsible card per service</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/storage.png" alt="Storage view: disks used, mounts healthy, cache used and transfer speed tiles, the disk bar, and rclone's mounts and caches: an archive cache out of space, a media cache with uploads in progress and queued, and the transfers running now"></td>
+    <td><img src="docs/images/security.png" alt="Security view: failed sign-ins, lockouts, active sessions and active bans tiles, failed sign-in attempts by address with one address locked out, and what CrowdSec blocks by origin and scenario"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Storage: disks, rclone mounts, caches and transfers</sub></td>
+    <td align="center"><sub>Security: sign-ins, sessions and CrowdSec bans</sub></td>
   </tr>
   <tr>
     <td><img src="docs/images/system.png" alt="System view: CPU, memory, swap and uptime tiles, a live host activity chart, disk and network cards, and the start of the containers table"></td>
@@ -79,7 +88,7 @@ and its containers are doing — all from one small container. Status: early dev
   &nbsp;
   <img src="docs/images/phone-network.png" width="240" alt="Network view on a phone-width screen: traffic tiles and the where-the-traffic-goes chart, with the views in a dock at the bottom">
   &nbsp;
-  <img src="docs/images/phone-system.png" width="240" alt="System view on a phone-width screen, with the views in a dock at the bottom">
+  <img src="docs/images/phone-storage.png" width="240" alt="Storage view on a phone-width screen: disk, mount and cache tiles above the disk bar and the mounts list, with the views in a dock at the bottom">
 </p>
 
 ## Quick start
@@ -290,7 +299,7 @@ disables buffering; with nginx, add `proxy_buffering off;` to the matching `loca
 ## Docs
 
 - [`docs/deploy.md`](docs/deploy.md) — host and container figures: compose example, cgroup v1, System view
-  notes, memory, connecting CrowdSec and security notes.
+  notes, Storage and connecting rclone, memory, connecting CrowdSec and security notes.
 - [`docs/adapters.md`](docs/adapters.md) — how adapters work and how to add an app.
 
 ## Development
