@@ -92,3 +92,19 @@ func TestPostJSONRefusesLargeBody(t *testing.T) {
 		t.Error("no error")
 	}
 }
+
+func TestPostJSONDoesNotFollowRedirects(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/core/version" {
+			t.Errorf("redirect followed to %s", r.URL.Path)
+		}
+		http.Redirect(w, r, "/core/quit", http.StatusTemporaryRedirect)
+	}))
+	defer ts.Close()
+	err := PostJSON(context.Background(), postTarget(t, ts.URL), "/core/version", []byte(`{}`),
+		func(r *http.Request) { r.SetBasicAuth("user", "secret") },
+		func(d *json.Decoder) error { return d.Decode(&json.RawMessage{}) })
+	if !errors.Is(err, StatusError(http.StatusTemporaryRedirect)) {
+		t.Errorf("err = %v, want status 307", err)
+	}
+}

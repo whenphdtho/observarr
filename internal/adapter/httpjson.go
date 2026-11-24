@@ -69,12 +69,16 @@ const maxPostBytes = 64 << 10
 // PostJSON POSTs body, a JSON document of at most 64 KiB, to base+path and hands the answer to read like
 // StreamJSON. It is for apps whose read-only calls are POSTs (a remote-control API that takes its parameters as a
 // JSON body); an adapter must only use it for calls that change nothing. authorize, if not nil, adds the
-// credentials to the request; they never appear in an error.
+// credentials to the request; they never appear in an error. A redirect is not followed but answered as a
+// StatusError: following it would send the body and credentials to a path the adapter did not choose.
 func PostJSON(ctx context.Context, t Target, path string, body []byte, authorize func(*http.Request),
 	read func(*json.Decoder) error) error {
 	if len(body) > maxPostBytes {
 		return errors.New("adapter: request body too large")
 	}
+	noRedirect := *t.HTTP
+	noRedirect.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	t.HTTP = &noRedirect
 	return doJSON(ctx, t, http.MethodPost, path, body, maxBodyBytes, authorize, read)
 }
 
