@@ -2,6 +2,7 @@
   import HostChart from './HostChart.svelte';
   import Rail from './Rail.svelte';
   import Kpi from './Kpi.svelte';
+  import Icon from './icons/Icon.svelte';
   import { onMount } from 'svelte';
   import { api } from './api.js';
   import { snapshot } from './data.js';
@@ -11,7 +12,8 @@
   import { formatLeft } from './security.js';
   import { formatBytes, formatPct } from './format.js';
 
-  // Overview is the landing view: the host's throughput, four key figures and what needs attention.
+  // Overview is the landing view: what needs attention first (or one calm line when nothing does), then the
+  // host's throughput and four key figures.
   // services is the (search-filtered) service list; onjump(id) shows a service's card.
   let { services, onjump } = $props();
 
@@ -45,10 +47,61 @@
     [...attention(services, $snapshot?.containers ?? []), ...mountAttention(services), ...lockIssue]
       .sort((a, b) => (a.tone === 'fail' ? 0 : 1) - (b.tone === 'fail' ? 0 : 1)),
   );
+  const fails = $derived(issues.filter((i) => i.tone === 'fail').length);
+  const warns = $derived(issues.length - fails);
+  const tally = $derived([
+    fails ? `${fails} error${fails === 1 ? '' : 's'}` : '',
+    warns ? `${warns} warning${warns === 1 ? '' : 's'}` : '',
+  ].filter(Boolean).join(' · '));
+  const VIEW_NAMES = { '#/apps': 'Apps', '#/storage': 'Storage', '#/security': 'Security', '#/system': 'System' };
+
+  // openIssue takes an entry about one service straight to its card; the others follow their link.
+  function openIssue(event, item) {
+    if (item.service == null || item.href !== '#/apps') return;
+    event.preventDefault();
+    onjump(item.service);
+  }
   const servicesTone = $derived(checked === 0 ? '' : up === services.length ? 'ok' : up === 0 ? 'fail' : 'warn');
 </script>
 
 <div class="overview">
+  {#if !$synced}
+    <p class="calm waiting" role="status">Waiting for the first reading…</p>
+  {:else if issues.length === 0}
+    <section class="calm" aria-labelledby="attention-title">
+      <h2 id="attention-title" class="visually-hidden">Needs attention</h2>
+      <p class="all-good">
+        <span class="dot ok" aria-hidden="true"></span>
+        <span><b>All good.</b> <span class="muted">No service down, no warnings, no stuck downloads.</span></span>
+      </p>
+    </section>
+  {:else}
+    <section class="attention" class:has-fail={fails > 0} aria-labelledby="attention-title">
+      <div class="att-head">
+        <h2 id="attention-title">Needs attention</h2>
+        <span class="tally num">{tally}</span>
+      </div>
+      <ul class="issues">
+        {#each issues as item (item.key)}
+          <li class={item.tone}>
+            <a href={item.href} class="issue row-link" onclick={(e) => openIssue(e, item)}>
+              <span class="dot {item.tone}" aria-hidden="true"></span>
+              <span class="what">
+                <span class="visually-hidden">{item.tone === 'fail' ? 'Error' : 'Warning'}: </span>
+                <span class="title ellipsis" title={item.title}>{item.title}</span>
+                {#if item.detail}<span class="detail">{item.detail}</span>{/if}
+              </span>
+              <span class="where">
+                <span class="where-name"><span class="visually-hidden">, open </span>{VIEW_NAMES[item.href] ?? ''}</span>
+                <span class="chev"><Icon name="chevron-right" size={16} /></span>
+              </span>
+            </a>
+          </li>
+        {/each}
+      </ul>
+    </section>
+  {/if}
+
   <HostChart />
 
   <div class="kpis">
@@ -74,55 +127,53 @@
     {/if}
   </div>
 
-  <section class="section" aria-labelledby="attention-title">
-    <div class="card-head">
-      <h2 id="attention-title">Needs attention</h2>
-      {#if $synced && issues.length}<span class="meta num">{issues.length}</span>{/if}
-    </div>
-    {#if !$synced}
-      <p class="waiting">Waiting for the first reading…</p>
-    {:else if issues.length === 0}
-      <p class="all-good">
-        <span class="dot ok" aria-hidden="true"></span>
-        <span><b>All good.</b> <span class="muted">No service down, no warnings, no stuck downloads.</span></span>
-      </p>
-    {:else}
-      <ul class="issues">
-        {#each issues as item (item.key)}
-          <li>
-            <span class="dot {item.tone}" aria-hidden="true"></span>
-            <a href={item.href} class="issue">
-              <span class="visually-hidden">{item.tone === 'fail' ? 'Error' : 'Warning'}: </span>
-              <span class="title ellipsis" title={item.title}>{item.title}</span>
-              {#if item.detail}<span class="detail">{item.detail}</span>{/if}
-            </a>
-          </li>
-        {/each}
-      </ul>
-    {/if}
-  </section>
-
   <div class="inline-rail">
     <Rail {services} {onjump} />
   </div>
 </div>
 
 <style>
-  .overview { display: grid; gap: 28px; }
+  .overview { display: grid; gap: 32px; }
+
+  /* Nothing to look at: one quiet line leads the page. */
+  .calm { margin-bottom: -8px; }
   .all-good { display: flex; align-items: center; gap: 10px; font-size: var(--t-base); }
   .all-good b { font-weight: 600; }
-  .issues { list-style: none; margin: 0; padding: 0; }
-  .issues li { display: flex; gap: 11px; align-items: flex-start; padding: 9px 0; border-bottom: 1px solid var(--border); min-width: 0; }
-  .issues li:first-child { padding-top: 0; }
-  .issues li:last-child { border-bottom: 0; padding-bottom: 0; }
-  .issues .dot { margin-top: 7px; }
-  .issue { display: grid; gap: 1px; min-width: 0; flex: 1; color: var(--text); text-decoration: none; }
-  .issue:hover .title { text-decoration: underline; }
+
+  /* Something to look at: the one boxed panel of the page, edged in the worst state's colour. */
+  .attention {
+    background: var(--surface); border: 1px solid var(--warn-edge); border-radius: var(--r-lg);
+    padding: 14px 8px 8px; min-width: 0;
+  }
+  .attention.has-fail { border-color: var(--fail-edge); }
+  .att-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0 10px 8px; min-width: 0; }
+  .att-head h2 { font-size: var(--t-lg); font-weight: 600; }
+  .tally { font-size: var(--t-sm); color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .issues { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  .issue {
+    display: flex; align-items: flex-start; gap: 11px; padding: 9px 10px; border-radius: var(--r);
+    min-width: 0; color: var(--text); text-decoration: none;
+  }
+  .fail .issue { background: var(--fail-wash); }
+  .fail .issue:hover { background: rgba(236, 108, 125, 0.14); }
+  .issue:hover .title { text-decoration: underline; text-underline-offset: 3px; }
+  .issue:focus-visible { outline-offset: 0; }
+  .issue .dot { margin-top: 7px; width: 8px; height: 8px; }
+  .what { display: grid; gap: 1px; min-width: 0; flex: 1; }
   .title { font-weight: 550; font-size: var(--t-base); }
   .detail { font-size: var(--t-sm); color: var(--text2); overflow-wrap: anywhere; }
+  .where {
+    display: flex; align-items: center; gap: 4px; flex: none; align-self: center;
+    font-size: var(--t-sm); color: var(--muted); white-space: nowrap;
+  }
+  .issue:hover .where { color: var(--text2); }
 
   .inline-rail { display: none; }
   @media (max-width: 1199px) {
-    .inline-rail { display: block; padding-top: 14px; border-top: 1px solid var(--border); }
+    .inline-rail { display: block; padding-top: 18px; border-top: 1px solid var(--border); }
+  }
+  @container (max-width: 520px) {
+    .where-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .attention { padding: 12px 4px 4px; }
   }
 </style>

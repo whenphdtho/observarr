@@ -31,10 +31,13 @@ export function serviceLine(svc) {
   const health = svc.readings?.health;
   if (!health) return { text: 'Checking…', detail: '', tone: '' };
   if (!svc.up) return { text: 'Down', detail: health.error || '', tone: 'fail' };
-  const n = downloading(svc);
-  if (n > 0) return { text: 'Up', detail: `${n} downloading`, tone: 'ok' };
+  // A warning or a stuck download is why the status dot is amber, so it is named before the downloads.
   const w = warnings(svc).filter((x) => x.level !== 'info').length;
   if (w > 0) return { text: 'Up', detail: `${w} warning${w === 1 ? '' : 's'}`, tone: 'warn' };
+  const stuck = queueItems(svc).filter((it) => it.problem).length;
+  if (stuck > 0) return { text: 'Up', detail: `${stuck} download${stuck === 1 ? '' : 's'} stuck`, tone: 'warn' };
+  const n = downloading(svc);
+  if (n > 0) return { text: 'Up', detail: `${n} downloading`, tone: 'ok' };
   const version = health.data?.version;
   return { text: 'Up', detail: version ? `v${version}` : '', tone: '' };
 }
@@ -83,25 +86,25 @@ function warningHref(svc) {
 
 // attention lists what needs a look, worst first: services down, health warnings and errors,
 // stuck queue items, and containers that are unhealthy, restarting or dead. Each entry is
-// { key, tone, title, detail, href }.
+// { key, tone, title, detail, href }, plus service (its id) when the entry is about one service.
 export function attention(services, containers) {
   const out = [];
   for (const svc of services) {
     const health = svc.readings?.health;
     if (health && !svc.up) {
-      out.push({ key: `down-${svc.id}`, tone: 'fail', title: `${svc.name} is down`, detail: health.error || '', href: '#/apps' });
+      out.push({ key: `down-${svc.id}`, tone: 'fail', title: `${svc.name} is down`, detail: health.error || '', href: '#/apps', service: svc.id });
     }
     const warnHref = warningHref(svc);
     for (const [i, w] of warnings(svc).entries()) {
       if (w.level === 'info') continue;
       out.push({
         key: `warn-${svc.id}-${i}`, tone: w.level === 'error' ? 'fail' : 'warn', title: svc.name,
-        detail: w.source ? `${w.source}: ${w.message}` : w.message, href: warnHref,
+        detail: w.source ? `${w.source}: ${w.message}` : w.message, href: warnHref, service: svc.id,
       });
     }
     for (const [i, it] of queueItems(svc).entries()) {
       if (!it.problem) continue;
-      out.push({ key: `queue-${svc.id}-${i}`, tone: 'warn', title: `${svc.name}: ${it.title}`, detail: it.problem, href: '#/apps' });
+      out.push({ key: `queue-${svc.id}-${i}`, tone: 'warn', title: `${svc.name}: ${it.title}`, detail: it.problem, href: '#/apps', service: svc.id });
     }
   }
   for (const c of containers) {
