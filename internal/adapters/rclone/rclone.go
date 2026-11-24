@@ -191,31 +191,33 @@ func (rcAdapter) Probe(ctx context.Context, t adapter.Target, kind shape.Kind) (
 }
 
 // probeHealth reports the version and latency, and warns of a cache that is out of space or holds files rclone
-// could not upload.
+// could not upload. Only core/version must answer: VFS figures that cannot be read are a warning, not an outage.
 func probeHealth(ctx context.Context, t adapter.Target) (any, error) {
 	v, latency, err := fetchVersion(ctx, t)
 	if err != nil {
 		return nil, err
 	}
-	mounts, _, err := fetchMounts(ctx, t)
+	h := shape.Health{Version: displayVersion(v.Version), LatencyMS: latency.Milliseconds(), Warnings: []shape.Warning{}}
+	vfses, _, err := fetchVFSes(ctx, t)
 	if err != nil {
-		return nil, err
+		h.Warnings = append(h.Warnings, shape.Warning{Level: shape.LevelWarning,
+			Message: "the cache figures cannot be read"})
+		return h, nil
 	}
-	warnings := []shape.Warning{}
-	for _, m := range mounts {
-		if len(warnings) >= shape.MaxWarnings {
+	for _, v := range vfses {
+		if len(h.Warnings) >= shape.MaxWarnings {
 			break
 		}
-		switch {
+		switch m := v.m; {
 		case m.OutOfSpace:
-			warnings = append(warnings, shape.Warning{Level: shape.LevelError, Source: m.Remote,
+			h.Warnings = append(h.Warnings, shape.Warning{Level: shape.LevelError, Source: m.Remote,
 				Message: "the cache disk is out of space"})
 		case m.ErroredFiles > 0:
-			warnings = append(warnings, shape.Warning{Level: shape.LevelWarning, Source: m.Remote,
+			h.Warnings = append(h.Warnings, shape.Warning{Level: shape.LevelWarning, Source: m.Remote,
 				Message: plural(m.ErroredFiles, "cached file") + " could not be uploaded"})
 		}
 	}
-	return shape.Health{Version: displayVersion(v.Version), LatencyMS: latency.Milliseconds(), Warnings: warnings}, nil
+	return h, nil
 }
 
 func plural(n int64, word string) string {
@@ -248,49 +250,25 @@ type listedMount struct {
 // fetchMounts combines vfs/list, vfs/stats and mount/listmounts into at most MaxMounts mounts, sorted by mount
 // point and remote, and reports how many there are in all.
 func fetchMounts(ctx context.Context, t adapter.Target) ([]shape.Mount, int, error) {
-	var names []string
-	total := 0
-	err := call(ctx, t, pathVFSList, nil, func(d *json.Decoder) error {
-		return decodeObject(d, map[string]func(*json.Decoder) error{
-			"vfses": func(d *json.Decoder) error {
-				var err error
-				total, err = decodeCapped(d, shape.MaxMounts, func(name string) {
-					if name != "" && len(name) <= maxName {
-						names = append(names, name)
-					}
-				})
-				return err
-			},
-		})
-	})
+	vfses, total, err := fetchVFSes(ctx, t)
+	if err != nil {
+		return nil, 0, err
+	}
+	listed, known, err := fetchListedMounts(ctx, t)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	listed, err := fetchListedMounts(ctx, t)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	mounts := make([]shape.Mount, 0, len(names))
-	for _, name := range names {
-		m, err := fetchVFS(ctx, t, name)
-		var status adapter.StatusError
-		if errors.As(err, &status) {
-			continue // the VFS went away since vfs/list
-		}
-		if err != nil {
-			return nil, 0, err
-		}
-		if m.Remote == "" {
-			m.Remote = shape.Clip(baseName(name))
-		}
+	mounts := make([]shape.Mount, 0, len(vfses))
+	for _, v := range vfses {
+		m := v.m
 		// A mount made through the remote control is listed with its mount point; match it by remote, in order.
-		base := baseName(name)
-		if i := slices.IndexFunc(listed, func(l listedMount) bool { return l.Fs == base }); i >= 0 {
+		if i := slices.IndexFunc(listed, func(l listedMount) bool { return l.Fs == v.base }); i >= 0 {
 			m.State = shape.MountMounted
 			m.MountPoint = shape.Clip(listed[i].MountPoint)
 			listed = slices.Delete(listed, i, i+1)
+		} else {
+			m.Unlisted = known
 		}
 		mounts = append(mounts, m)
 	}
@@ -312,11 +290,56 @@ func fetchMounts(ctx context.Context, t adapter.Target) ([]shape.Mount, int, err
 	return mounts, max(total, len(mounts)), nil
 }
 
-// fetchListedMounts reads mount/listmounts. A build without mount support (404) lists none; so does a remote
-// control that needs credentials when none are configured, as the other calls still work without them.
-func fetchListedMounts(ctx context.Context, t adapter.Target) ([]listedMount, error) {
-	var listed []listedMount
-	err := call(ctx, t, pathListMounts, nil, func(d *json.Decoder) error {
+// vfs is one VFS as vfs/stats reports it, with its vfs/list name less any "[n]".
+type vfs struct {
+	base string
+	m    shape.Mount
+}
+
+// fetchVFSes reads vfs/list and the vfs/stats of its first MaxMounts names, and reports how many VFSes there are
+// in all. A VFS that went away since vfs/list (404) is left out of both; any other failure fails the whole reading.
+func fetchVFSes(ctx context.Context, t adapter.Target) ([]vfs, int, error) {
+	var names []string
+	total := 0
+	err := call(ctx, t, pathVFSList, nil, func(d *json.Decoder) error {
+		return decodeObject(d, map[string]func(*json.Decoder) error{
+			"vfses": func(d *json.Decoder) error {
+				var err error
+				total, err = decodeCapped(d, shape.MaxMounts, func(name string) {
+					if name != "" && len(name) <= maxName {
+						names = append(names, name)
+					}
+				})
+				return err
+			},
+		})
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	out := make([]vfs, 0, len(names))
+	for _, name := range names {
+		m, err := fetchVFS(ctx, t, name)
+		if errors.Is(err, adapter.ErrNotFound) {
+			total--
+			continue
+		}
+		if err != nil {
+			return nil, 0, err
+		}
+		if m.Remote == "" {
+			m.Remote = shape.Clip(baseName(name))
+		}
+		out = append(out, vfs{base: baseName(name), m: m})
+	}
+	return out, max(total, len(out)), nil
+}
+
+// fetchListedMounts reads mount/listmounts; known is false when it is not available. A build without mount support
+// (404) lists none; so does a remote control that needs credentials when none are configured, as the other calls
+// still work without them.
+func fetchListedMounts(ctx context.Context, t adapter.Target) (listed []listedMount, known bool, err error) {
+	err = call(ctx, t, pathListMounts, nil, func(d *json.Decoder) error {
 		return decodeObject(d, map[string]func(*json.Decoder) error{
 			"mountPoints": func(d *json.Decoder) error {
 				_, err := decodeCapped(d, maxListedMounts, func(l listedMount) { listed = append(listed, l) })
@@ -325,12 +348,12 @@ func fetchListedMounts(ctx context.Context, t adapter.Target) ([]listedMount, er
 		})
 	})
 	switch {
-	case errors.Is(err, adapter.ErrNotFound):
-		return nil, nil
-	case errors.Is(err, adapter.ErrUnauthorized) && t.APIKey == "":
-		return nil, nil
+	case errors.Is(err, adapter.ErrNotFound), errors.Is(err, adapter.ErrUnauthorized) && t.APIKey == "":
+		return nil, false, nil
+	case err != nil:
+		return nil, false, err
 	}
-	return listed, err
+	return listed, true, nil
 }
 
 // baseName is a vfs/list name without the "[n]" rclone appends when several VFSes share one remote.

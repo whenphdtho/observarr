@@ -43,7 +43,7 @@ type fakeRC struct {
 	user, pass string
 	noAuth     bool
 	answers    map[string][]byte // by path; vfs/stats by "/vfs/stats?" + fs
-	status     map[string]int    // by path
+	status     map[string]int    // by path, like answers
 
 	mu    sync.Mutex
 	calls []string
@@ -98,7 +98,7 @@ func (f *fakeRC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if key == "/vfs/stats" {
 		key += "?" + params["fs"]
 	}
-	if code := f.status[r.URL.Path]; code != 0 {
+	if code := f.status[key]; code != 0 {
 		w.WriteHeader(code)
 		w.Write(f.answers["/mount/listmounts?notfound404"])
 		return
@@ -262,7 +262,7 @@ func TestProbeMounts(t *testing.T) {
 	if media != wantMedia {
 		t.Errorf("media mount\n got %+v\nwant %+v", media, wantMedia)
 	}
-	wantBackup := shape.Mount{Remote: "cloud:backup", State: shape.MountActive, CacheMode: "off"}
+	wantBackup := shape.Mount{Remote: "cloud:backup", State: shape.MountActive, Unlisted: true, CacheMode: "off"}
 	if backup != wantBackup {
 		t.Errorf("backup mount\n got %+v\nwant %+v", backup, wantBackup)
 	}
@@ -297,8 +297,8 @@ func TestProbeMountsWithoutAuthHasNoMountPoints(t *testing.T) {
 	f.noAuth = false
 	m := probeMounts(t, f, "")
 	for _, mt := range m.Mounts {
-		if mt.State != shape.MountActive || mt.MountPoint != "" {
-			t.Errorf("mount %+v, want active without a mount point", mt)
+		if mt.State != shape.MountActive || mt.MountPoint != "" || mt.Unlisted {
+			t.Errorf("mount %+v, want active without a mount point, not known to be unlisted", mt)
 		}
 	}
 	if len(m.Mounts) != 2 {
@@ -310,7 +310,7 @@ func TestProbeMountsWithoutMountSupport(t *testing.T) {
 	f := newFakeRC(t)
 	f.status["/mount/listmounts"] = http.StatusNotFound
 	m := probeMounts(t, f, "")
-	if len(m.Mounts) != 2 || m.Mounts[1].State != shape.MountActive {
+	if len(m.Mounts) != 2 || m.Mounts[1].State != shape.MountActive || m.Mounts[1].Unlisted {
 		t.Errorf("mounts %+v", m.Mounts)
 	}
 }
@@ -327,10 +327,38 @@ func TestProbeMountsWrongCredentialsFails(t *testing.T) {
 
 func TestProbeMountsSkipsVFSThatWentAway(t *testing.T) {
 	f := newFakeRC(t)
-	delete(f.answers, "/vfs/stats?cloud:backup")
+	f.status["/vfs/stats?cloud:backup"] = http.StatusNotFound
 	m := probeMounts(t, f, "")
-	if len(m.Mounts) != 1 || m.Mounts[0].Remote != "media-crypt:" {
-		t.Errorf("mounts %+v", m.Mounts)
+	if m.Total != 1 || len(m.Mounts) != 1 || m.Mounts[0].Remote != "media-crypt:" {
+		t.Errorf("Total %d, mounts %+v", m.Total, m.Mounts)
+	}
+}
+
+func TestProbeMountsFailsOnVFSError(t *testing.T) {
+	f := newFakeRC(t)
+	delete(f.answers, "/vfs/stats?cloud:backup") // the fake answers 500
+	ts := start(t, f)
+	_, err := rclone.New().Probe(context.Background(), target(t, ts.URL, ""), shape.KindMounts)
+	if !errors.Is(err, adapter.StatusError(http.StatusInternalServerError)) {
+		t.Errorf("err = %v, want status 500", err)
+	}
+}
+
+// Health needs only core/version: a remote control whose VFS calls fail still answers, with a warning.
+func TestProbeHealthSurvivesVFSFailure(t *testing.T) {
+	f := newFakeRC(t)
+	f.status["/vfs/list"] = http.StatusInternalServerError
+	f.status["/mount/listmounts"] = http.StatusInternalServerError
+	ts := start(t, f)
+	got, err := rclone.New().Probe(context.Background(), target(t, ts.URL, ""), shape.KindHealth)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h := got.(shape.Health); h.Version != "1.71.2" || len(h.Warnings) != 1 {
+		t.Errorf("health %+v", h)
+	}
+	if slices.Contains(f.paths(), "POST /mount/listmounts") {
+		t.Error("health read mount/listmounts")
 	}
 }
 
@@ -387,9 +415,9 @@ func TestProbeHealthWarnsOfCacheProblems(t *testing.T) {
 	if h.Version != "1.71.2" {
 		t.Errorf("Version = %q", h.Version)
 	}
-	want := []shape.Warning{
-		{Level: shape.LevelError, Source: "cloud:backup", Message: "the cache disk is out of space"},
+	want := []shape.Warning{ // in vfs/list's order
 		{Level: shape.LevelWarning, Source: "media-crypt:", Message: "1 cached file could not be uploaded"},
+		{Level: shape.LevelError, Source: "cloud:backup", Message: "the cache disk is out of space"},
 	}
 	if !slices.Equal(h.Warnings, want) {
 		t.Errorf("warnings\n got %+v\nwant %+v", h.Warnings, want)

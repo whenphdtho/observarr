@@ -141,18 +141,21 @@ const KindMounts Kind = "mounts"
 // Mount states.
 const (
 	MountMounted = "mounted" // the app reports it as mounted at MountPoint
-	MountActive  = "active"  // the app serves it but does not report where it is mounted
-	// MountUnmounted is a mount the app knows of that is not mounted now (for apps that keep configured mounts).
+	MountActive  = "active"  // the app serves it but does not report where, or whether, it is mounted
+	// MountUnmounted is a mount the app knows of that is not mounted now. No adapter reports it yet; it is for apps
+	// that keep configured mounts.
 	MountUnmounted = "unmounted"
 )
 
 // Mount is one remote file system an app mounts, with its local cache.
 type Mount struct {
-	Remote            string `json:"remote"`               // what is mounted, e.g. "cloud:media"
-	MountPoint        string `json:"mountPoint,omitempty"` // where, if the app reports it
-	State             string `json:"state"`                // MountMounted or MountActive
-	CacheMode         string `json:"cacheMode,omitempty"`  // the app's cache mode, e.g. "full"; "" if unknown
-	Cache             bool   `json:"cache"`                // the mount keeps a disk cache; the figures below are its own
+	Remote     string `json:"remote"`               // what is mounted, e.g. "cloud:media"
+	MountPoint string `json:"mountPoint,omitempty"` // where, if the app reports it
+	State      string `json:"state"`                // MountMounted, MountActive or MountUnmounted
+	// Unlisted is for MountActive: the app lists the mounts made through it, and this one is not among them.
+	Unlisted          bool   `json:"unlisted,omitempty"`
+	CacheMode         string `json:"cacheMode,omitempty"` // the app's cache mode, e.g. "full"; "" if unknown
+	Cache             bool   `json:"cache"`               // the mount keeps a disk cache; the figures below are its own
 	CacheUsedBytes    int64  `json:"cacheUsedBytes"`
 	CacheMaxBytes     int64  `json:"cacheMaxBytes"` // 0: no limit
 	CachedFiles       int64  `json:"cachedFiles"`
