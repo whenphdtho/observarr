@@ -12,13 +12,15 @@
   let withKeys = $state(true);
   let pass = $state('');
   let pass2 = $state('');
+  let password = $state(''); // the account's: the keys leave the server only with it
   let exportError = $state('');
   let exporting = $state(false);
   let exported = $state('');
 
   const passShort = $derived(withKeys && pass !== '' && [...pass].length < MIN_PASS);
   const passMismatch = $derived(withKeys && pass2 !== '' && pass !== pass2);
-  const canExport = $derived(!exporting && (!withKeys || ([...pass].length >= MIN_PASS && pass === pass2)));
+  const canExport = $derived(!exporting &&
+    (!withKeys || ([...pass].length >= MIN_PASS && pass === pass2 && password !== '')));
 
   async function exportFile(event) {
     event.preventDefault();
@@ -27,15 +29,17 @@
     exportError = '';
     exported = '';
     try {
-      const { blob, name } = await download('/api/settings/export', withKeys ? { passphrase: pass } : { withoutKeys: true });
+      const { blob, name } = await download('/api/settings/export',
+        withKeys ? { passphrase: pass, password } : { withoutKeys: true });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = name;
       a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 0);
+      // Some browsers start the download only after the click returns: keep the file's URL a moment longer.
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
       exported = withKeys ? `Downloaded ${name}. Keep the passphrase: the keys cannot be restored without it.` :
         `Downloaded ${name}, without keys.`;
-      pass = pass2 = '';
+      pass = pass2 = password = '';
     } catch (err) {
       exportError = err.message;
     } finally {
@@ -52,6 +56,7 @@
   let restorePass = $state('');
   let skipKeys = $state(false);
   let mode = $state('add');
+  let confirmRemove = $state(false); // replace: the user agreed to remove the apps saved now
   let report = $state(null);
   let restoreError = $state('');
   let busy = $state(false);
@@ -59,6 +64,7 @@
   const byType = $derived(Object.fromEntries($adapters.map((a) => [a.type, a])));
   const taken = $derived(report?.services.filter((s) => s.nameTaken).length ?? 0);
   const toAdd = $derived(report ? report.services.length - (mode === 'add' ? taken : 0) : 0);
+  const canApply = $derived(!busy && toAdd > 0 && (mode === 'add' || report.saved === 0 || confirmRemove));
 
   async function pickFile(event) {
     const file = event.currentTarget.files?.[0];
@@ -92,6 +98,7 @@
     try {
       report = await api('POST', '/api/settings/import', body('preview'));
       mode = 'add';
+      confirmRemove = false;
       step = 'preview';
     } catch (err) {
       restoreError = err.message;
@@ -118,7 +125,7 @@
     step = 'pick';
     report = null;
     fileText = fileName = restorePass = restoreError = '';
-    hasKeys = skipKeys = false;
+    hasKeys = skipKeys = confirmRemove = false;
   }
 
   function keyText(s) {
@@ -169,6 +176,12 @@
           <input type="password" bind:value={pass2} autocomplete="new-password" maxlength="1024"
             aria-invalid={passMismatch} aria-describedby={passMismatch ? 'backup-pass-mismatch' : undefined} />
           {#if passMismatch}<span id="backup-pass-mismatch" class="hint error">The passphrases differ.</span>{/if}
+        </label>
+        <label>
+          Your password
+          <input type="password" bind:value={password} autocomplete="current-password" maxlength="1024"
+            aria-describedby="backup-password-hint" />
+          <span id="backup-password-hint" class="hint muted">The one you sign in with: the keys leave only with it.</span>
         </label>
       {/if}
       <div aria-live="polite" class="status">
@@ -266,13 +279,19 @@
               <span>Replace all <span class="muted">· removes every app saved here first</span></span>
             </label>
           </fieldset>
+          {#if mode === 'replace' && report.saved > 0}
+            <label class="choice confirm">
+              <input type="checkbox" bind:checked={confirmRemove} />
+              <span>Remove the {plural(report.saved, 'app')} saved now</span>
+            </label>
+          {/if}
           <p class="muted small">Nothing is saved until you apply. Restored apps are checked on their first poll.</p>
           <div aria-live="polite" class="status">
             {#if restoreError}<p class="error" role="alert">{restoreError}</p>{/if}
           </div>
           <div class="actions">
             <button type="button" class="quiet" disabled={busy} onclick={reset}>Cancel</button>
-            <button type="button" disabled={busy || (toAdd === 0 && mode === 'add')} onclick={apply}>
+            <button type="button" disabled={!canApply} onclick={apply}>
               {busy ? 'Applying…' : mode === 'replace' ? `Replace with ${plural(toAdd, 'app')}` : `Add ${plural(toAdd, 'app')}`}
             </button>
           </div>

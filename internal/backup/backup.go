@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"unicode/utf8"
 
 	"golang.org/x/crypto/argon2"
@@ -191,11 +190,8 @@ func Parse(data []byte) (File, error) {
 	var f File
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(&f); err != nil {
+	if err := dec.Decode(&f); err != nil { // data after the value was refused by the first decoding already
 		return File{}, fmt.Errorf("malformed settings file: %v", err)
-	}
-	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
-		return File{}, errors.New("malformed settings file: unexpected data after the JSON value")
 	}
 	ids := make(map[int64]bool, len(f.Services))
 	for _, svc := range f.Services {

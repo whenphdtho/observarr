@@ -367,17 +367,30 @@ func (s *Server) makeRoomForFailures(now time.Time) {
 	}
 }
 
-// withHashSlot runs fn, which hashes or checks a password or derives a settings file's key, once one of the
-// server's hash slots is free. Each argon2 run holds its memory cost (19 MiB for a password, 64 MiB for a settings
-// file), so bounding concurrent runs bounds memory under a flood of logins. It reports false, without running fn, if the request ends while waiting; there is no one
+// withHashSlot runs fn, which hashes or checks a password, once one of the server's hash slots is free. Each
+// argon2 run holds its memory cost (19 MiB for our hashes), so bounding concurrent runs bounds memory under a
+// flood of logins. It reports false, without running fn, if the request ends while waiting; there is no one
 // left to answer then.
 func (s *Server) withHashSlot(ctx context.Context, fn func()) bool {
+	return withSlot(ctx, s.hashSlots, fn)
+}
+
+// withFileKeySlot runs fn, which derives a settings file's key (argon2 at 64 MiB and 4 lanes), once no other
+// settings file's key is being derived: one at a time, apart from the password hash slots. It reports false,
+// without running fn, if the request ends while waiting.
+func (s *Server) withFileKeySlot(ctx context.Context, fn func()) bool {
+	return withSlot(ctx, s.fileKeySlot, fn)
+}
+
+// withSlot runs fn once slots has room, holding one place in it meanwhile; false, without running fn, if ctx
+// ends first.
+func withSlot(ctx context.Context, slots chan struct{}, fn func()) bool {
 	select {
-	case s.hashSlots <- struct{}{}:
+	case slots <- struct{}{}:
 	case <-ctx.Done():
 		return false
 	}
-	defer func() { <-s.hashSlots }()
+	defer func() { <-slots }()
 	fn()
 	return true
 }

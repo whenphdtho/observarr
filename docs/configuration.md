@@ -193,17 +193,20 @@ disables buffering; with nginx, add `proxy_buffering off;` to the matching `loca
 - **What it holds:** every app (type, name, URL, linked container) with its API key, and the finds you dismissed.
   Never user accounts or passwords, sessions, the audit log, traffic and host history, the setup token or
   `secret.key`.
-- **Export** encrypts the keys with a passphrase you type (at least 12 characters). Everything else stays
-  readable JSON, so you can see what the file holds. Keep the passphrase: without it the keys cannot be
-  restored. Or choose **Leave keys out**: the file then holds no secrets, and each app shows "API key missing"
-  after restoring until you enter its key again.
+- **Export** encrypts the keys with a passphrase you type (at least 12 characters), and asks for your own
+  password first, so a session alone cannot take the keys out; wrong passwords count as failed logins. Everything
+  else stays readable JSON, so you can see what the file holds. Keep the passphrase: without it the keys cannot be
+  restored. Or choose **Leave keys out**: the file then holds no secrets, needs no password, and each app shows
+  "API key missing" after restoring until you enter its key again. An account that signs in through a login proxy
+  has no password here and can export only without keys.
 - **Restore** reads the file and its passphrase and shows what it holds before anything is saved. Then choose
   **Add alongside** (apps whose name is already in use here are skipped) or **Replace all** (every app saved here
-  is removed first), and apply. Either way all of it is saved at once or not at all. Restored apps are contacted
+  is removed first; tick that you agree to remove them, and a file with no app to restore replaces nothing), and
+  apply. Either way all of it is saved at once or not at all. Restored apps are contacted
   only by the normal polling afterwards; their keys are re-encrypted with this server's `secret.key`.
 - A wrong passphrase, or a file changed after export, restores nothing. Every URL is checked as when adding an
   app by hand; apps of a type this Observarr does not know are skipped and listed. Files over 1 MiB are refused.
-- Exports, restores and wrong passphrases are written to the audit log; after 5 wrong passphrases in 15 minutes
+- Exports, restores, wrong passwords and wrong passphrases are written to the audit log; after 5 wrong passphrases in 15 minutes
   restoring pauses for that user.
 
 The keys are encrypted with AES-256-GCM under a key derived from the passphrase with argon2id (64 MiB, 3 passes,

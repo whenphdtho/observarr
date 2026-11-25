@@ -21,13 +21,16 @@ import (
 const (
 	// maxImportBody bounds an import request: the file as a JSON string, escaping included, and the passphrase.
 	maxImportBody = 2*backup.MaxFile + 64<<10
-	// maxDismissedKey bounds one dismissed find in a settings file, in bytes.
+	// maxDismissedKey bounds one dismissed find in a settings file, in bytes; maxDismissed how many a file may hold.
 	maxDismissedKey = 4096
+	maxDismissed    = 5000
 )
 
-// exportInput asks for the settings file, with the keys encrypted under passphrase or without them.
+// exportInput asks for the settings file, with the keys encrypted under passphrase or without them. The keys
+// leave the server only with the account's current password.
 type exportInput struct {
 	Passphrase  string `json:"passphrase"`
+	Password    string `json:"password"`
 	WithoutKeys bool   `json:"withoutKeys"`
 }
 
@@ -42,9 +45,15 @@ func (s *Server) exportSettings(w http.ResponseWriter, r *http.Request, sess sto
 	case in.WithoutKeys && in.Passphrase != "":
 		writeError(w, http.StatusBadRequest, "passphrase: not with withoutKeys")
 		return
+	case in.WithoutKeys && in.Password != "":
+		writeError(w, http.StatusBadRequest, "password: not with withoutKeys")
+		return
 	case !in.WithoutKeys:
 		if err := backup.CheckPassphrase(in.Passphrase); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if !s.confirmPassword(w, r, sess, in.Password) {
 			return
 		}
 	}
@@ -78,7 +87,7 @@ func (s *Server) exportSettings(w http.ResponseWriter, r *http.Request, sess sto
 	}
 	slices.Sort(f.Dismissed)
 	if !in.WithoutKeys {
-		if !s.withHashSlot(ctx, func() { err = backup.Seal(&f, keys, in.Passphrase) }) {
+		if !s.withFileKeySlot(ctx, func() { err = backup.Seal(&f, keys, in.Passphrase) }) {
 			return
 		}
 		if err != nil {
@@ -105,6 +114,46 @@ func (s *Server) exportSettings(w http.ResponseWriter, r *http.Request, sess sto
 	w.Write(append(body, '\n'))
 }
 
+// confirmPassword checks the session user's current password before the keys leave the server, so a session
+// alone (a stolen cookie, or a script running in the page) cannot take them out. Each check counts against the
+// client address's login attempts, as a login does, and a wrong password is audited (without it). It answers
+// the request itself when it fails.
+func (s *Server) confirmPassword(w http.ResponseWriter, r *http.Request, sess store.Session, password string) bool {
+	switch {
+	case password == "":
+		writeError(w, http.StatusBadRequest, "password: enter your password to export the keys")
+		return false
+	case len(password) > maxPasswordLen:
+		writeError(w, http.StatusBadRequest, "password: at most 1024 bytes")
+		return false
+	}
+	u, err := s.Store.UserByName(r.Context(), sess.UserName)
+	if err != nil {
+		s.internal(w, r, err)
+		return false
+	}
+	if u.PasswordHash == noPassword {
+		writeError(w, http.StatusForbidden,
+			"this account signs in through the login proxy and has no password here: export without keys")
+		return false
+	}
+	key := auth.LimitKey(auth.ClientIP(r, s.Config.TrustedProxies))
+	if !s.attempt(w, key) {
+		return false
+	}
+	var match bool
+	if !s.withHashSlot(r.Context(), func() { match = auth.CheckPassword(password, u.PasswordHash) }) {
+		return false
+	}
+	if !match {
+		s.auditFailure(r, sess.UserName, "settings export failed", "wrong password", key)
+		writeError(w, http.StatusForbidden, "wrong password")
+		return false
+	}
+	s.succeeded(r, key)
+	return true
+}
+
 // importInput is a settings file to preview or apply. Mode "preview" changes nothing; "add" adds the file's
 // services alongside the saved ones, skipping any whose name is taken; "replace" removes the saved ones first.
 type importInput struct {
@@ -121,6 +170,7 @@ type importReport struct {
 	Services         []importedService `json:"services"`
 	Skipped          []skippedService  `json:"skipped"`
 	Dismissed        int               `json:"dismissed"` // dismissed finds of known app types
+	Saved            int               `json:"saved"`     // services saved here before the import
 	Removed          int               `json:"removed"`   // saved services removed (applied "replace")
 	Applied          bool              `json:"applied"`
 }
@@ -189,12 +239,17 @@ func (s *Server) importSettings(w http.ResponseWriter, r *http.Request, sess sto
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	rep.Saved = len(saved)
 	if in.Mode == "preview" {
 		writeJSON(w, http.StatusOK, rep)
 		return
 	}
 
 	replace := in.Mode == "replace"
+	if replace && len(items) == 0 { // replacing with nothing would only remove every saved service
+		writeError(w, http.StatusBadRequest, "the file holds no app this server can restore: nothing replaced")
+		return
+	}
 	if !replace {
 		items = slices.DeleteFunc(items, func(it importItem) bool {
 			if it.out.NameTaken {
@@ -276,7 +331,8 @@ func (s *Server) importKeys(w http.ResponseWriter, r *http.Request, sess store.S
 	}
 	var keys map[int64]string
 	var err error
-	if !s.withHashSlot(r.Context(), func() { keys, err = backup.Open(f, in.Passphrase) }) {
+	if !s.withFileKeySlot(r.Context(), func() { keys, err = backup.Open(f, in.Passphrase) }) {
+		s.importLimiter.Release(who) // the client went away before the passphrase was tried
 		return nil, false
 	}
 	if errors.Is(err, backup.ErrPassphrase) {
@@ -285,7 +341,8 @@ func (s *Server) importKeys(w http.ResponseWriter, r *http.Request, sess store.S
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return nil, false
 	}
-	if err != nil {
+	if err != nil { // only a wrong passphrase costs an attempt
+		s.importLimiter.Release(who)
 		writeError(w, http.StatusBadRequest, err.Error())
 		return nil, false
 	}
@@ -337,6 +394,9 @@ func (s *Server) planImport(f backup.File, keys map[int64]string, saved []store.
 		rep.Services = append(rep.Services, out)
 	}
 
+	if len(f.Dismissed) > maxDismissed {
+		return nil, importReport{}, nil, fmt.Errorf("the file holds more than %d dismissed finds", maxDismissed)
+	}
 	var dismissed []string
 	for i, key := range f.Dismissed {
 		typ, rest, ok := strings.Cut(key, " ")

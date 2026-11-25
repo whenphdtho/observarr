@@ -1,10 +1,12 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -15,7 +17,12 @@ import (
 	"observarr/internal/shape"
 )
 
-const passphrase = "a passphrase of some length"
+const (
+	passphrase   = "a passphrase of some length"
+	userPassword = "a long enough password" // the test admin's (see admin)
+	// withKeys asks for an export with the keys: the file's passphrase and the account's password.
+	withKeys = `{"passphrase":"` + passphrase + `","password":"` + userPassword + `"}`
+)
 
 // exported adds a fake service with testKey ("Alpha") and a keyless one ("Open"), dismisses a find, and returns
 // the settings file exported with body.
@@ -72,7 +79,7 @@ func (e *servicesEnv) saved() []string {
 
 func TestSettingsRoundTrip(t *testing.T) {
 	src := newServicesEnv(t)
-	file := src.exported(`{"passphrase":"` + passphrase + `"}`)
+	file := src.exported(withKeys)
 	if !src.hasAudit("exported settings: services: 2, keys encrypted: 1") {
 		t.Fatalf("audit = %v", src.auditRows())
 	}
@@ -125,7 +132,7 @@ func TestSettingsRoundTrip(t *testing.T) {
 
 func TestSettingsWrongPassphraseImportsNothing(t *testing.T) {
 	src := newServicesEnv(t)
-	file := src.exported(`{"passphrase":"` + passphrase + `"}`)
+	file := src.exported(withKeys)
 	dst := newServicesEnv(t)
 	for _, mode := range []string{"preview", "add"} {
 		if code, _, msg := dst.importFile(file, passphrase+"?", mode); code != 422 || !strings.Contains(msg, "wrong passphrase") {
@@ -153,7 +160,7 @@ func TestSettingsWrongPassphraseImportsNothing(t *testing.T) {
 
 func TestSettingsWrongPassphrasesAreLimited(t *testing.T) {
 	src := newServicesEnv(t)
-	file := src.exported(`{"passphrase":"` + passphrase + `"}`)
+	file := src.exported(withKeys)
 	for range auth.MaxAttempts {
 		src.importFile(file, "not the passphrase", "preview")
 	}
@@ -164,7 +171,7 @@ func TestSettingsWrongPassphrasesAreLimited(t *testing.T) {
 
 func TestSettingsTamperedFileIsRefused(t *testing.T) {
 	src := newServicesEnv(t)
-	file := src.exported(`{"passphrase":"` + passphrase + `"}`)
+	file := src.exported(withKeys)
 	var f backup.File
 	if err := json.Unmarshal(file, &f); err != nil {
 		t.Fatal(err)
@@ -277,7 +284,7 @@ func TestSettingsImportValidates(t *testing.T) {
 // A replacing import that fails midway changes nothing: the saved services stay, and keep being polled.
 func TestSettingsReplaceIsOneTransaction(t *testing.T) {
 	src := newServicesEnv(t)
-	file := src.exported(`{"passphrase":"` + passphrase + `"}`)
+	file := src.exported(withKeys)
 	dst := newServicesEnv(t)
 	dst.create("Keep")
 	db, err := sql.Open("sqlite", filepath.Join(dst.dir, "o.db"))
@@ -335,5 +342,180 @@ func TestSettingsNeedSessionAndCSRF(t *testing.T) {
 		if strings.Contains(row, "settings") {
 			t.Fatalf("a refused request was audited: %s", row)
 		}
+	}
+}
+
+// export sends an export request with body and returns the status and the answer.
+func (e *servicesEnv) export(body string) (int, string) {
+	e.t.Helper()
+	code, raw, _ := e.raw("POST", "/api/settings/export", body, map[string]string{"X-CSRF-Token": e.csrf})
+	return code, string(raw)
+}
+
+func TestSettingsExportWithKeysNeedsThePassword(t *testing.T) {
+	e := newServicesEnv(t)
+	e.create("Alpha")
+	wrong := `{"passphrase":"` + passphrase + `","password":"not the password"}`
+	for _, body := range []string{
+		`{"passphrase":"` + passphrase + `"}`,
+		`{"withoutKeys":true,"password":"` + userPassword + `"}`,
+	} {
+		if code, raw := e.export(body); code != 400 {
+			t.Errorf("export %s = %d %s, want 400", body, code, raw)
+		}
+	}
+	if code, raw := e.export(wrong); code != 403 || strings.Contains(raw, "secrets") {
+		t.Fatalf("export with a wrong password = %d %s", code, raw)
+	}
+	if !e.hasAudit("settings export failed: 1 wrong password from 127.0.0.1 in 15 min") {
+		t.Fatalf("audit = %v", e.auditRows())
+	}
+	for _, row := range e.auditRows() {
+		if strings.HasPrefix(row, "exported settings") {
+			t.Fatalf("a refused export was audited as done: %s", row)
+		}
+	}
+	if code, raw := e.export(withKeys); code != 200 || !strings.Contains(raw, `"secrets": {`) {
+		t.Fatalf("export with the password = %d %s", code, raw)
+	}
+	if code, raw := e.export(`{"withoutKeys":true}`); code != 200 {
+		t.Fatalf("export without keys = %d %s", code, raw)
+	}
+	// Wrong passwords count as failed logins from the address.
+	for range auth.MaxAttempts {
+		e.export(wrong)
+	}
+	if code, raw := e.export(withKeys); code != 429 {
+		t.Fatalf("after %d wrong passwords = %d %s, want 429", auth.MaxAttempts, code, raw)
+	}
+}
+
+// Neither the file nor the audit log nor the server log ever holds a key, the passphrase or the password.
+func TestSettingsSecretsStayOutOfFilesAuditAndLog(t *testing.T) {
+	src := newServicesEnv(t)
+	file := src.exported(withKeys)
+	if strings.Contains(string(file), testKey) {
+		t.Fatal("the export holds a key in plain text")
+	}
+	src.export(`{"passphrase":"` + passphrase + `","password":"not the password"}`)
+	dst := newServicesEnv(t)
+	dst.importFile(file, "not the passphrase", "preview")
+	if code, _, msg := dst.importFile(file, passphrase, "add"); code != 200 {
+		t.Fatalf("import = %d %s", code, msg)
+	}
+	for name, e := range map[string]*servicesEnv{"exporting": src, "importing": dst} {
+		audit := strings.Join(e.auditRows(), "\n")
+		for _, secret := range []string{passphrase, "not the passphrase", userPassword, "not the password", testKey} {
+			if strings.Contains(audit, secret) || strings.Contains(e.logs.String(), secret) {
+				t.Errorf("%s server: %q appears in the audit log or the log", name, secret)
+			}
+		}
+	}
+}
+
+// A file whose encrypted keys were cut out still imports, without keys, and says which keys are missing.
+func TestSettingsFileWithoutItsSecretsImportsNoKeys(t *testing.T) {
+	src := newServicesEnv(t)
+	var f map[string]any
+	if err := json.Unmarshal(src.exported(withKeys), &f); err != nil {
+		t.Fatal(err)
+	}
+	f["secrets"] = nil
+	stripped, _ := json.Marshal(f)
+	dst := newServicesEnv(t)
+	code, rep, msg := dst.importFile(stripped, "", "add")
+	if code != 200 || len(rep.Services) != 2 || rep.Services[0].Key != "missing" || rep.Services[1].Key != "none" {
+		t.Fatalf("import = %d %+v %s", code, rep, msg)
+	}
+	svcs, err := dst.srv.Store.Services(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, svc := range svcs {
+		if svc.SealedKey != nil {
+			t.Fatalf("%s got a key", svc.Name)
+		}
+	}
+	if !dst.hasAudit("imported settings: added: 2, skipped: 0") {
+		t.Fatalf("audit = %v", dst.auditRows())
+	}
+}
+
+func TestSettingsImportRefusesTooManyDismissedFinds(t *testing.T) {
+	e := newServicesEnv(t)
+	file := func(n int) []byte {
+		f := backup.File{Format: backup.Format, Version: backup.Version, Services: []backup.Service{}}
+		for i := range n {
+			f.Dismissed = append(f.Dismissed, fmt.Sprintf("fake http://192.0.2.%d:%d", i%250+1, 1000+i))
+		}
+		b, _ := json.Marshal(f)
+		return b
+	}
+	if code, _, msg := e.importFile(file(maxDismissed+1), "", "add"); code != 400 ||
+		!strings.Contains(msg, "more than 5000 dismissed finds") {
+		t.Fatalf("%d dismissed finds = %d %s", maxDismissed+1, code, msg)
+	}
+	if d, _ := e.srv.Store.Dismissed(context.Background()); len(d) != 0 {
+		t.Fatalf("a refused file dismissed %d finds", len(d))
+	}
+	if code, rep, msg := e.importFile(file(maxDismissed), "", "add"); code != 200 || rep.Dismissed != maxDismissed {
+		t.Fatalf("%d dismissed finds = %d %+v %s", maxDismissed, code, rep, msg)
+	}
+}
+
+// Only a wrong passphrase costs an import attempt: one whose client went away before it was tried does not.
+func TestSettingsImportCountsOnlyTriedPassphrases(t *testing.T) {
+	e := newServicesEnv(t)
+	file := e.exported(withKeys)
+	body, _ := json.Marshal(map[string]any{"file": string(file), "passphrase": "not the passphrase", "mode": "preview"})
+	attempts := func() int {
+		addrs, _ := e.srv.importLimiter.Status()
+		if len(addrs) == 0 {
+			return 0
+		}
+		return addrs[0].Attempts
+	}
+	e.srv.fileKeySlot <- struct{}{} // another settings file's key is being derived
+	for range auth.MaxAttempts + 1 {
+		ctx, cancel := context.WithCancel(context.Background())
+		req, _ := http.NewRequestWithContext(ctx, "POST", e.base+"/api/settings/import", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-CSRF-Token", e.csrf)
+		done := make(chan error, 1)
+		go func() {
+			resp, err := e.http.Do(req)
+			if err == nil {
+				resp.Body.Close()
+			}
+			done <- err
+		}()
+		eventually(t, "the attempt is reserved", func() bool { return attempts() == 1 })
+		cancel()
+		if err := <-done; err == nil {
+			t.Fatal("the request was answered while it waited")
+		}
+		eventually(t, "the attempt is given back", func() bool { return attempts() == 0 })
+	}
+	<-e.srv.fileKeySlot
+	if code, _, msg := e.importFile(file, passphrase, "preview"); code != 200 {
+		t.Fatalf("import after %d abandoned attempts = %d %s", auth.MaxAttempts+1, code, msg)
+	}
+}
+
+// Replacing with a file that holds nothing to restore would only remove the saved services: it is refused.
+func TestSettingsReplaceWithNothingIsRefused(t *testing.T) {
+	e := newServicesEnv(t)
+	e.create("Keep")
+	file := []byte(`{"format":"observarr-settings","version":1,"createdAt":"","observarrVersion":"","services":[` +
+		`{"id":1,"type":"future","name":"Later","url":"http://later:1","container":"","hasKey":false}],` +
+		`"dismissed":[],"secrets":null}`)
+	if code, rep, msg := e.importFile(file, "", "preview"); code != 200 || rep.Saved != 1 || len(rep.Services) != 0 {
+		t.Fatalf("preview = %d %+v %s", code, rep, msg)
+	}
+	if code, _, msg := e.importFile(file, "", "replace"); code != 400 || !strings.Contains(msg, "nothing replaced") {
+		t.Fatalf("replace = %d %s", code, msg)
+	}
+	if got := e.saved(); len(got) != 1 || got[0] != "Keep" {
+		t.Fatalf("saved = %v", got)
 	}
 }

@@ -66,12 +66,14 @@ type Server struct {
 	healthReason string    // why that probe failed; "" if it did not
 
 	importLimiter *auth.Limiter // slows down passphrase guessing on settings import, per user
+	fileKeySlot   chan struct{} // one settings file's key derivation at a time; see withFileKeySlot
 }
 
 // Handler returns the complete HTTP handler. Call it once, before serving.
 func (s *Server) Handler() http.Handler {
 	s.hashSlots = make(chan struct{}, runtime.NumCPU())
 	s.importLimiter = auth.NewLimiter(time.Now)
+	s.fileKeySlot = make(chan struct{}, 1)
 	if s.pingEvery == 0 {
 		s.pingEvery = 25 * time.Second
 	}
