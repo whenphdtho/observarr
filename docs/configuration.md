@@ -27,7 +27,8 @@ browser remembers which cards are open).
 
 For any of these you'll need:
 
-- **Its API key.** In Sonarr, Radarr, Lidarr and Prowlarr: Settings → General → Security → API Key.
+- **Its API key.** In Sonarr, Radarr, Lidarr and Prowlarr: Settings → General → Security → API Key. In
+  Jellyfin: Dashboard → API Keys → add one named Observarr (see [deploy.md](deploy.md#connect-jellyfin)).
 - **A URL Observarr can reach:**
   - If Observarr and the app share a Docker network, use the app's **container name** as the host, e.g.
     `http://sonarr:8989`.

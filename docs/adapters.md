@@ -350,3 +350,32 @@ point, state (`mounted`, `active`, or `unmounted` for apps that keep configured 
 and limit, cached files, uploads in progress and queued, errored files and out-of-space — plus the transfer
 speed, totals and at most `shape.MaxTransfers` (20) transfers in progress; `Total` and `ActiveTransfers` keep
 the real counts. The Storage view and the `Mounts` widget render it.
+
+## Jellyfin: streams
+
+`internal/adapters/jellyfin` reads Jellyfin's REST API with an API key. It fills `health` and `streams`;
+deployment is in [deploy.md](deploy.md#connect-jellyfin).
+
+- **Calls.** `GET /System/Info/Public` (no key) recognises Jellyfin by its `ProductName` and is the network
+  scan's fingerprint; `GET /System/Info` checks the key and gives the version and the server's own state (a
+  pending restart or a shutdown becomes a warning); `GET /Sessions?activeWithinSeconds=960` lists the sessions.
+  Field names are checked against Jellyfin's source and recorded in the package comment.
+- **The key** goes in `Authorization: MediaBrowser Token="<key>"`, the form Jellyfin keeps; the `X-Emby-Token`
+  header is deprecated and off by default from Jellyfin 12. A key with anything but letters, digits and dashes is
+  refused before a request is built, so it cannot break out of the quotes.
+- **Play method.** Jellyfin reports a remux, and a stream whose audio alone is converted, as `Transcode`; with
+  `TranscodingInfo.IsVideoDirect` that is a direct stream, as Jellyfin's own dashboard shows it. Transcode
+  reasons (a flags enum the server writes as an array of names) become plain words, e.g.
+  `ContainerBitrateExceedsLimit` is "bitrate too high".
+- **Privacy.** A session carries the client's address (`RemoteEndPoint`); the adapter has no field for it, so it
+  is never read, kept or sent to the browser. User names are kept.
+- **Emby** is not covered: its public system info has no product name to recognise it by, and it authenticates
+  differently. It would need an adapter of its own, tested against a real server.
+
+The `streams` shape (`shape.Streams`) counts every session playing something — in all, paused, transcoding —
+and sums the bitrate, and lists at most `shape.MaxStreams` (50), sorted by user and title. Each stream has the
+user, client and device, a title ("Series S01E02 · Episode", "Film (2008)"), paused or not, progress, the play
+method (`direct`, `directstream`, `transcode`), at most `shape.MaxStreamReasons` (8) reasons, the codecs of the
+file and what the server converts them to, and the bitrate in bits/s. The poller reads it every 10 s while
+someone watches, like a queue. The `Streams` widget, the Overview's "Now playing" section, the service card and
+the Network view render it. A transcode is not a warning: the adapter has nothing that says it is a problem.
