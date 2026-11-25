@@ -82,7 +82,7 @@
 <style>
   .card-head { flex-wrap: wrap; }
   .pad { padding: 24px 0; }
-  .avg { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 18px; margin: -6px 0 14px; font-size: var(--t-base); }
+  .avg { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 18px; margin: -6px 0 14px; font-size: var(--t-body); }
   .avg > span { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; color: var(--text2); }
   .avg b { font-weight: 600; color: var(--text); }
 </style>

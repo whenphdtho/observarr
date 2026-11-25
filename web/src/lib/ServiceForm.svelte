@@ -219,12 +219,12 @@
   .fields { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   @container (max-width: 440px) { .fields { grid-template-columns: minmax(0, 1fr); } }
   .fields .wide { grid-column: 1 / -1; }
-  label { display: grid; gap: 6px; font-size: var(--t-base); color: var(--text2); align-content: start; }
+  label { display: grid; gap: 6px; font-size: var(--t-body); color: var(--text2); align-content: start; }
   label.check { display: flex; align-items: center; gap: 8px; }
-  .hint { font-size: var(--t-sm); }
+  .hint { font-size: var(--t-small); }
   .ok-text { color: var(--ok); }
   .status:empty { display: none; }
   .status { display: grid; gap: 4px; }
-  p { font-size: var(--t-base); }
+  p { font-size: var(--t-body); }
   .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 </style>

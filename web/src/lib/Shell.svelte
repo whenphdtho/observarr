@@ -9,7 +9,7 @@
   import Storage from './Storage.svelte';
   import Rail from './Rail.svelte';
   import Icon from './icons/Icon.svelte';
-  import Mark from './Mark.svelte';
+  import BrandMark from './BrandMark.svelte';
   import { arrive } from './motion.js';
   import { live, serviceList, reconnecting, lastEvent } from './live.js';
   import { loadAdapters, loadSystem } from './data.js';
@@ -128,7 +128,7 @@
 <div class="app">
   <aside class="left">
     <div class="brand">
-      <Mark size={26} />
+      <BrandMark size={26} />
       Observarr
     </div>
 
@@ -215,7 +215,7 @@
 
   .brand {
     display: flex; align-items: center; gap: 10px; padding: 0 10px 22px;
-    font-size: var(--t-lg); font-weight: 680; letter-spacing: -0.02em;
+    font-family: var(--font-display); font-size: var(--t-h2); font-weight: var(--w-display); letter-spacing: var(--track-heading);
   }
 
   .search {
@@ -229,13 +229,13 @@
   .search input:focus { box-shadow: none; }
   .search input::-webkit-search-cancel-button { display: none; }
   .search kbd {
-    font: 500 var(--t-xs) 'Inter', sans-serif; color: var(--muted); border: 1px solid var(--border2); border-radius: 4px; padding: 0 5px;
+    font: 500 var(--t-micro) var(--font-body); color: var(--muted); border: 1px solid var(--border2); border-radius: 4px; padding: 0 5px;
   }
 
-  .cap { padding: 4px 10px 6px; font-size: var(--t-sm); color: var(--muted); }
+  .cap { padding: 4px 10px 6px; font-size: var(--t-small); color: var(--muted); }
   .vbtn {
     display: flex; align-items: center; gap: 10px; padding: 8px 12px; margin-bottom: 2px; border-radius: var(--r);
-    color: var(--text2); font-weight: 500; font-size: var(--t-base); text-decoration: none; white-space: nowrap;
+    color: var(--text2); font-weight: 500; font-size: var(--t-body); text-decoration: none; white-space: nowrap;
     transition: background 140ms var(--ease), color 140ms var(--ease);
   }
   .vbtn :global(.icon) { color: var(--muted); }
@@ -248,15 +248,15 @@
   .acct { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 12px 10px 0; border-top: 1px solid var(--border); }
   .av {
     width: 28px; height: 28px; border-radius: 50%; background: var(--surface3); display: grid; place-items: center;
-    font-weight: 600; font-size: var(--t-sm); flex: none;
+    font-weight: 600; font-size: var(--t-small); flex: none;
   }
-  .nm { display: grid; min-width: 0; flex: 1; line-height: 1.3; font-weight: 550; font-size: var(--t-base); }
-  .nm .muted { font-size: var(--t-sm); font-weight: 400; }
+  .nm { display: grid; min-width: 0; flex: 1; line-height: 1.3; font-weight: 500; font-size: var(--t-body); }
+  .nm .muted { font-size: var(--t-small); font-weight: 400; }
   .acct .ibtn { border-color: transparent; }
 
   .top { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; min-width: 0; }
-  h1 { flex: 1; font-size: var(--t-h1); font-weight: 680; letter-spacing: -0.025em; line-height: 1.2; }
-  .live { display: inline-flex; align-items: center; gap: 4px; flex: none; font-size: var(--t-sm); color: var(--muted); white-space: nowrap; }
+  h1 { flex: 1; }
+  .live { display: inline-flex; align-items: center; gap: 4px; flex: none; font-size: var(--t-small); color: var(--muted); white-space: nowrap; }
   .live i { position: relative; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); margin-right: 4px; }
   /* One soft ring leaves the dot when a reading arrives. */
   .live i.beat::after {
@@ -299,7 +299,7 @@
     nav .cap { display: none; }
     .vbtn {
       flex: 1 1 0; min-width: 0; min-height: 48px; flex-direction: column; justify-content: center; gap: 3px;
-      padding: 7px 2px; margin: 0; font-size: var(--t-xs);
+      padding: 7px 2px; margin: 0; font-size: var(--t-micro);
     }
     .vlabel { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
     .vbtn[aria-current='page'], .vbtn[aria-current='page']:hover { background: var(--accent-fill); color: var(--accent-ink); }

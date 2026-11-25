@@ -164,7 +164,7 @@
   svg { display: block; overflow: visible; }
   .grid { stroke: var(--grid); }
   .grid.zero { stroke: var(--border2); }
-  .label { fill: var(--muted); font-size: var(--t-xs); }
+  .label { fill: var(--muted); font-size: var(--t-micro); }
   .line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
   .cross { stroke: var(--text2); stroke-width: 1; stroke-dasharray: 3 3; }
   .mark { fill: var(--surface); stroke-width: 2.5; }
@@ -175,7 +175,7 @@
   .tip {
     position: absolute; top: 4px; z-index: 2; pointer-events: none; display: grid; gap: 4px; min-width: 150px; max-width: min(260px, 70%);
     padding: 9px 12px; border-radius: var(--r); background: var(--surface3); border: 1px solid var(--border2);
-    box-shadow: var(--float); font-size: var(--t-sm); color: var(--text2);
+    box-shadow: var(--float); font-size: var(--t-small); color: var(--text2);
   }
   .when { color: var(--text); font-weight: 600; white-space: nowrap; }
   .row { display: flex; align-items: center; gap: 7px; min-width: 0; }

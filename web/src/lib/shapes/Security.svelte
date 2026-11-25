@@ -46,13 +46,13 @@
 <style>
   .security { display: grid; gap: 6px; }
   .row { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding-top: 12px; border-top: 1px solid var(--border); }
-  .label { font-size: var(--t-base); font-weight: 600; }
-  .count { font-size: var(--t-sm); color: var(--muted); }
-  .age { margin-left: auto; font-size: var(--t-sm); white-space: nowrap; }
-  .error { font-size: var(--t-base); }
-  .split { font-size: var(--t-sm); }
-  .last { display: flex; align-items: baseline; gap: 8px; min-width: 0; font-size: var(--t-base); }
-  .what { flex: none; font-size: var(--t-sm); }
-  .value { flex: 0 1 auto; font-weight: 550; }
-  .scenario { flex: 0 1 auto; margin-left: auto; font-size: var(--t-sm); }
+  .label { font-size: var(--t-body); font-weight: 600; }
+  .count { font-size: var(--t-small); color: var(--muted); }
+  .age { margin-left: auto; font-size: var(--t-small); white-space: nowrap; }
+  .error { font-size: var(--t-body); }
+  .split { font-size: var(--t-small); }
+  .last { display: flex; align-items: baseline; gap: 8px; min-width: 0; font-size: var(--t-body); }
+  .what { flex: none; font-size: var(--t-small); }
+  .value { flex: 0 1 auto; font-weight: 500; }
+  .scenario { flex: 0 1 auto; margin-left: auto; font-size: var(--t-small); }
 </style>

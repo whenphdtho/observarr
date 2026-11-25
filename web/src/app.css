@@ -4,6 +4,23 @@
   font-weight: 100 900;
   font-display: swap;
 }
+/* Sora sets the page titles, the headings and the wordmark: Latin only, weights 600 to 700. */
+@font-face {
+  font-family: 'Sora';
+  src: url('./assets/fonts/sora.woff2') format('woff2');
+  font-weight: 600 700;
+  font-display: swap;
+}
+/* Until Sora arrives, Arial Bold scaled to its widths and heights holds the headings' size and line. */
+@font-face {
+  font-family: 'Sora Fallback';
+  src: local('Arial Bold'), local('Arial-BoldMT'), local('Arial');
+  font-weight: 600 700;
+  size-adjust: 107.3%;
+  ascent-override: 90.4%;
+  descent-override: 27%;
+  line-gap-override: 0%;
+}
 
 :root {
   color-scheme: dark;
@@ -74,19 +91,38 @@
   --r-pill: 999px;
   /* Room inside a panel. */
   --pad: 20px 22px;
-  /* Type scale: axis and dock labels, meta, body, emphasis, section, page title, lead figures. */
-  --t-xs: 11px;
-  --t-sm: 12px;
-  --t-base: 13px;
-  --t-md: 14px;
-  --t-lg: 16px;
-  --t-xl: 20px;
-  --t-2xl: 28px;
-  --t-h1: 24px;
+  /* Brand: the mark's tile stays dark wherever it sits, with a hairline to hold its edge on the rails. */
+  --brand-tile: #14153a;
+  --brand-ink: #ffffff;
+  --brand-edge: rgba(255, 255, 255, 0.07);
+  /* Type. Sora sets the page title, the section and card headings and the wordmark; Inter sets the
+     rest, every figure included, in tabular numerals. Sentence case throughout, no spaced capitals. */
+  --font-display: 'Sora', 'Sora Fallback', ui-sans-serif, system-ui, sans-serif;
+  --font-body: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --t-display: 24px; /* h1: the page title */
+  --t-h2: 16px; /* section and card headings, dialog titles, the wordmark */
+  --t-h3: 14px; /* headings inside a section, app names, the side column's headings */
+  --t-body: 13px; /* text, controls, tables */
+  --t-small: 12px; /* meta, keys, hints, column heads */
+  --t-micro: 11px; /* axis and dock labels: the floor for any text */
+  --t-figure-lg: 28px; /* lead figures */
+  --t-figure: 20px; /* key figures */
+  --t-figure-sm: 16px; /* figures in a list of facts */
+  --w-body: 400;
+  --w-label: 500;
+  --w-strong: 600; /* Inter emphasis and figures */
+  --w-heading: 600;
+  --w-display: 650;
+  --lh-display: 1.2;
+  --lh-heading: 1.3;
+  --lh-body: 1.5;
+  --track-display: -0.02em;
+  --track-heading: -0.01em;
+  --track-figure: -0.015em;
   /* Depth: panels sit a little above the page; dialogs and tooltips further. */
   --lift: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 14px 30px -20px rgba(3, 4, 18, 0.9);
   --float: 0 14px 34px -12px rgba(3, 4, 18, 0.85);
-  font: 14px/1.5 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font: var(--w-body) var(--t-body) / var(--lh-body) var(--font-body);
   /* Tabular figures everywhere: live values must not jitter as they change. */
   font-feature-settings: 'cv11', 'ss01', 'tnum';
   font-variant-numeric: tabular-nums;
@@ -99,13 +135,22 @@
 body { margin: 0; background: var(--bg); color: var(--text); caret-color: var(--accent); }
 ::selection { background: var(--accent-wash); color: var(--text); }
 h1, h2, h3, p { margin: 0; }
+h1, h2, h3 {
+  font-family: var(--font-display); font-weight: var(--w-heading); line-height: var(--lh-heading); text-wrap: balance;
+}
+h1 { font-size: var(--t-display); font-weight: var(--w-display); line-height: var(--lh-display); letter-spacing: var(--track-display); }
+h2 { font-size: var(--t-h2); letter-spacing: var(--track-heading); }
+h3 { font-size: var(--t-h3); }
+/* Counts and units inside a heading are figures: Inter, at the heading's size or their own. */
+:is(h1, h2, h3) :is(em, small, .unit, .num, .meta) { font-family: var(--font-body); letter-spacing: 0; }
+p { text-wrap: pretty; }
 /* Disclosure summaries look like the controls they are. */
 summary { cursor: pointer; color: var(--text2); width: fit-content; border-radius: 4px; }
 summary:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
 
 /* Buttons: primary (accent) by default, .quiet for everything secondary, .ibtn for icon-only. */
 button {
-  font: inherit; font-size: var(--t-base); font-weight: 550; display: inline-flex; align-items: center; justify-content: center;
+  font: inherit; font-size: var(--t-body); font-weight: 500; display: inline-flex; align-items: center; justify-content: center;
   gap: 7px; padding: 6px 12px; border-radius: var(--r); cursor: pointer; white-space: nowrap;
   color: var(--accent-ink); background: var(--accent-fill); border: 1px solid var(--accent-fill);
   transition: background 140ms var(--ease), border-color 140ms var(--ease), color 140ms var(--ease),
@@ -125,7 +170,7 @@ button.ibtn {
 button.ibtn:hover:not(:disabled) { color: var(--text); background: var(--surface2); border-color: var(--border2); }
 
 input, select, textarea {
-  font: inherit; font-size: var(--t-base); color: var(--text); background: var(--bg); border: 1px solid var(--field-border);
+  font: inherit; font-size: var(--t-body); color: var(--text); background: var(--bg); border: 1px solid var(--field-border);
   border-radius: var(--r); padding: 7px 10px; width: 100%;
 }
 input[type='checkbox'] { width: 16px; height: 16px; accent-color: var(--accent); }
@@ -138,7 +183,7 @@ a { color: var(--accent-text); text-underline-offset: 3px; text-decoration-thick
 a:hover { color: var(--accent-text-hi); }
 /* A link that leads to another view: accent words and a chevron, underlined on hover. */
 .go {
-  display: inline-flex; align-items: center; gap: 2px; color: var(--accent-text); font-size: var(--t-sm); font-weight: 550;
+  display: inline-flex; align-items: center; gap: 2px; color: var(--accent-text); font-size: var(--t-small); font-weight: 500;
   text-decoration: none; white-space: nowrap; border-radius: 4px;
 }
 .go:hover { color: var(--accent-text-hi); text-decoration: underline; }
@@ -160,8 +205,8 @@ dialog[open]::backdrop { animation: backdrop-in 180ms var(--ease); }
 @keyframes dialog-in { from { opacity: 0; transform: translateY(6px) scale(0.985); } }
 @keyframes backdrop-in { from { opacity: 0; } }
 dialog::backdrop { background: var(--scrim); }
-dialog h2 { font-size: var(--t-lg); font-weight: 600; }
-dialog label { display: grid; gap: 6px; font-size: var(--t-base); color: var(--text2); }
+dialog h2 { font-size: var(--t-h2); }
+dialog label { display: grid; gap: 6px; font-size: var(--t-body); color: var(--text2); }
 dialog .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 
 /* Shared pieces used by several views. */
@@ -190,10 +235,10 @@ dialog .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap:
 @media (max-width: 720px) { :root { --pad: 16px 16px; } }
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 16px; min-width: 0; }
 .card-head h2 {
-  font-size: var(--t-lg); font-weight: 620; letter-spacing: -0.012em; display: flex; align-items: center; gap: 8px; min-width: 0;
+  display: flex; align-items: center; gap: 8px; min-width: 0;
 }
 /* Right-aligned note in a section head: a count, a unit, a time span. */
-.card-head .meta { font-size: var(--t-sm); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-head .meta { font-size: var(--t-small); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* A row of key figures (Kpi.svelte): one panel split by hairlines, four across, two on narrower
    layouts, one on the smallest. The 1px gap lets the panel's border colour show as the dividers. */
@@ -213,7 +258,7 @@ dialog .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap:
   background: var(--bg); border: 1px solid var(--border);
 }
 .seg button {
-  padding: 4px 12px; border-radius: var(--r-pill); font-weight: 550; font-size: var(--t-sm); color: var(--text2);
+  padding: 4px 12px; border-radius: var(--r-pill); font-weight: 500; font-size: var(--t-small); color: var(--text2);
   background: transparent; border: 0; min-height: 28px;
 }
 .seg button:hover:not(:disabled) { background: var(--surface2); border: 0; color: var(--text); }
@@ -224,7 +269,7 @@ dialog .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap:
 /* Something to set up or know: the notices of the host and container sources. */
 .banner {
   display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: var(--r-lg);
-  border: 1px solid var(--warn-line); background: var(--surface); color: var(--text2); font-size: var(--t-base);
+  border: 1px solid var(--warn-line); background: var(--surface); color: var(--text2); font-size: var(--t-body);
 }
 .banner > .icon { color: var(--warn); margin-top: 1px; }
 .banner-text { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
@@ -234,15 +279,15 @@ dialog .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap:
 }
 
 /* No figures yet, or none to show. */
-.waiting { color: var(--muted); font-size: var(--t-base); }
+.waiting { color: var(--muted); font-size: var(--t-body); }
 
 /* Data tables: a quiet header, numbers right-aligned in tabular figures. On narrow layouts each
    row becomes a block whose cells name their column (data-label), split from the next by a hairline. */
 .table-wrap { margin: 0 -8px; overflow-x: auto; }
-table.data { width: 100%; border-collapse: collapse; font-size: var(--t-base); }
+table.data { width: 100%; border-collapse: collapse; font-size: var(--t-body); }
 .data th, .data td { padding: 8px; text-align: left; border-bottom: 1px solid var(--border); min-width: 0; }
 .data tbody tr:last-child td { border-bottom: 0; }
-.data th { white-space: nowrap; color: var(--muted); font-weight: 500; font-size: var(--t-sm); padding-top: 2px; }
+.data th { white-space: nowrap; color: var(--muted); font-weight: 500; font-size: var(--t-small); padding-top: 2px; }
 .data .r { text-align: right; }
 .data td.r { white-space: nowrap; }
 .data th button {
@@ -262,7 +307,7 @@ table.data { width: 100%; border-collapse: collapse; font-size: var(--t-base); }
   }
   .data tbody tr:last-child { border-bottom: 0; }
   .data td { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 2px 0; border: 0; }
-  .data td::before { content: attr(data-label); color: var(--muted); font-size: var(--t-sm); flex-shrink: 0; }
+  .data td::before { content: attr(data-label); color: var(--muted); font-size: var(--t-small); flex-shrink: 0; }
   .data td.lead { display: grid; justify-content: stretch; grid-column: 1 / -1; font-weight: 600; }
   .data td.r { text-align: left; }
   .data td.lead::before { display: none; }
@@ -277,7 +322,7 @@ table.data { width: 100%; border-collapse: collapse; font-size: var(--t-base); }
 }
 .ring.blank { border-color: transparent; }
 /* A key below a chart: ring markers and names in one wrapping row. */
-.keys { display: flex; flex-wrap: wrap; gap: 6px 18px; list-style: none; margin: 0; padding: 0; font-size: var(--t-sm); color: var(--text2); }
+.keys { display: flex; flex-wrap: wrap; gap: 6px 18px; list-style: none; margin: 0; padding: 0; font-size: var(--t-small); color: var(--text2); }
 .keys li { display: inline-flex; align-items: center; gap: 7px; min-width: 0; white-space: nowrap; }
 
 
@@ -306,7 +351,7 @@ table.data { width: 100%; border-collapse: collapse; font-size: var(--t-base); }
 /* Small facts after a title, split by middle dots: "Downloading · 1.6 GiB left · 00:00:53". The
    row keeps one line; each fact gives way with an ellipsis. */
 .facts {
-  display: flex; gap: 0 6px; min-width: 0; font-size: var(--t-sm); color: var(--muted); white-space: nowrap; overflow: hidden;
+  display: flex; gap: 0 6px; min-width: 0; font-size: var(--t-small); color: var(--muted); white-space: nowrap; overflow: hidden;
 }
 .facts > * { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .facts > * + *::before { content: '·'; margin-right: 6px; color: var(--muted); }
@@ -316,9 +361,9 @@ table.data { width: 100%; border-collapse: collapse; font-size: var(--t-base); }
   color: var(--muted); display: grid; justify-items: center; gap: 4px;
 }
 .empty .icon { color: var(--dim); margin-bottom: 4px; }
-.empty b { color: var(--text); font-size: var(--t-md); font-weight: 620; letter-spacing: -0.01em; }
+.empty b { color: var(--text); font-size: var(--t-h3); font-weight: var(--w-strong); }
 .empty button { margin-top: 10px; }
-.empty > span { max-width: 60ch; font-size: var(--t-base); overflow-wrap: anywhere; }
+.empty > span { max-width: 60ch; font-size: var(--t-body); overflow-wrap: anywhere; }
 .empty .links { display: flex; gap: 6px 16px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
 
 @media (prefers-reduced-motion: reduce) {

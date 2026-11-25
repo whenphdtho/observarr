@@ -22,7 +22,7 @@
 
 <style>
   .delta {
-    display: inline-flex; align-items: center; gap: 4px; font-size: var(--t-sm); font-weight: 600; white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 4px; font-size: var(--t-small); font-weight: 600; white-space: nowrap;
     font-variant-numeric: tabular-nums; line-height: 1;
   }
   svg { fill: currentColor; flex: none; }

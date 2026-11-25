@@ -326,37 +326,37 @@
 
   .flow { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 24px; align-items: start; }
   .legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; min-width: 0; }
-  .legend li { display: flex; align-items: flex-start; gap: 10px; padding: 5px 0; min-width: 0; font-size: var(--t-base); }
-  .legend .legend-head { font-size: var(--t-sm); color: var(--muted); justify-content: space-between; padding-top: 0; }
+  .legend li { display: flex; align-items: flex-start; gap: 10px; padding: 5px 0; min-width: 0; font-size: var(--t-body); }
+  .legend .legend-head { font-size: var(--t-small); color: var(--muted); justify-content: space-between; padding-top: 0; }
   .legend .ring { margin-top: 5px; }
-  .span-total { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; margin: -6px 0 14px; font-size: var(--t-base); }
-  .span-total b { font-size: var(--t-xl); font-weight: 650; letter-spacing: -0.015em; }
+  .span-total { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; margin: -6px 0 14px; font-size: var(--t-body); }
+  .span-total b { font-size: var(--t-figure); font-weight: 600; letter-spacing: var(--track-figure); }
   .who { display: grid; min-width: 0; flex: 1; line-height: 1.35; }
-  .who .name { font-weight: 550; }
-  .who .muted, .fig .muted { font-size: var(--t-sm); }
+  .who .name { font-weight: 500; }
+  .who .muted, .fig .muted { font-size: var(--t-small); }
   .fig { display: grid; justify-items: end; line-height: 1.35; white-space: nowrap; flex: none; }
-  .note { margin-top: 12px; font-size: var(--t-sm); color: var(--muted); max-width: 90ch; }
+  .note { margin-top: 12px; font-size: var(--t-small); color: var(--muted); max-width: 90ch; }
 
   .pair { display: grid; gap: 20px; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; }
   .pair.trend { grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); align-items: stretch; }
   .pair.single { grid-template-columns: minmax(0, 1fr); }
-  .app { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 550; }
+  .app { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 500; }
   .share { display: block; height: 2px; margin-top: 6px; border-radius: 1px; background: var(--surface3); overflow: hidden; max-width: 220px; }
   .share i { display: block; height: 100%; background: var(--bar); }
 
-  .pct { font-size: var(--t-2xl); font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; white-space: nowrap; }
-  .pct small { font-size: var(--t-base); font-weight: 450; color: var(--muted); margin-left: 8px; letter-spacing: 0; }
+  .pct { font-size: var(--t-figure-lg); font-weight: 600; letter-spacing: var(--track-figure); line-height: 1.2; white-space: nowrap; }
+  .pct small { font-size: var(--t-body); font-weight: 400; color: var(--muted); margin-left: 8px; letter-spacing: 0; }
   .budget-bar { display: block; margin: 10px 0 8px; }
-  .used { font-size: var(--t-base); color: var(--text2); }
+  .used { font-size: var(--t-body); color: var(--text2); }
 
   .totals { margin: 0; display: grid; }
-  .totals div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: var(--t-base); }
+  .totals div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: var(--t-body); }
   .totals div:first-child { padding-top: 0; }
   .totals dt { color: var(--text2); }
-  .totals dd { margin: 0; font-weight: 550; white-space: nowrap; }
+  .totals dd { margin: 0; font-weight: 500; white-space: nowrap; }
   .totals .sum { border-bottom: 0; }
   .totals .sum dd { font-weight: 600; }
-  .hint { margin-top: 10px; font-size: var(--t-sm); overflow-wrap: anywhere; }
+  .hint { margin-top: 10px; font-size: var(--t-small); overflow-wrap: anywhere; }
 
   @container (max-width: 760px) {
     .flow { grid-template-columns: minmax(0, 1fr); }

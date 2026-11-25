@@ -191,30 +191,30 @@
   .service.warn { border-color: var(--warn-edge); }
   header { display: flex; align-items: center; gap: 12px; min-width: 0; }
   .ident { display: grid; min-width: 0; flex: 1; line-height: 1.35; }
-  h2 { font-size: var(--t-md); font-weight: 600; }
-  .ident p { font-size: var(--t-sm); }
+  h2 { font-size: var(--t-h3); letter-spacing: 0; }
+  .ident p { font-size: var(--t-small); }
   /* State and version sit on the name's line. */
   .badges {
     display: flex; align-items: baseline; gap: 10px; min-width: 0; flex: 0 1 auto; align-self: flex-start;
-    padding-top: 2px; font-size: var(--t-sm);
+    padding-top: 2px; font-size: var(--t-small);
   }
   .badges .state-word { flex: none; color: var(--text2); }
   .badges .state-word.fail-text { color: var(--fail); }
   .badges .version { flex: 0 1 auto; max-width: 110px; }
 
-  .summary { font-size: var(--t-base); color: var(--text2); }
+  .summary { font-size: var(--t-body); color: var(--text2); }
   .summary.warn { color: var(--warn); }
   .summary.fail { color: var(--fail); }
 
   /* The lead row has one fixed height, whatever it holds, so collapsed cards line up. */
   .lead { height: 40px; display: grid; align-content: center; gap: 7px; min-width: 0; }
   .lead-head { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
-  .lead-title { flex: 1; font-size: var(--t-base); }
-  .pct { flex: none; font-size: var(--t-sm); color: var(--text2); }
-  .lead-warning { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--t-sm); color: var(--text2); }
+  .lead-title { flex: 1; font-size: var(--t-body); }
+  .pct { flex: none; font-size: var(--t-small); color: var(--text2); }
+  .lead-warning { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--t-small); color: var(--text2); }
   .lead-warning :global(.icon) { color: var(--warn); }
   .lead-warning.level-error :global(.icon) { color: var(--fail); }
-  .lead-note { font-size: var(--t-sm); color: var(--muted); }
+  .lead-note { font-size: var(--t-small); color: var(--muted); }
   /* An error keeps up to two lines of the fixed-height row; its full text is in the title. */
   .lead-note.fail {
     color: var(--fail); overflow-wrap: anywhere; overflow: hidden;
@@ -224,7 +224,7 @@
   .details { display: grid; gap: 12px; min-width: 0; }
   .widgets { display: grid; gap: 4px 32px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); align-items: start; }
   .widget { min-width: 0; }
-  .container-line { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--t-sm); color: var(--text2); }
+  .container-line { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--t-small); color: var(--text2); }
   .container-line :global(.icon) { color: var(--muted); }
   .container-line .state { flex: 1 1 auto; }
   .container-line .num { flex: none; color: var(--muted); }

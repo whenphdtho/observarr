@@ -130,15 +130,15 @@
   .rail-section + .rail-section { margin-top: 24px; }
   .cap {
     display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px;
-    font-size: var(--t-base); font-weight: 600;
+    font-size: var(--t-h3);
   }
-  .cap em { font-style: normal; color: var(--muted); font-weight: 400; font-size: var(--t-sm); white-space: nowrap; }
-  .none { font-size: var(--t-base); }
+  .cap em { font-style: normal; color: var(--muted); font-weight: 400; font-size: var(--t-small); white-space: nowrap; }
+  .none { font-size: var(--t-body); }
   ul { list-style: none; margin: 0; padding: 0; }
   .app {
     width: calc(100% + 16px); margin: 0 -8px; padding: 6px 8px; justify-content: flex-start; gap: 12px;
     background: transparent; border: 0; border-radius: var(--r); color: var(--text); font-weight: 400;
-    font-size: var(--t-base); text-align: left;
+    font-size: var(--t-body); text-align: left;
   }
   .app:hover:not(:disabled) { background: var(--surface2); }
   /* A service with a problem keeps a faint wash of its state colour, so it is found without reading. */
@@ -150,28 +150,28 @@
   .apps { display: grid; gap: 2px; }
   .app .tile-icon { width: 32px; height: 32px; }
   .text { display: grid; min-width: 0; flex: 1; line-height: 1.35; }
-  .name { font-weight: 550; }
-  .line { font-size: var(--t-sm); color: var(--muted); }
+  .name { font-weight: 500; }
+  .line { font-size: var(--t-small); color: var(--muted); }
   .line .warn { color: var(--warn); }
   .line .fail { color: var(--fail); }
 
   .srow {
     display: flex; align-items: center; gap: 10px; padding: 6px 8px; margin: 0 -8px; border-radius: var(--r);
-    font-size: var(--t-base); color: var(--text2); text-decoration: none; min-width: 0;
+    font-size: var(--t-body); color: var(--text2); text-decoration: none; min-width: 0;
   }
   .srow:hover { color: var(--text); }
   .srow:focus-visible, .budget:focus-visible { outline-offset: 0; }
   .srow .ellipsis { flex: 1; }
-  .srow b { color: var(--text); font-weight: 550; white-space: nowrap; }
+  .srow b { color: var(--text); font-weight: 500; white-space: nowrap; }
   .srow b.warn-text { color: var(--warn); }
-  .srow b em { font-style: normal; color: var(--muted); font-weight: 400; font-size: var(--t-sm); }
+  .srow b em { font-style: normal; color: var(--muted); font-weight: 400; font-size: var(--t-small); }
 
   .budget {
     margin: 10px -8px 0; display: grid; gap: 6px; padding: 8px; border-radius: var(--r);
-    color: var(--text2); text-decoration: none; font-size: var(--t-base);
+    color: var(--text2); text-decoration: none; font-size: var(--t-body);
   }
   .budget:hover { color: var(--text); }
   .row1 { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-  .row1 b { color: var(--text); font-weight: 550; white-space: nowrap; }
-  .small { font-size: var(--t-sm); }
+  .row1 b { color: var(--text); font-weight: 500; white-space: nowrap; }
+  .small { font-size: var(--t-small); }
 </style>

@@ -69,15 +69,15 @@
     position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; text-align: center;
     padding: 0 30px; pointer-events: none; min-width: 0;
   }
-  .centre b { font-size: var(--t-xl); font-weight: 650; letter-spacing: -0.015em; line-height: 1.2; white-space: nowrap; }
-  .centre span { font-size: var(--t-sm); color: var(--muted); max-width: 100%; }
+  .centre b { font-size: var(--t-figure); font-weight: 600; letter-spacing: var(--track-figure); line-height: 1.2; white-space: nowrap; }
+  .centre span { font-size: var(--t-small); color: var(--muted); max-width: 100%; }
   .key { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; flex: 1 1 180px; min-width: 0; }
   .key li {
     display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 8px;
-    font-size: var(--t-base); min-width: 0; border-radius: var(--r-sm);
+    font-size: var(--t-body); min-width: 0; border-radius: var(--r-sm);
   }
   .key li.on .name { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
   .name { color: var(--text2); }
   .pct { font-weight: 600; text-align: right; }
-  .amt { font-size: var(--t-sm); min-width: 7ch; text-align: right; white-space: nowrap; }
+  .amt { font-size: var(--t-small); min-width: 7ch; text-align: right; white-space: nowrap; }
 </style>

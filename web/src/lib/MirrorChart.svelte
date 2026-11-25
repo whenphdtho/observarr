@@ -220,8 +220,8 @@
   svg { display: block; overflow: visible; }
   .grid { stroke: var(--grid); }
   .grid.zero { stroke: var(--field-border); }
-  .label { fill: var(--muted); font-size: var(--t-xs); }
-  .side { fill: var(--text2); font-size: var(--t-xs); font-weight: 550; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
+  .label { fill: var(--muted); font-size: var(--t-micro); }
+  .side { fill: var(--text2); font-size: var(--t-micro); font-weight: 500; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
   .edge { fill: none; stroke-width: 1.25; stroke-linejoin: round; }
   .cross { stroke: var(--text2); stroke-width: 1; stroke-dasharray: 3 3; }
   .waiting { display: grid; place-items: center; height: 100%; }
@@ -229,7 +229,7 @@
   .tip {
     position: absolute; top: 4px; z-index: 2; pointer-events: none; display: grid; gap: 4px; width: max-content;
     max-width: min(280px, 78%); padding: 9px 12px; border-radius: var(--r); background: var(--surface3);
-    border: 1px solid var(--border2); box-shadow: var(--float); font-size: var(--t-sm); color: var(--text2);
+    border: 1px solid var(--border2); box-shadow: var(--float); font-size: var(--t-small); color: var(--text2);
   }
   .when { color: var(--text); font-weight: 600; white-space: nowrap; }
   .row { display: grid; grid-template-columns: minmax(0, 1fr) 6ch 6ch; gap: 8px; align-items: center; }

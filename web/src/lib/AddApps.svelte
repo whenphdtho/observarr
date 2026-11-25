@@ -193,7 +193,7 @@
   .add-apps { display: grid; gap: 28px; }
   .toolbar { display: flex; align-items: center; margin-bottom: -12px; }
   .back {
-    display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-base); font-weight: 550; color: var(--text2);
+    display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-body); font-weight: 500; color: var(--text2);
     text-decoration: none; padding: 4px 8px 4px 4px; border-radius: var(--r);
   }
   .back:hover { color: var(--text); background: var(--surface2); }
@@ -213,22 +213,22 @@
   .fold-btn :global(.icon) { margin-top: 2px; color: var(--text2); transition: transform 160ms var(--ease); }
   .fold-btn[aria-expanded='true'] :global(.icon) { transform: rotate(90deg); }
   .fold-text { display: grid; gap: 1px; min-width: 0; font-weight: 400; }
-  .fold-text b { font-weight: 600; font-size: var(--t-base); }
-  .fold-text .muted { font-size: var(--t-sm); }
+  .fold-text b { font-weight: 600; font-size: var(--t-body); }
+  .fold-text .muted { font-size: var(--t-small); }
   .fold-body { display: grid; gap: 10px; padding: 0 0 14px 29px; min-width: 0; }
   .scan { display: grid; gap: 10px; }
-  label { display: grid; gap: 6px; font-size: var(--t-base); color: var(--text2); }
+  label { display: grid; gap: 6px; font-size: var(--t-body); color: var(--text2); }
   textarea { resize: vertical; min-height: 44px; }
   .scan-foot { display: flex; align-items: center; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
   .scan-foot .hint { margin-right: auto; }
-  .hint { font-size: var(--t-sm); }
+  .hint { font-size: var(--t-small); }
   .rows { margin: 0; padding: 0; display: grid; }
-  .none { font-size: var(--t-base); }
-  .problems { font-size: var(--t-sm); color: var(--muted); margin-top: 8px; }
+  .none { font-size: var(--t-body); }
+  .problems { font-size: var(--t-small); color: var(--muted); margin-top: 8px; }
   .problems summary { cursor: pointer; width: fit-content; }
   .problems ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 2px; overflow-wrap: anywhere; }
-  .problems b { color: var(--text2); font-weight: 550; }
-  .ok-text { color: var(--ok); font-size: var(--t-base); margin-top: 10px; }
+  .problems b { color: var(--text2); font-weight: 500; }
+  .ok-text { color: var(--ok); font-size: var(--t-body); margin-top: 10px; }
   .spinner {
     width: 14px; height: 14px; border-radius: 50%; flex: none;
     border: 2px solid var(--field-border); border-top-color: var(--accent); animation: spin 0.8s linear infinite;

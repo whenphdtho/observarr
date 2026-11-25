@@ -47,7 +47,7 @@
     container-type: inline-size;
   }
   .kpi > :where(:not(.change):not(.spark-slot)) { grid-column: 1 / -1; }
-  .label { grid-row: 1; display: flex; align-items: center; gap: 2px; min-width: 0; font-size: var(--t-sm); color: var(--muted); }
+  .label { grid-row: 1; display: flex; align-items: center; gap: 2px; min-width: 0; font-size: var(--t-small); color: var(--muted); }
   .graph .label, .kpi:has(.change) .label { grid-column: 1; }
   .change { grid-row: 1; grid-column: 2; justify-self: end; align-self: center; }
   .graph .value { grid-column: 1; }
@@ -60,11 +60,11 @@
   .link:hover .label { color: var(--text2); }
   .link:hover .chev { color: var(--text); transform: translateX(2px); }
   .value {
-    grid-row: 2; font-size: var(--t-xl); font-weight: 600; letter-spacing: -0.01em; line-height: 1.35; margin-top: 4px;
+    grid-row: 2; font-size: var(--t-figure); font-weight: 600; letter-spacing: var(--track-figure); line-height: 1.35; margin-top: 4px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .value small { font-size: var(--t-sm); font-weight: 450; color: var(--muted); margin-left: 4px; letter-spacing: 0; }
-  .sub { font-size: var(--t-sm); color: var(--muted); }
+  .value small { font-size: var(--t-small); font-weight: 400; color: var(--muted); margin-left: 4px; letter-spacing: 0; }
+  .sub { font-size: var(--t-small); color: var(--muted); }
   .bar { margin-top: 8px; }
   .bar > i { transition: width 400ms var(--ease); }
   .bone { display: inline-block; width: 64px; height: 18px; margin: 4px 0; border-radius: 4px; background: var(--surface2); vertical-align: middle; }

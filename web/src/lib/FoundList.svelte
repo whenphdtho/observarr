@@ -119,15 +119,15 @@
 
 <style>
   .found { display: grid; gap: 8px; min-width: 0; }
-  .found-status { font-size: var(--t-base); padding: 6px 0; max-width: 90ch; }
+  .found-status { font-size: var(--t-body); padding: 6px 0; max-width: 90ch; }
   .found-status.loading { display: flex; align-items: center; gap: 10px; }
   .found-status:focus { outline: none; }
   .rows { margin: 0; padding: 0; display: grid; }
   .retry { justify-self: start; }
-  .problems { font-size: var(--t-sm); color: var(--muted); }
+  .problems { font-size: var(--t-small); color: var(--muted); }
   .problems summary { cursor: pointer; width: fit-content; }
   .problems ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 2px; overflow-wrap: anywhere; }
-  .problems b { color: var(--text2); font-weight: 550; }
+  .problems b { color: var(--text2); font-weight: 500; }
   .spinner {
     width: 14px; height: 14px; border-radius: 50%; flex: none;
     border: 2px solid var(--field-border); border-top-color: var(--accent); animation: spin 0.8s linear infinite;

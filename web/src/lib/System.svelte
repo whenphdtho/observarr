@@ -229,7 +229,7 @@
                   <button type="button" onclick={() => sortBy(col.key)}>
                     {col.label}
                     <span class="arrow" aria-hidden="true">
-                      {sortKey === col.key ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                      {#if sortKey === col.key}<Icon name={sortDir === 'asc' ? 'chevron-up' : 'chevron-down'} size={13} />{/if}
                     </span>
                   </button>
                 </th>
@@ -310,15 +310,15 @@
   .pair { display: grid; gap: 20px; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; }
   .pair.single { grid-template-columns: minmax(0, 1fr); }
 
-  .unit { font-size: var(--t-sm); font-weight: 400; color: var(--muted); }
+  .unit { font-size: var(--t-small); font-weight: 400; color: var(--muted); }
   .rows { list-style: none; margin: 0; padding: 0; }
   .rows li {
     display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border);
-    font-size: var(--t-base); min-width: 0;
+    font-size: var(--t-body); min-width: 0;
   }
   .rows li:first-child { padding-top: 0; }
   .rows li:last-child { border-bottom: 0; padding-bottom: 0; }
-  .rows .name { font-weight: 550; }
+  .rows .name { font-weight: 500; }
   .rate { white-space: nowrap; color: var(--text2); }
   .rows li.disk-row { align-items: center; }
   .disk-row .name { flex: 1 1 auto; min-width: 0; }
@@ -329,7 +329,7 @@
   }
 
   .mobile-sort { display: none; }
-  .arrow { font-size: 9px; width: 1em; display: inline-block; }
+  .arrow { width: 13px; height: 13px; display: inline-grid; }
   .state-wrap { display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; }
   /* Two figures of one cell (used/limit, down/up, read/write) sit one above the other. */
   .two { display: grid; line-height: 1.4; }
@@ -342,7 +342,7 @@
      line; CPU %, Restarts and Up since side by side; Memory, Network and Block I/O each on a line
      of their own, as their figures are too long to share one. */
   @container (max-width: 759px) {
-    .mobile-sort { display: flex; align-items: center; gap: 8px; font-size: var(--t-base); margin-bottom: 10px; }
+    .mobile-sort { display: flex; align-items: center; gap: 8px; font-size: var(--t-body); margin-bottom: 10px; }
     .mobile-sort label { white-space: nowrap; flex-shrink: 0; color: var(--muted); }
     .mobile-sort select { flex: 1; min-width: 0; }
     tbody tr {

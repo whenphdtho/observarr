@@ -174,7 +174,7 @@
   .plot:focus-visible { outline-offset: 4px; }
   svg { display: block; overflow: visible; }
   .grid { stroke: var(--grid); }
-  .label { fill: var(--muted); font-size: var(--t-xs); }
+  .label { fill: var(--muted); font-size: var(--t-micro); }
   .col { fill: var(--surface2); }
   .bar { fill-opacity: 0.9; }
   .cap { fill: var(--fail); }
@@ -187,7 +187,7 @@
   .tip {
     position: absolute; top: 4px; z-index: 2; pointer-events: none; display: grid; gap: 4px; min-width: 160px;
     padding: 9px 12px; border-radius: var(--r); background: var(--surface3); border: 1px solid var(--border2);
-    box-shadow: var(--float); font-size: var(--t-sm); color: var(--text2);
+    box-shadow: var(--float); font-size: var(--t-small); color: var(--text2);
   }
   .when { color: var(--text); font-weight: 600; white-space: nowrap; }
   .row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 7px; align-items: center; }

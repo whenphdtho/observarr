@@ -3,7 +3,7 @@
   import EditService from './EditService.svelte';
   import FoundList from './FoundList.svelte';
   import Icon from './icons/Icon.svelte';
-  import Mark from './Mark.svelte';
+  import BrandMark from './BrandMark.svelte';
   import { adapters, adaptersError, adapterFor, snapshot } from './data.js';
   import { lastEvent } from './live.js';
 
@@ -101,7 +101,7 @@
   {#if onboarding && !filtered}
     <section class="card onboarding" aria-labelledby="onboarding-title">
       <div class="intro">
-        <span class="intro-mark"><Mark size={36} /></span>
+        <span class="intro-mark"><BrandMark size={36} /></span>
         <div class="intro-text">
           <h2 id="onboarding-title">{services.length === 0 ? 'Add your apps' : 'Add the rest of your apps'}</h2>
           <p class="muted">
@@ -143,19 +143,18 @@
 <style>
   .apps { display: grid; gap: 16px; }
   .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .count { margin-right: auto; font-size: var(--t-base); font-weight: 600; }
+  .count { margin-right: auto; font-size: var(--t-body); font-weight: 600; }
   /* Cards of one row share its height; an expanded card takes a whole row of its own. */
   .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
 
   .onboarding { display: grid; gap: 12px; padding: 22px 22px 16px; }
   .intro { display: flex; gap: 14px; align-items: flex-start; min-width: 0; }
   .intro-text { display: grid; gap: 4px; min-width: 0; flex: 1; }
-  .intro h2 { font-size: var(--t-lg); font-weight: 620; letter-spacing: -0.01em; }
-  .intro p { font-size: var(--t-base); max-width: 62ch; }
+  .intro p { font-size: var(--t-body); max-width: 62ch; }
   .done { flex: none; }
   .more { border-top: 1px solid var(--border); padding-top: 12px; }
   .link {
-    padding: 0; background: transparent; border: 0; color: var(--accent-text); font-weight: 550;
+    padding: 0; background: transparent; border: 0; color: var(--accent-text); font-weight: 500;
     white-space: normal; text-align: left;
   }
   .link:hover:not(:disabled) { background: transparent; border: 0; text-decoration: underline; }

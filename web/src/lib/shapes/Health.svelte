@@ -62,12 +62,12 @@
   .row { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
   .row .facts { flex: 1; color: var(--text2); }
   .row .state-word { flex: none; }
-  .age { margin-left: auto; padding-left: 6px; font-size: var(--t-sm); white-space: nowrap; }
-  .error { font-size: var(--t-base); }
+  .age { margin-left: auto; padding-left: 6px; font-size: var(--t-small); white-space: nowrap; }
+  .error { font-size: var(--t-body); }
   .warnings { list-style: none; margin: 0; padding: 0; display: grid; }
   .warnings li {
     display: flex; align-items: baseline; gap: 10px; min-width: 0; padding: 8px 0; border-top: 1px solid var(--border);
-    font-size: var(--t-sm); color: var(--text2);
+    font-size: var(--t-small); color: var(--text2);
   }
   .warnings .dot { transform: translateY(-1px); }
   .msg { overflow-wrap: anywhere; min-width: 0; }

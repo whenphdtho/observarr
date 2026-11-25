@@ -435,21 +435,21 @@
 
 <style>
   .security { display: grid; gap: 28px; }
-  .note { font-size: var(--t-sm); margin-top: 10px; }
-  h3 { font-size: var(--t-sm); font-weight: 600; color: var(--text2); margin: 20px 0 8px; }
+  .note { font-size: var(--t-small); margin-top: 10px; }
+  h3 { margin: 20px 0 8px; }
 
   /* The figures of a blocker: label over value, side by side, no boxes. */
   .figures { display: grid; gap: 12px 24px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .fig { display: grid; gap: 2px; align-content: start; min-width: 0; font-size: var(--t-sm); }
-  .fig b { font-size: var(--t-lg); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .types-list { font-size: var(--t-base); color: var(--text2); padding-top: 3px; }
+  .fig { display: grid; gap: 2px; align-content: start; min-width: 0; font-size: var(--t-small); }
+  .fig b { font-size: var(--t-figure-sm); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .types-list { font-size: var(--t-body); color: var(--text2); padding-top: 3px; }
   .types-list b { font-size: inherit; font-weight: 600; color: var(--text); }
 
   .pair { display: grid; gap: 28px 32px; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
   .section .pair { gap: 0 32px; }
   .bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
   .bars li {
-    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; font-size: var(--t-base); min-width: 0;
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; font-size: var(--t-body); min-width: 0;
   }
   .bars .num { color: var(--text2); white-space: nowrap; }
   .bars .bar { grid-column: 1 / -1; }
@@ -458,15 +458,15 @@
 
   .list { list-style: none; margin: 0; padding: 0; }
   .list li {
-    display: grid; gap: 1px; padding: 8px 0; border-bottom: 1px solid var(--border); min-width: 0; font-size: var(--t-base);
+    display: grid; gap: 1px; padding: 8px 0; border-bottom: 1px solid var(--border); min-width: 0; font-size: var(--t-body);
   }
   .list li:first-child { padding-top: 0; }
   .list li:last-child { border-bottom: 0; }
   .who { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-  .who .name { font-weight: 550; flex: 0 1 auto; }
-  .tag { flex: none; font-size: var(--t-sm); color: var(--muted); }
-  .when { font-size: var(--t-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .action { display: grid; gap: 8px; justify-items: start; margin-top: 14px; font-size: var(--t-base); }
+  .who .name { font-weight: 500; flex: 0 1 auto; }
+  .tag { flex: none; font-size: var(--t-small); color: var(--muted); }
+  .when { font-size: var(--t-small); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .action { display: grid; gap: 8px; justify-items: start; margin-top: 14px; font-size: var(--t-body); }
 
   .checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 0 32px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .checks li { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-bottom: 1px solid var(--border); min-width: 0; }
@@ -474,10 +474,10 @@
   .checks .dot { margin-top: 7px; }
   .checks .text { display: grid; gap: 1px; min-width: 0; flex: 1; }
   .checks .line { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-  .checks .label { font-weight: 550; font-size: var(--t-base); white-space: nowrap; }
-  .checks .value { margin-left: auto; font-size: var(--t-sm); color: var(--text2); }
+  .checks .label { font-weight: 500; font-size: var(--t-body); white-space: nowrap; }
+  .checks .value { margin-left: auto; font-size: var(--t-small); color: var(--text2); }
   .checks .warn .value { color: var(--warn); }
-  .checks .detail { font-size: var(--t-sm); color: var(--muted); overflow-wrap: anywhere; }
+  .checks .detail { font-size: var(--t-small); color: var(--muted); overflow-wrap: anywhere; }
 
   dialog p { margin: 8px 0 14px; }
 

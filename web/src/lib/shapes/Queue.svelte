@@ -9,6 +9,8 @@
   const data = $derived(reading?.data);
   const items = $derived(data?.items ?? []);
   const age = $derived(reading ? formatAge(reading.at, $now) : '');
+  // An app's status word in sentence case: only its first letter raised.
+  const sentence = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 </script>
 
 <div class="queue">
@@ -38,7 +40,7 @@
               <i style:width={formatPercent(item.progress)}></i>
             </div>
             <div class="facts">
-              <span class="status" class:warn-text={!!item.problem} title={item.status}>{item.status}</span>
+              <span class="status" class:warn-text={!!item.problem} title={item.status}>{sentence(item.status)}</span>
               <span title={`${formatBytes(item.leftBytes)} left of ${formatBytes(item.sizeBytes)}`}>
                 {formatBytes(item.leftBytes)} left
               </span>
@@ -57,16 +59,15 @@
 <style>
   .queue { display: grid; gap: 6px; }
   .row { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding-top: 12px; border-top: 1px solid var(--border); }
-  .label { font-size: var(--t-base); font-weight: 600; }
-  .count { font-size: var(--t-sm); color: var(--muted); }
-  .age { margin-left: auto; font-size: var(--t-sm); white-space: nowrap; }
-  .error { font-size: var(--t-base); }
+  .label { font-size: var(--t-body); font-weight: 600; }
+  .count { font-size: var(--t-small); color: var(--muted); }
+  .age { margin-left: auto; font-size: var(--t-small); white-space: nowrap; }
+  .error { font-size: var(--t-body); }
   .items { list-style: none; margin: 0; padding: 0; display: grid; }
   .items li { display: grid; gap: 6px; min-width: 0; padding: 10px 0; border-bottom: 1px solid var(--border); }
   .items li:last-child { border-bottom: 0; padding-bottom: 0; }
   .head { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
-  .title { flex: 1; font-weight: 550; font-size: var(--t-base); }
-  .pct { font-size: var(--t-sm); color: var(--text2); flex: none; }
-  .status { text-transform: capitalize; }
-  .problem { color: var(--warn); overflow-wrap: anywhere; font-size: var(--t-sm); }
+  .title { flex: 1; font-weight: 500; font-size: var(--t-body); }
+  .pct { font-size: var(--t-small); color: var(--text2); flex: none; }
+  .problem { color: var(--warn); overflow-wrap: anywhere; font-size: var(--t-small); }
 </style>

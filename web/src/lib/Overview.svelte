@@ -165,7 +165,7 @@
 
   /* Nothing to look at: one quiet line leads the page. */
   .calm { margin-bottom: -8px; }
-  .all-good { display: flex; align-items: center; gap: 10px; font-size: var(--t-base); }
+  .all-good { display: flex; align-items: center; gap: 10px; font-size: var(--t-body); }
   .all-good b { font-weight: 600; }
 
   /* Something to look at: the one boxed panel of the page, edged in the worst state's colour. */
@@ -175,8 +175,7 @@
   }
   .attention.has-fail { border-color: var(--fail-edge); }
   .att-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0 10px 8px; min-width: 0; }
-  .att-head h2 { font-size: var(--t-lg); font-weight: 650; letter-spacing: -0.015em; }
-  .tally { font-size: var(--t-sm); color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .tally { font-size: var(--t-small); color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .issues { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
   .issue {
     display: flex; align-items: flex-start; gap: 11px; padding: 9px 10px; border-radius: var(--r);
@@ -195,11 +194,11 @@
   .issue:focus-visible { outline-offset: 0; }
   .issue .dot { margin-top: 7px; width: 8px; height: 8px; }
   .what { display: grid; gap: 1px; min-width: 0; flex: 1; }
-  .title { font-weight: 550; font-size: var(--t-base); }
-  .detail { font-size: var(--t-sm); color: var(--text2); overflow-wrap: anywhere; }
+  .title { font-weight: 500; font-size: var(--t-body); }
+  .detail { font-size: var(--t-small); color: var(--text2); overflow-wrap: anywhere; }
   .where {
     display: flex; align-items: center; gap: 4px; flex: none; align-self: center;
-    font-size: var(--t-sm); color: var(--muted); white-space: nowrap;
+    font-size: var(--t-small); color: var(--muted); white-space: nowrap;
   }
   .issue:hover .where { color: var(--text2); }
 

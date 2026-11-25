@@ -99,5 +99,5 @@ Development: `make ui` builds the web app, `make check` runs gofmt, vet and test
 
 ## License
 
-[GPL-3.0](LICENSE). Ships the [Inter](https://github.com/rsms/inter) font (OFL) and [Lucide](https://lucide.dev)
-icons (ISC). App logos belong to their projects and are shown only to identify them; see [NOTICE](NOTICE).
+[GPL-3.0](LICENSE). Ships the [Inter](https://github.com/rsms/inter) and [Sora](https://github.com/sora-xor/sora-font)
+fonts (OFL) and [Lucide](https://lucide.dev) icons (ISC). App logos belong to their projects and are shown only to identify them; see [NOTICE](NOTICE).
