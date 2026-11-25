@@ -109,13 +109,13 @@
   --accent-text-hi: #a8c8ff;
   --accent-wash: rgba(61, 139, 255, 0.28);
   /* Data: violet, blue and cyan lead, two more for busy charts, and a quiet one for the rest. Each
-     keeps at least 3:1 against the panels; charts lay them over each other as translucent fills. */
+     keeps at least 3:1 against the panels and the tooltip; charts lay them over each other as translucent fills. */
   --series-1: #8b6cf6;
   --series-2: #3d8bff;
   --series-3: #2be3e6;
   --series-4: #f07ac8;
   --series-5: #a9b8ff;
-  --series-other: #6a6e9e;
+  --series-other: #767aab;
   --down: var(--series-2);
   --up: var(--series-3);
   --cpu: var(--series-1);
