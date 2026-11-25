@@ -186,7 +186,7 @@
 
   .tip {
     position: absolute; top: 4px; z-index: 2; pointer-events: none; display: grid; gap: 4px; min-width: 160px;
-    padding: 9px 12px; border-radius: var(--r); background: var(--surface3); border: 1px solid var(--border2);
+    padding: 9px 12px; border-radius: var(--r); background: var(--tip); border: 1px solid var(--tip-edge);
     box-shadow: var(--float); font-size: var(--t-small); color: var(--text2);
   }
   .when { color: var(--text); font-weight: 600; white-space: nowrap; }

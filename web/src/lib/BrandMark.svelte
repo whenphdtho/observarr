@@ -23,8 +23,8 @@
   }
   svg { display: block; width: 100%; height: 100%; fill: none; stroke-linecap: round; }
   .rim-a, .rim-b { stroke-width: 9; }
-  .rim-a { stroke: var(--series-1); }
-  .rim-b { stroke: var(--series-2); }
+  .rim-a { stroke: var(--brand-a); }
+  .rim-b { stroke: var(--brand-b); }
   .bridge { stroke: var(--brand-ink); stroke-width: 7; }
-  .glint { stroke: var(--series-3); stroke-width: 5; }
+  .glint { stroke: var(--brand-glint); stroke-width: 5; }
 </style>

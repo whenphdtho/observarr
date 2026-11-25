@@ -3,7 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0f1026" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#edeff7" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f1026" />
+    <!-- Sets the theme before the first paint; a file, not inline, so the CSP needs no exception. -->
+    <script src="/theme.js"></script>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%2314153a'/%3E%3Cg transform='translate(12 12) scale(.76)' fill='none' stroke-linecap='round'%3E%3Ccircle cx='28' cy='52' r='19' stroke='%238b6cf6' stroke-width='9'/%3E%3Ccircle cx='72' cy='52' r='19' stroke='%233d8bff' stroke-width='9'/%3E%3Cpath d='M45 48Q50 42 55 48' stroke='%23fff' stroke-width='7'/%3E%3Cpath d='M17.7 48.2A11 11 0 0 1 24.2 41.7M61.7 48.2A11 11 0 0 1 68.2 41.7' stroke='%232be3e6' stroke-width='5'/%3E%3C/g%3E%3C/svg%3E" />
     <title>Observarr</title>
   </head>

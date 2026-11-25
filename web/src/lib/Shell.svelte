@@ -10,6 +10,7 @@
   import Rail from './Rail.svelte';
   import Icon from './icons/Icon.svelte';
   import BrandMark from './BrandMark.svelte';
+  import ThemeSwitch from './ThemeSwitch.svelte';
   import { arrive } from './motion.js';
   import { live, serviceList, reconnecting, lastEvent } from './live.js';
   import { loadAdapters, loadSystem } from './data.js';
@@ -151,15 +152,21 @@
       {/each}
     </nav>
 
-    <div class="acct">
-      <span class="av" aria-hidden="true">{user.slice(0, 1).toUpperCase()}</span>
-      <span class="nm">
-        <span class="ellipsis" title={user}>{user}</span>
-        <span class="muted">signed in</span>
-      </span>
-      <button type="button" class="ibtn" onclick={onlogout} aria-label="Sign out" title={`Sign out ${user}`}>
-        <Icon name="log-out" size={17} />
-      </button>
+    <div class="foot">
+      <div class="theme-row">
+        <span class="muted" aria-hidden="true">Theme</span>
+        <ThemeSwitch />
+      </div>
+      <div class="acct">
+        <span class="av" aria-hidden="true">{user.slice(0, 1).toUpperCase()}</span>
+        <span class="nm">
+          <span class="ellipsis" title={user}>{user}</span>
+          <span class="muted">signed in</span>
+        </span>
+        <button type="button" class="ibtn" onclick={onlogout} aria-label="Sign out" title={`Sign out ${user}`}>
+          <Icon name="log-out" size={17} />
+        </button>
+      </div>
     </div>
   </aside>
 
@@ -223,7 +230,7 @@
     border: 1px solid var(--border2); border-radius: var(--r);
   }
   .search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-  .search { background: var(--bg); }
+  .search { background: var(--field); }
   .search input { flex: 1; min-width: 0; padding: 7px 0; border: 0; border-radius: 0; background: transparent; outline: none; }
   .search input::placeholder { color: var(--muted); }
   .search input:focus { box-shadow: none; }
@@ -245,7 +252,10 @@
   .vbtn[aria-current='page'], .vbtn[aria-current='page']:hover { background: var(--accent-fill); color: var(--accent-ink); font-weight: 600; }
   .vbtn[aria-current='page'] :global(.icon) { color: var(--accent-ink); }
 
-  .acct { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 12px 10px 0; border-top: 1px solid var(--border); }
+  /* The foot of the side column: the theme, then the account. */
+  .foot { margin-top: auto; display: grid; gap: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .theme-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 10px; font-size: var(--t-small); }
+  .acct { display: flex; align-items: center; gap: 10px; padding: 0 10px; }
   .av {
     width: 28px; height: 28px; border-radius: 50%; background: var(--surface3); display: grid; place-items: center;
     font-weight: 600; font-size: var(--t-small); flex: none;
@@ -288,8 +298,9 @@
       gap: 12px; padding: 14px 16px 10px; border: 0; background: transparent;
     }
     .brand { grid-area: brand; padding: 0; }
-    .acct { grid-area: acct; margin: 0; padding: 0; border: 0; }
-    .nm, .av { display: none; }
+    .foot { grid-area: acct; display: flex; align-items: center; gap: 8px; margin: 0; padding: 0; border: 0; }
+    .theme-row, .acct { padding: 0; }
+    .theme-row > span, .nm, .av { display: none; }
     .search { grid-area: search; margin: 0; }
     .search kbd { display: none; }
     nav {

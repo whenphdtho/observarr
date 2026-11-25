@@ -22,7 +22,60 @@
   line-gap-override: 0%;
 }
 
+/* Tokens that do not change with the theme: shape, type, motion and the brand. */
 :root {
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Radii: panels, controls, small marks, and pills (segmented options, the current view). */
+  --r-lg: 16px;
+  --r: 8px;
+  --r-sm: 5px;
+  --r-pill: 999px;
+  /* Room inside a panel. */
+  --pad: 20px 22px;
+  /* Brand: the mark keeps its dark tile and its own colours in both themes, with a hairline to hold its edge. */
+  --brand-tile: #14153a;
+  --brand-ink: #ffffff;
+  --brand-edge: rgba(255, 255, 255, 0.07);
+  --brand-a: #8b6cf6;
+  --brand-b: #3d8bff;
+  --brand-glint: #2be3e6;
+  /* Type. Sora sets the page title, the section and card headings and the wordmark; Inter sets the
+     rest, every figure included, in tabular numerals. Sentence case throughout, no spaced capitals. */
+  --font-display: 'Sora', 'Sora Fallback', ui-sans-serif, system-ui, sans-serif;
+  --font-body: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --t-display: 24px; /* h1: the page title */
+  --t-h2: 16px; /* section and card headings, dialog titles, the wordmark */
+  --t-h3: 14px; /* headings inside a section, app names, the side column's headings */
+  --t-body: 13px; /* text, controls, tables */
+  --t-small: 12px; /* meta, keys, hints, column heads */
+  --t-micro: 11px; /* axis and dock labels: the floor for any text */
+  --t-figure-lg: 28px; /* lead figures */
+  --t-figure: 20px; /* key figures */
+  --t-figure-sm: 16px; /* figures in a list of facts */
+  --w-body: 400;
+  --w-label: 500;
+  --w-strong: 600; /* Inter emphasis and figures */
+  --w-heading: 600;
+  --w-display: 650;
+  --lh-display: 1.2;
+  --lh-heading: 1.3;
+  --lh-body: 1.5;
+  --track-display: -0.02em;
+  --track-heading: -0.01em;
+  --track-figure: -0.015em;
+  font: var(--w-body) var(--t-body) / var(--lh-body) var(--font-body);
+  /* Tabular figures everywhere: live values must not jitter as they change. */
+  font-feature-settings: 'cv11', 'ss01', 'tnum';
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll) transparent;
+}
+
+/* Colours. public/theme.js sets data-theme before the first paint, from the stored choice or the system's
+   (lib/theme.js keeps it current); without it the page is dark. Both themes fill the same roles. */
+:root, :root[data-theme='dark'] {
   color-scheme: dark;
   /* Neutrals: one deep indigo family. --bg is the page, --rail the side columns, --surface the
      panels on the page (cards, the figure strip, dialogs), --surface2/3 raised controls and tracks. */
@@ -36,7 +89,9 @@
   /* Edge of a secondary button: at least 3:1 against the page and the panels, so its shape is seen. */
   --btn-edge: #62679c;
   --btn-edge-hi: #7479b0;
-  /* Form fields keep a stronger edge than --border2: at least 3:1 against the page and the panels. */
+  /* Form fields: a ground of their own and a stronger edge than --border2, at least 3:1 against the page
+     and the panels. */
+  --field: #0f1026;
   --field-border: #6e73aa;
   --field-border-hi: #8287bd;
   --text: #eef0ff;
@@ -66,6 +121,12 @@
   --cpu: var(--series-1);
   --mem: var(--series-3);
   --grid: #262a52;
+  /* Opacity of the fills under the lines: an area (top and bottom of its fade), a mirrored band, a spark. */
+  --area-hi: 0.42;
+  --area-lo: 0.03;
+  --band-hi: 0.6;
+  --band-lo: 0.28;
+  --spark-hi: 0.38;
   /* State: a set of its own, apart from the data colours. Each keeps at least 4.5:1 on the page and panels. */
   --ok: #4ad295;
   --warn: #f2b45e;
@@ -82,54 +143,74 @@
   --warn-line: rgba(242, 180, 94, 0.38);
   /* Progress and share bars: neutral, so colour is left for warnings. */
   --bar: #8d91bd;
+  /* Chart tooltips, the dialog backdrop, the scrollbar thumb. */
+  --tip: #2a2e5c;
+  --tip-edge: #323668;
   --scrim: rgba(6, 7, 20, 0.66);
-  --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  /* Radii: panels, controls, small marks, and pills (segmented options, the current view). */
-  --r-lg: 16px;
-  --r: 8px;
-  --r-sm: 5px;
-  --r-pill: 999px;
-  /* Room inside a panel. */
-  --pad: 20px 22px;
-  /* Brand: the mark's tile stays dark wherever it sits, with a hairline to hold its edge on the rails. */
-  --brand-tile: #14153a;
-  --brand-ink: #ffffff;
-  --brand-edge: rgba(255, 255, 255, 0.07);
-  /* Type. Sora sets the page title, the section and card headings and the wordmark; Inter sets the
-     rest, every figure included, in tabular numerals. Sentence case throughout, no spaced capitals. */
-  --font-display: 'Sora', 'Sora Fallback', ui-sans-serif, system-ui, sans-serif;
-  --font-body: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --t-display: 24px; /* h1: the page title */
-  --t-h2: 16px; /* section and card headings, dialog titles, the wordmark */
-  --t-h3: 14px; /* headings inside a section, app names, the side column's headings */
-  --t-body: 13px; /* text, controls, tables */
-  --t-small: 12px; /* meta, keys, hints, column heads */
-  --t-micro: 11px; /* axis and dock labels: the floor for any text */
-  --t-figure-lg: 28px; /* lead figures */
-  --t-figure: 20px; /* key figures */
-  --t-figure-sm: 16px; /* figures in a list of facts */
-  --w-body: 400;
-  --w-label: 500;
-  --w-strong: 600; /* Inter emphasis and figures */
-  --w-heading: 600;
-  --w-display: 650;
-  --lh-display: 1.2;
-  --lh-heading: 1.3;
-  --lh-body: 1.5;
-  --track-display: -0.02em;
-  --track-heading: -0.01em;
-  --track-figure: -0.015em;
+  --scroll: #323668;
   /* Depth: panels sit a little above the page; dialogs and tooltips further. */
   --lift: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 14px 30px -20px rgba(3, 4, 18, 0.9);
   --float: 0 14px 34px -12px rgba(3, 4, 18, 0.85);
-  font: var(--w-body) var(--t-body) / var(--lh-body) var(--font-body);
-  /* Tabular figures everywhere: live values must not jitter as they change. */
-  font-feature-settings: 'cv11', 'ss01', 'tnum';
-  font-variant-numeric: tabular-nums;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border2) transparent;
+}
+
+/* Light: a cool, faintly indigo ground, white panels held by hairlines and soft shadows, dark indigo
+   text. The data and state colours keep their hues, deepened to hold the same contrast on white. */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #edeff7;
+  --rail: #f6f7fb;
+  --surface: #ffffff;
+  --surface2: #e6e9f4;
+  --surface3: #dadeee;
+  --border: #dde0ee;
+  --border2: #c9cee3;
+  --btn-edge: #8287ad;
+  --btn-edge-hi: #6d729c;
+  --field: #ffffff;
+  --field-border: #7e83a9;
+  --field-border-hi: #666b95;
+  --text: #15173a;
+  --text2: #41456d;
+  --muted: #595d85;
+  --dim: #a3a7c7;
+  --accent: #2a6ae6;
+  --accent-fill: #2563de;
+  --accent-fill-hi: #1d55c6;
+  --accent-ink: #ffffff;
+  --accent-text: #1f5bd1;
+  --accent-text-hi: #163f9c;
+  --accent-wash: rgba(42, 106, 230, 0.2);
+  --series-1: #6b4bdf;
+  --series-2: #2a6ae6;
+  --series-3: #078a92;
+  --series-4: #c13a98;
+  --series-5: #5868d4;
+  --series-other: #858aaf;
+  --grid: #e4e7f1;
+  --area-hi: 0.2;
+  --area-lo: 0.02;
+  --band-hi: 0.34;
+  --band-lo: 0.14;
+  --spark-hi: 0.2;
+  --ok: #11784b;
+  --warn: #9a5800;
+  --fail: #c0283f;
+  --fail-wash: rgba(192, 40, 63, 0.05);
+  --fail-wash-hi: rgba(192, 40, 63, 0.09);
+  --fail-flash: rgba(192, 40, 63, 0.16);
+  --warn-wash: rgba(214, 132, 20, 0.07);
+  --warn-wash-hi: rgba(214, 132, 20, 0.12);
+  --warn-flash: rgba(214, 132, 20, 0.2);
+  --fail-edge: rgba(192, 40, 63, 0.38);
+  --warn-edge: rgba(176, 102, 0, 0.36);
+  --warn-line: rgba(176, 102, 0, 0.42);
+  --bar: #7378a6;
+  --tip: #ffffff;
+  --tip-edge: #c9cee3;
+  --scrim: rgba(21, 23, 58, 0.4);
+  --scroll: #bfc4dc;
+  --lift: 0 1px 2px rgba(21, 23, 58, 0.05), 0 10px 26px -18px rgba(21, 23, 58, 0.22);
+  --float: 0 2px 6px rgba(21, 23, 58, 0.06), 0 16px 36px -14px rgba(21, 23, 58, 0.3);
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); caret-color: var(--accent); }
@@ -170,7 +251,7 @@ button.ibtn {
 button.ibtn:hover:not(:disabled) { color: var(--text); background: var(--surface2); border-color: var(--border2); }
 
 input, select, textarea {
-  font: inherit; font-size: var(--t-body); color: var(--text); background: var(--bg); border: 1px solid var(--field-border);
+  font: inherit; font-size: var(--t-body); color: var(--text); background: var(--field); border: 1px solid var(--field-border);
   border-radius: var(--r); padding: 7px 10px; width: 100%;
 }
 input[type='checkbox'] { width: 16px; height: 16px; accent-color: var(--accent); }
