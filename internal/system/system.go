@@ -24,6 +24,7 @@ const (
 	idleEvery     = 30 * time.Second // sample interval otherwise
 	listEvery     = 30 * time.Second // container list refresh, besides refreshes on Docker events
 	minList       = 5 * time.Second  // shortest time between two refreshes
+	minGap        = time.Second      // shortest time between two samples: counters need it to move, else rates read 0
 	settle        = time.Second      // Docker events are collected this long before the list is refreshed
 	minBackoff    = time.Second      // first wait before reconnecting the Docker events stream
 	maxBackoff    = time.Minute      // longest wait; a stream that lasted this long resets the wait
@@ -117,7 +118,7 @@ type Sampler struct {
 	store    TrafficStore // where daily traffic totals are kept; nil = nowhere
 	hist     HistoryStore // where the history is kept; nil = nowhere
 
-	watchedEvery, idleEvery, listEvery, minList, settle, minBackoff, maxBackoff, persistEvery time.Duration // the constants; tests shorten them
+	watchedEvery, idleEvery, listEvery, minList, minGap, settle, minBackoff, maxBackoff, persistEvery time.Duration // the constants; tests shorten them
 
 	changed      chan struct{} // a Docker event arrived
 	eventsDenied atomic.Bool   // the socket proxy refused the events stream at the last attempt
@@ -143,7 +144,7 @@ type Sampler struct {
 // traffic in memory only, with days in the local time zone and no budget; see KeepTraffic.
 func New(c collect.Collector, watchers func() int, log *slog.Logger) *Sampler {
 	return &Sampler{c: c, watchers: watchers, log: log, now: time.Now, traffic: NewTraffic(time.Local, "", 0),
-		watchedEvery: watchedEvery, idleEvery: idleEvery, listEvery: listEvery, minList: minList, settle: settle,
+		watchedEvery: watchedEvery, idleEvery: idleEvery, listEvery: listEvery, minList: minList, minGap: minGap, settle: settle,
 		minBackoff: minBackoff, maxBackoff: maxBackoff, persistEvery: persistEvery,
 		changed: make(chan struct{}, 1), prevUsage: map[string]usageReading{}, logged: map[string]string{},
 		snap: Snapshot{Containers: []ContainerView{}, Notices: []string{}}, subs: map[chan Snapshot]struct{}{}}
@@ -188,9 +189,20 @@ func (s *Sampler) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-listed:
+			// A refresh right after a sample (the first list comes at once) waits until the counters can have
+			// moved: a sample a moment after the last one would read the CPU and the traffic as idle.
+			if wait := s.minGap - s.now().Sub(s.sampledAt); wait > 0 {
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(wait):
+				}
+			}
 		case <-tick.C:
-			// Half a tick of slack: ticks drift against sampledAt, and 30 s must not turn into 32.
-			if s.watchers() == 0 && s.now().Sub(s.sampledAt) < s.idleEvery-s.watchedEvery/2 {
+			// Half a tick of slack: ticks drift against sampledAt, and 30 s must not turn into 32. A tick just
+			// after a sample a refresh asked for is skipped, for the same reason such a sample waits.
+			since := s.now().Sub(s.sampledAt)
+			if since < s.minGap || (s.watchers() == 0 && since < s.idleEvery-s.watchedEvery/2) {
 				continue
 			}
 		}

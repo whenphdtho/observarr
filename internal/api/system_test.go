@@ -25,10 +25,11 @@ func TestSystemRoutesNeedSession(t *testing.T) {
 func TestSystemWithoutSourcesGivesNotices(t *testing.T) {
 	e := newServicesEnv(t)
 	var snap map[string]any
-	eventually(t, "the first sample", func() bool {
+	// The host's notice comes with the first sample, Docker's with the one after the first container list.
+	eventuallyWithin(t, 5*time.Second, "the samples after the first list", func() bool {
 		code, data, _ := e.do("GET", "/api/system", "", nil)
 		snap = data
-		return code == 200 && len(data["notices"].([]any)) > 0
+		return code == 200 && len(data["notices"].([]any)) > 1
 	})
 	notices := snap["notices"].([]any)
 	if snap["host"] != nil || len(snap["containers"].([]any)) != 0 || len(notices) != 2 ||
