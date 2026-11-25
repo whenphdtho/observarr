@@ -144,8 +144,8 @@
   /* A service with a problem keeps a faint wash of its state colour, so it is found without reading. */
   .app.fail { background: var(--fail-wash); }
   .app.warn { background: var(--warn-wash); }
-  .app.fail:hover:not(:disabled) { background: rgba(236, 108, 125, 0.14); }
-  .app.warn:hover:not(:disabled) { background: rgba(227, 166, 80, 0.13); }
+  .app.fail:hover:not(:disabled) { background: var(--fail-wash-hi); }
+  .app.warn:hover:not(:disabled) { background: var(--warn-wash-hi); }
   .app:focus-visible { outline-offset: 0; }
   .apps { display: grid; gap: 2px; }
   .app .tile-icon { width: 32px; height: 32px; }

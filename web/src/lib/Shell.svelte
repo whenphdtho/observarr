@@ -223,6 +223,7 @@
     border: 1px solid var(--border2); border-radius: var(--r);
   }
   .search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .search { background: var(--bg); }
   .search input { flex: 1; min-width: 0; padding: 7px 0; border: 0; border-radius: 0; background: transparent; outline: none; }
   .search input::placeholder { color: var(--muted); }
   .search input:focus { box-shadow: none; }
@@ -233,15 +234,16 @@
 
   .cap { padding: 4px 10px 6px; font-size: var(--t-sm); color: var(--muted); }
   .vbtn {
-    display: flex; align-items: center; gap: 10px; padding: 7px 10px; margin-bottom: 1px; border-radius: var(--r);
+    display: flex; align-items: center; gap: 10px; padding: 8px 12px; margin-bottom: 2px; border-radius: var(--r);
     color: var(--text2); font-weight: 500; font-size: var(--t-base); text-decoration: none; white-space: nowrap;
     transition: background 140ms var(--ease), color 140ms var(--ease);
   }
   .vbtn :global(.icon) { color: var(--muted); }
   .vbtn:hover { background: var(--surface2); color: var(--text); }
   .vbtn:hover :global(.icon) { color: var(--text2); }
-  .vbtn[aria-current='page'] { background: var(--surface3); color: var(--text); font-weight: 600; }
-  .vbtn[aria-current='page'] :global(.icon) { color: var(--accent); }
+  /* The current view: a filled blue pill. */
+  .vbtn[aria-current='page'], .vbtn[aria-current='page']:hover { background: var(--accent-fill); color: var(--accent-ink); font-weight: 600; }
+  .vbtn[aria-current='page'] :global(.icon) { color: var(--accent-ink); }
 
   .acct { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 12px 10px 0; border-top: 1px solid var(--border); }
   .av {
@@ -300,7 +302,7 @@
       padding: 7px 2px; margin: 0; font-size: var(--t-xs);
     }
     .vlabel { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-    .vbtn[aria-current='page'] { background: transparent; color: var(--text); }
+    .vbtn[aria-current='page'], .vbtn[aria-current='page']:hover { background: var(--accent-fill); color: var(--accent-ink); }
     .top { margin: 10px 0 16px; }
   }
   @media (max-width: 400px) {

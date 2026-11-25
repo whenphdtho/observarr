@@ -1,5 +1,5 @@
 <script>
-  // Mark is the brand mark: an eye on the accent, its pupil a live reading. size is the square's side in px.
+  // Mark is the brand mark: an eye on violet running into blue, its pupil a live reading. size is the square's side in px.
   let { size = 26 } = $props();
   const glyph = $derived(Math.round(size * 0.7));
 </script>
@@ -14,8 +14,11 @@
 </span>
 
 <style>
-  .mark { display: grid; place-items: center; flex: none; background: var(--accent); }
+  .mark {
+    display: grid; place-items: center; flex: none;
+    background: linear-gradient(135deg, var(--series-1), var(--accent-fill) 70%);
+  }
   svg { fill: none; stroke: var(--accent-ink); stroke-width: 2.1; stroke-linejoin: round; }
   circle { fill: var(--accent-ink); stroke: none; }
-  .glint { fill: var(--accent); }
+  .glint { fill: var(--accent-fill); }
 </style>
