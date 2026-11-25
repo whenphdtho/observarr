@@ -350,3 +350,26 @@ point, state (`mounted`, `active`, or `unmounted` for apps that keep configured 
 and limit, cached files, uploads in progress and queued, errored files and out-of-space — plus the transfer
 speed, totals and at most `shape.MaxTransfers` (20) transfers in progress; `Total` and `ActiveTransfers` keep
 the real counts. The Storage view and the `Mounts` widget render it.
+
+## Overseerr and Jellyseerr: one adapter, several apps
+
+`internal/adapters/seerr` reads Overseerr, Jellyseerr and Seerr, which share one API under `/api/v1`. It fills
+`health` and `requests`; deployment is in [deploy.md](deploy.md#connect-overseerr-or-jellyseerr).
+
+- **Which app answers** is data, not a second adapter: `shape.Requests.App` is "Seerr" from version 3 on,
+  "Jellyseerr" when the public settings carry `mediaServerType` (Overseerr has none), and "Overseerr" otherwise.
+  The UI shows it as it shows any other text.
+- **Detect** reads `GET /api/v1/status` (no key; `version`, `commitTag` and `restartRequired` must all be there)
+  and then `GET /api/v1/request/count` with the key in `X-Api-Key`, so a wrong key is `ErrUnauthorized`.
+  `Fingerprint` uses the status alone.
+- **Titles** are not part of a request: the adapter looks them up from `/api/v1/movie/{tmdbId}` or
+  `/api/v1/tv/{tmdbId}`, at most `shape.MaxRequests` (10) per reading and two at a time, and remembers up to 512
+  of them.
+- **Requesters** are taken from `displayName`, falling back to the user names; the app falls back to the e-mail
+  address, so any name holding an `@` is dropped. The e-mail field is never decoded.
+
+The `requests` shape (`shape.Requests`) holds the counts by state (`total`, `pending`, `approved`, `processing`,
+`available`, `declined`, `failed`), at most `shape.MaxRequests` newest requests — each with `title`, `type`
+(`movie` or `series`), `requestedBy`, `state` (`pending`, `approved`, `processing`, `partially available`,
+`available`, `completed`, `declined`, `failed`) and `at` — and `openIssues` when the app counts issues. The
+`Requests` widget renders it.

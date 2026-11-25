@@ -189,3 +189,51 @@ const (
 	MaxMounts    = 20
 	MaxTransfers = 20
 )
+
+// KindRequests is filled by apps that take media requests from their users.
+const KindRequests Kind = "requests"
+
+// Request states, from waiting to done.
+const (
+	RequestPending    = "pending"             // waiting for approval
+	RequestApproved   = "approved"            // approved, not yet being fetched
+	RequestProcessing = "processing"          // being fetched
+	RequestPartial    = "partially available" // some of it can be watched
+	RequestAvailable  = "available"           // it can be watched
+	RequestCompleted  = "completed"           // done, though no longer reported as available
+	RequestDeclined   = "declined"
+	RequestFailed     = "failed" // handing it on to the app that fetches it failed
+)
+
+// RequestCounts counts an app's requests by state, over all time, as the app counts them: the states can overlap
+// (an available request may also count as approved), so they need not add up to Total.
+type RequestCounts struct {
+	Total      int `json:"total"`
+	Pending    int `json:"pending"`
+	Approved   int `json:"approved"`
+	Processing int `json:"processing"`
+	Available  int `json:"available"`
+	Declined   int `json:"declined"`
+	Failed     int `json:"failed"`
+}
+
+// MediaRequest is one request for a movie or a series.
+type MediaRequest struct {
+	Title       string    `json:"title"`
+	Type        string    `json:"type"`        // "movie" or "series"
+	RequestedBy string    `json:"requestedBy"` // the user's display name; never an e-mail address
+	State       string    `json:"state"`       // one of the Request states
+	At          time.Time `json:"at,omitzero"` // when it was made; zero (left out) if the app did not say
+}
+
+// Requests sums up the media requests an app takes.
+type Requests struct {
+	// App names the app that answers, for an adapter that serves several apps sharing one API; "" otherwise.
+	App        string         `json:"app,omitempty"`
+	Counts     RequestCounts  `json:"counts"`
+	Latest     []MediaRequest `json:"latest"`               // newest first, at most MaxRequests; [] not nil
+	OpenIssues *int           `json:"openIssues,omitempty"` // problems users reported that are still open; nil if unknown
+}
+
+// MaxRequests bounds Requests.Latest.
+const MaxRequests = 10

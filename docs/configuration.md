@@ -78,6 +78,9 @@ services:
 The subfolder name (`sonarr`, `radarr`, …) only matters as a hint for apps whose config file doesn't already
 say which app it belongs to; either way, nothing is added until you review the suggestion and click Add.
 
+For Overseerr and Jellyseerr the key is under Settings → General → API Key; see
+[deploy.md](deploy.md#connect-overseerr-or-jellyseerr).
+
 ## Configuration
 
 All settings are environment variables.

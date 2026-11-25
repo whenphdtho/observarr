@@ -1,0 +1,52 @@
+{
+  "pageInfo": {"pages": 1, "pageSize": 10, "results": 7, "page": 1},
+  "results": [
+    {
+      "id": 17, "status": 1, "type": "movie", "is4k": false, "createdAt": "2026-11-23T10:30:00.000Z",
+      "updatedAt": "2026-11-23T10:30:00.000Z",
+      "media": {"id": 9, "tmdbId": 45745, "tvdbId": null, "mediaType": "movie", "status": 2, "status4k": 1},
+      "requestedBy": {"id": 2, "email": "alex@example.com", "username": "alex", "plexUsername": null,
+        "displayName": "alex", "userType": 2}
+    },
+    {
+      "id": 16, "status": 2, "type": "tv", "is4k": false, "createdAt": "2026-11-22T18:05:00.000Z",
+      "updatedAt": "2026-11-22T19:00:00.000Z",
+      "media": {"id": 8, "tmdbId": 90210, "tvdbId": 400001, "mediaType": "tv", "status": 3, "status4k": 1},
+      "requestedBy": {"id": 3, "email": "sam@example.com", "username": null, "plexUsername": null,
+        "jellyfinUsername": "sam", "displayName": "sam", "userType": 3}
+    },
+    {
+      "id": 15, "status": 2, "type": "movie", "is4k": true, "createdAt": "2026-11-21T08:00:00.000Z",
+      "updatedAt": "2026-11-21T09:00:00.000Z",
+      "media": {"id": 7, "tmdbId": 133701, "tvdbId": null, "mediaType": "movie", "status": 5, "status4k": 3},
+      "requestedBy": {"id": 4, "email": "robin@example.com", "username": null, "plexUsername": null,
+        "displayName": "robin@example.com", "userType": 1}
+    },
+    {
+      "id": 14, "status": 5, "type": "movie", "is4k": false, "createdAt": "2026-11-20T08:00:00.000Z",
+      "updatedAt": "2026-11-20T21:00:00.000Z",
+      "media": {"id": 6, "tmdbId": 358332, "tvdbId": null, "mediaType": "movie", "status": 5, "status4k": 1},
+      "requestedBy": {"id": 2, "email": "alex@example.com", "username": "alex", "displayName": "alex", "userType": 2}
+    },
+    {
+      "id": 13, "status": 2, "type": "tv", "is4k": false, "createdAt": "2026-11-19T08:00:00.000Z",
+      "updatedAt": "2026-11-19T21:00:00.000Z",
+      "media": {"id": 5, "tmdbId": 90211, "tvdbId": 400002, "mediaType": "tv", "status": 4, "status4k": 1},
+      "requestedBy": {"id": 3, "email": "sam@example.com", "jellyfinUsername": "sam", "displayName": "sam",
+        "userType": 3}
+    },
+    {
+      "id": 12, "status": 3, "type": "movie", "is4k": false, "createdAt": "2026-11-18T08:00:00.000Z",
+      "updatedAt": "2026-11-18T09:00:00.000Z",
+      "media": {"id": 4, "tmdbId": 10378, "tvdbId": null, "mediaType": "movie", "status": 1, "status4k": 1},
+      "requestedBy": {"id": 4, "email": "robin@example.com", "plexUsername": "robin", "displayName": "robin",
+        "userType": 1}
+    },
+    {
+      "id": 11, "status": 4, "type": "movie", "is4k": false, "createdAt": "not a time",
+      "updatedAt": "2026-11-17T09:00:00.000Z",
+      "media": {"id": 3, "tmdbId": 0, "tvdbId": null, "mediaType": "movie", "status": 2, "status4k": 1},
+      "requestedBy": {"id": 4, "email": "robin@example.com", "displayName": "robin", "userType": 1}
+    }
+  ]
+}

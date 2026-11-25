@@ -13,6 +13,7 @@ next to its adapter and served at /api/icons/<type>.svg:
   internal/adapters/arr/icons/prowlarr.svg  Prowlarr  from homarr-labs/dashboard-icons (Apache-2.0)
   internal/adapters/crowdsec/icon.svg       CrowdSec  from homarr-labs/dashboard-icons (Apache-2.0)
   internal/adapters/arr/icons/lidarr.svg    Lidarr    redrawn after homarr-labs/dashboard-icons (Apache-2.0)
+  internal/adapters/seerr/icon.svg          Overseerr from homarr-labs/dashboard-icons (Apache-2.0)
 
 Changes to the dashboard-icons files: the colours were flattened to one colour (light paint became cut-outs),
 fills were reduced to path data, and the Lidarr mark was redrawn from its outline. dashboard-icons is
