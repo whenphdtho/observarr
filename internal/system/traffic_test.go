@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sync"
 	"testing"
 	"time"
@@ -94,9 +95,13 @@ func TestTrafficSpreadsBytesOverMinutes(t *testing.T) {
 		t.Fatalf("budget = %+v", s.Budget)
 	}
 	v := tr.View("24h")
-	if len(v.Times) != 1 || v.Times[0] != at("2026-11-23", "10:00:00").UnixMilli() || v.Host.Series == nil ||
-		v.Host.Series.Rx[0] != 50 || v.Host.Rx != 100 || v.Host.Tx != 10 {
-		t.Fatalf("24h view = %+v %+v", v.Times, v.Host)
+	n := len(v.Times)
+	if n != minuteSlots || v.Step != 60 || v.Times[n-1] != at("2026-11-23", "10:00:00").UnixMilli() ||
+		v.Host.Series == nil || v.Host.Series.Rx[n-1] != 50 || v.Host.Rx != 100 || v.Host.Tx != 10 {
+		t.Fatalf("24h view = %d times ending %v, %+v", n, v.Times[n-1], v.Host)
+	}
+	if rx := v.Host.Series.Rx[n-2]; !math.IsNaN(rx) {
+		t.Fatalf("a minute before the first reading = %v, want a gap", rx)
 	}
 	live := tr.View("5m")
 	if live.Range != "5m" || len(live.Times) != 2 || live.Host.Series.Rx[1] != 100 {
@@ -237,7 +242,7 @@ func TestTrafficIsBounded(t *testing.T) {
 		t.Fatalf("%d flows, want the host and the %d containers seen in the last day", n, len(ctrs))
 	}
 	v := tr.View("24h")
-	if len(v.Times) > maxPoints || len(v.Host.Series.Rx) != len(v.Times) || len(v.Containers) != len(ctrs) {
+	if len(v.Times) != minuteSlots || len(v.Host.Series.Rx) != len(v.Times) || len(v.Containers) != len(ctrs) {
 		t.Fatalf("24h view: %d times, %d values, %d containers", len(v.Times), len(v.Host.Series.Rx), len(v.Containers))
 	}
 	if first, last := v.Times[0], v.Times[len(v.Times)-1]; last-first >= 24*time.Hour.Milliseconds() {
@@ -277,7 +282,7 @@ func TestSamplerCountsTraffic(t *testing.T) {
 	if snap.Traffic == nil || snap.Traffic.TodayRx != 2000 || snap.Traffic.Budget.Used != 2000 {
 		t.Fatalf("snapshot traffic = %+v", snap.Traffic)
 	}
-	v := s.Network("5m")
+	v, _ := s.Network(ctx, "5m")
 	if v.Host.Rx != 1000 || len(v.Containers) != 1 || v.Containers[0].Name != "app" || v.Containers[0].Rx != 100 ||
 		v.Containers[0].TodayRx != 200 {
 		t.Fatalf("network = %+v %+v; want the host and app only (web has the host's network)", v.Host, v.Containers)
