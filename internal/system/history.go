@@ -3,6 +3,7 @@ package system
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"math"
 	"slices"
 	"strconv"
@@ -22,9 +23,11 @@ type HistoryStore interface {
 }
 
 const (
-	sparkMinutes = 60 // the minutes of a Spark
-	dailyDays    = 30 // the days of TrafficView.Daily
-	maxSeries    = store.MaxSources
+	sparkMinutes = 60               // the minutes of a Spark
+	dailyDays    = 30               // the days of TrafficView.Daily
+	maxSeries    = store.MaxSources // containers a view shows at most
+	maxHeadFails = 5                // failed writes of one minute before it is dropped
+	minCoverage  = 80               // percent of a period's minutes that must be known for its total
 )
 
 // span is a range of buckets: their resolution in seconds and how many there are, the latest last.
@@ -112,22 +115,33 @@ func (t *Traffic) enqueue(m store.HistoryMinute) {
 }
 
 // persistHistory writes the queued minutes to hs, each in a transaction of its own. Minutes that fail to be
-// written wait for the next call, as long as the queue has room for them.
+// written wait for the next call, as long as the queue has room for them; a minute that failed maxHeadFails
+// times in a row is dropped, so one bad minute cannot hold up the others.
 func (t *Traffic) persistHistory(ctx context.Context, hs HistoryStore) error {
 	t.mu.Lock()
 	queue := t.queue
 	t.queue = nil
 	t.mu.Unlock()
 	for i, m := range queue {
-		if err := hs.AddHistory(ctx, m); err != nil {
-			t.mu.Lock()
-			t.queue = append(queue[i:], t.queue...)
-			if over := len(t.queue) - maxQueued; over > 0 {
-				t.queue = slices.Delete(t.queue, 0, over)
-			}
+		err := hs.AddHistory(ctx, m)
+		t.mu.Lock()
+		if err == nil {
+			t.headFails = 0
 			t.mu.Unlock()
-			return err
+			continue
 		}
+		rest := queue[i:]
+		if t.headFails++; t.headFails >= maxHeadFails {
+			rest, t.headFails = rest[1:], 0
+			err = fmt.Errorf("dropped the minute at %s after %d failed writes: %w",
+				time.Unix(m.Minute, 0).UTC().Format(time.RFC3339), maxHeadFails, err)
+		}
+		t.queue = append(rest, t.queue...)
+		if over := len(t.queue) - maxQueued; over > 0 {
+			t.queue = slices.Delete(t.queue, 0, over)
+		}
+		t.mu.Unlock()
+		return err
 	}
 	return nil
 }
@@ -155,9 +169,7 @@ func (t *Traffic) restore(ctx context.Context, hs HistoryStore, now time.Time) e
 				f.minutes[i] = pair[float32]{}
 			}
 		}
-		if t.oldest == 0 || m < t.oldest {
-			t.oldest = m
-		}
+		t.lastQueued = max(t.lastQueued, m) // kept already: never handed to the history again
 		return i
 	}
 	for _, r := range rows {
@@ -230,7 +242,7 @@ func (t *Traffic) longView(ctx context.Context, hs HistoryStore, rng string, now
 			return TrafficView{}, err
 		}
 	}
-	minutes := make([]int64, len(starts)) // watched minutes per bucket
+	minutes := make([]int64, len(starts)) // watched minutes per bucket: the host row's, written every one
 	bytes := map[string][]pair[uint64]{}
 	totals := map[string]uint64{}
 	for _, r := range rows {
@@ -238,7 +250,9 @@ func (t *Traffic) longView(ctx context.Context, hs HistoryStore, rng string, now
 		if !ok {
 			continue
 		}
-		minutes[i] = max(minutes[i], r.N)
+		if r.Source == hostScope {
+			minutes[i] = r.N
+		}
 		if r.Source != hostScope && !strings.HasPrefix(r.Source, ctrScope) {
 			continue // the containers beyond a bucket's sources: the host's figures cover them
 		}
@@ -292,9 +306,8 @@ func (t *Traffic) longView(ctx context.Context, hs HistoryStore, rng string, now
 			c.TodayRx, c.TodayTx = f.today[0]+uint64(f.open[0]), f.today[1]+uint64(f.open[1])
 		}
 		c.Series = series(bytes[src])
-		v.Containers = append(v.Containers, c)
+		v.Containers = append(v.Containers, c) // most traffic in the range first
 	}
-	sortContainers(v.Containers)
 	return v, nil
 }
 
@@ -305,20 +318,20 @@ func (t *Traffic) previous(ctx context.Context, hs HistoryStore, rng string, v T
 	if rng == "5m" {
 		t.mu.Lock()
 		defer t.mu.Unlock()
-		if t.open == 0 || t.oldest == 0 || t.oldest > t.open-10 {
+		if t.open == 0 {
 			return nil, nil
 		}
 		var sum pair[float64]
-		held := false
+		held := 0
 		host := t.flows[hostScope]
 		for m := t.open - 10; m < t.open-5; m++ {
 			if i := slot(m); t.minuteAt[i] == m {
-				held = true
+				held++
 				sum[0] += float64(host.minutes[i][0]) * 60
 				sum[1] += float64(host.minutes[i][1]) * 60
 			}
 		}
-		if !held {
+		if held*100 < 5*minCoverage {
 			return nil, nil
 		}
 		return &Totals{In: uint64(math.Round(sum[0])), Out: uint64(math.Round(sum[1]))}, nil

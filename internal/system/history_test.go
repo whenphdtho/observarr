@@ -150,7 +150,7 @@ func TestRangesStepsAndPoints(t *testing.T) {
 		var v TrafficView
 		var err error
 		if c.rng == "24h" {
-			v = tr.View(c.rng)
+			v = tr.View(c.rng, tr.last)
 		} else if v, err = tr.longView(ctx, st, c.rng, now); err != nil {
 			t.Fatal(err)
 		}
@@ -190,6 +190,17 @@ func TestRangesStepsAndPoints(t *testing.T) {
 	}
 }
 
+// window is a HistoryStore that records the period HostTraffic is asked for and gives 7/1 bytes for it.
+type window struct {
+	HistoryStore
+	res, from, to int64
+}
+
+func (w *window) HostTraffic(_ context.Context, res, from, to int64) (uint64, uint64, bool, error) {
+	w.res, w.from, w.to = res, from, to
+	return 7, 1, true, nil
+}
+
 func TestPreviousPeriodTotals(t *testing.T) {
 	st := openStore(t)
 	tr := NewTraffic(zone, "", 0)
@@ -198,48 +209,50 @@ func TestPreviousPeriodTotals(t *testing.T) {
 
 	// Five minutes: the five minutes before the last five, from memory.
 	readMinutes(t, tr, st, now.Add(-15*time.Minute), now.Add(time.Second))
-	v := tr.View("5m")
+	v := tr.View("5m", now)
 	if p, err := tr.previous(ctx, st, "5m", v); err != nil || p == nil || *p != (Totals{300, 30}) {
 		t.Fatalf("5m previous = %+v %v, want 5 minutes of 60/6", p, err)
 	}
-
-	// A day: the day before, from minutes.
-	v = tr.View("24h")
-	first := v.Times[0] / 1000
-	if p, _ := tr.previous(ctx, st, "24h", v); p != nil {
-		t.Fatalf("24h previous without a kept day before = %+v", p)
+	// Only two of those five minutes watched: not known.
+	gappy := NewTraffic(zone, "", 0)
+	gappy.observe(now.Add(-3*time.Hour), eth(0, 0), nil)
+	readMinutes(t, gappy, st, now.Add(-7*time.Minute), now.Add(time.Second))
+	if p, _ := gappy.previous(ctx, st, "5m", gappy.View("5m", now)); p != nil {
+		t.Fatalf("5m previous with 2 of 5 minutes watched = %+v", p)
 	}
+
+	// A day of minutes kept here and there is not the day before.
+	day := tr.View("24h", now)
+	first := day.Times[0] / 1000
 	addMinute(t, st, zone, first-86400, 1000, nil)
 	addMinute(t, st, zone, first-60, 500, nil)
-	if p, err := tr.previous(ctx, st, "24h", v); err != nil || p == nil || *p != (Totals{1500, 750}) {
-		t.Fatalf("24h previous = %+v %v", p, err)
+	if p, err := tr.previous(ctx, st, "24h", day); err != nil || p != nil {
+		t.Fatalf("24h previous from two minutes of the day = %+v %v", p, err)
 	}
 
-	// A week: the week before, from hours.
-	if v, _ = tr.longView(ctx, st, "7d", now); v.Times[0]/1000 != hourStart(now.Unix(), zone)-167*3600 {
-		t.Fatalf("7d starts %v", time.UnixMilli(v.Times[0]))
-	}
-	if p, _ := tr.previous(ctx, st, "7d", v); p != nil {
-		t.Fatalf("7d previous, the history starting within it = %+v", p)
-	}
-	week := v.Times[0]/1000 - 7*86400
-	addMinute(t, st, zone, week, 7000, nil)
-	addMinute(t, st, zone, week+3*86400, 3000, nil)
-	if p, err := tr.previous(ctx, st, "7d", v); err != nil || p == nil || p.In != 7000+3000 {
-		t.Fatalf("7d previous = %+v %v", p, err)
-	}
-
-	// Thirty days: the thirty local days before, from days.
-	v, _ = tr.longView(ctx, st, "30d", now)
-	day := addDays(v.Times[0]/1000, -30, zone)
-	addMinute(t, st, zone, day+3600, 100_000, nil)
-	if p, err := tr.previous(ctx, st, "30d", v); err != nil || p == nil || p.In != 100_000 {
-		t.Fatalf("30d previous = %+v %v", p, err)
-	}
-	// A year: days are not kept two years, so the year before is never known in full.
-	v, _ = tr.longView(ctx, st, "1y", now)
-	if p, err := tr.previous(ctx, st, "1y", v); err != nil || p != nil {
-		t.Fatalf("1y previous = %+v %v", p, err)
+	// Each range asks for the period as long right before it: minutes, hours, or local days.
+	w := &window{}
+	for _, c := range []struct {
+		rng           string
+		res, from, to func(first int64) int64
+	}{
+		{"24h", func(int64) int64 { return 60 }, func(f int64) int64 { return f - 86400 }, func(f int64) int64 { return f }},
+		{"7d", func(int64) int64 { return 3600 }, func(f int64) int64 { return f - 7*86400 }, func(f int64) int64 { return f }},
+		{"30d", func(int64) int64 { return 86400 }, func(f int64) int64 { return addDays(f, -30, zone) },
+			func(f int64) int64 { return dayStart(f, zone) }},
+		{"1y", func(int64) int64 { return 86400 }, func(f int64) int64 { return addDays(f, -366, zone) },
+			func(f int64) int64 { return f }},
+	} {
+		v := day
+		if c.rng != "24h" {
+			v, _ = tr.longView(ctx, st, c.rng, now)
+		}
+		f := v.Times[0] / 1000
+		p, err := tr.previous(ctx, w, c.rng, v)
+		if err != nil || p == nil || *p != (Totals{7, 1}) || w.res != c.res(f) || w.from != c.from(f) || w.to != c.to(f) {
+			t.Errorf("%s previous = %+v %v from res %d [%v, %v)", c.rng, p, err, w.res, time.Unix(w.from, 0),
+				time.Unix(w.to, 0))
+		}
 	}
 }
 
@@ -310,7 +323,7 @@ func TestRestartRestoresTheLastDay(t *testing.T) {
 	if err := before.persistHistory(ctx, st); err != nil {
 		t.Fatal(err)
 	}
-	old := before.View("24h")
+	old := before.View("24h", before.last)
 
 	after := NewTraffic(zone, "", 0)
 	after.keep = true
@@ -319,7 +332,7 @@ func TestRestartRestoresTheLastDay(t *testing.T) {
 		t.Fatal(err)
 	}
 	after.observe(restart, eth(0, 0), nil)
-	v := after.View("24h")
+	v := after.View("24h", after.last)
 	if len(v.Times) != minuteSlots || v.Times[minuteSlots-1] != old.Times[minuteSlots-1] {
 		t.Fatalf("restored view: %d times", len(v.Times))
 	}

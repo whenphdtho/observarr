@@ -75,7 +75,6 @@ type Traffic struct {
 	hostAt   [minuteSlots]int64 // likewise for cpu and mem, which only minutes with a host reading have
 	cpu      [minuteSlots]float32
 	mem      [minuteSlots]uint64
-	oldest   int64            // the oldest minute ever held; 0 for none
 	liveAt   [liveSlots]int64 // ms since epoch
 	nextLive int
 	last     time.Time                  // latest reading
@@ -85,12 +84,14 @@ type Traffic struct {
 	peak     pair[float32]              // the host's highest rates in a reading of day (since the start, on the first day)
 	pending  map[[2]string]pair[uint64] // bytes by day and scope, not yet written
 
-	seen     bool    // a reading was taken in the open minute
-	openCPU  float64 // sum of the open minute's host CPU readings
-	openMem  float64 // and of its memory readings
-	openHost int     // how many host readings that is
-	keep     bool    // closed minutes are queued for a HistoryStore
-	queue    []store.HistoryMinute
+	seen       bool    // a reading was taken in the open minute
+	openCPU    float64 // sum of the open minute's host CPU readings
+	openMem    float64 // and of its memory readings
+	openHost   int     // how many host readings that is
+	keep       bool    // closed minutes are queued for a HistoryStore
+	lastQueued int64   // the latest minute queued (or restored); none at or before it is queued again
+	queue      []store.HistoryMinute
+	headFails  int // failed writes in a row of the queue's first minute
 }
 
 // TrafficSummary is the host's traffic today in bytes, its highest rates today in bytes per second (of one
@@ -358,30 +359,49 @@ func (t *Traffic) spread(now time.Time) {
 	}
 }
 
+// openRecord is the open minute as the history keeps it: its bytes so far and its host averages.
+func (t *Traffic) openRecord() store.HistoryMinute {
+	m := t.open * 60
+	rec := store.HistoryMinute{Minute: m, Hour: hourStart(m, t.loc), Day: dayStart(m, t.loc)}
+	if t.openHost > 0 {
+		n := float64(t.openHost)
+		rec.Host = &store.HostAvg{CPU: float64(float32(t.openCPU / n)), Mem: uint64(math.Round(t.openMem / n))}
+	}
+	for key, f := range t.flows {
+		b := pair[uint64]{uint64(math.Round(f.open[0])), uint64(math.Round(f.open[1]))}
+		if key == hostScope || b != (pair[uint64]{}) {
+			rec.Traffic = append(rec.Traffic, store.SourceBytes{Source: key, Rx: b[0], Tx: b[1]})
+		}
+	}
+	return rec
+}
+
+// queueOpen queues the open minute for the history unless a minute at or after it was queued already (the
+// clock went back): a minute is handed to the history once.
+func (t *Traffic) queueOpen() {
+	if t.keep && t.open > t.lastQueued {
+		t.enqueue(t.openRecord())
+		t.lastQueued = t.open
+	}
+}
+
 // closeMinute records the open minute's averages if it was watched, adds its bytes to today's totals and to
 // those waiting to be written, and queues it for the history.
 func (t *Traffic) closeMinute(watched bool) {
 	m, i := t.open, slot(t.open)
 	t.minuteAt[i], t.hostAt[i] = 0, 0
-	rec := store.HistoryMinute{Minute: m * 60, Hour: hourStart(m*60, t.loc), Day: dayStart(m*60, t.loc)}
 	if watched {
+		t.queueOpen()
 		t.minuteAt[i] = m
-		if t.oldest == 0 || m < t.oldest {
-			t.oldest = m
-		}
 		if t.openHost > 0 {
 			n := float64(t.openHost)
 			t.hostAt[i], t.cpu[i], t.mem[i] = m, float32(t.openCPU/n), uint64(math.Round(t.openMem/n))
-			rec.Host = &store.HostAvg{CPU: float64(t.cpu[i]), Mem: t.mem[i]}
 		}
 	}
 	for key, f := range t.flows {
 		f.minutes[i] = pair[float32]{float32(f.open[0] / 60), float32(f.open[1] / 60)}
 		b := pair[uint64]{uint64(math.Round(f.open[0])), uint64(math.Round(f.open[1]))}
 		f.open = pair[float64]{}
-		if watched && (key == hostScope || b != (pair[uint64]{})) {
-			rec.Traffic = append(rec.Traffic, store.SourceBytes{Source: key, Rx: b[0], Tx: b[1]})
-		}
 		if b == (pair[uint64]{}) {
 			continue
 		}
@@ -391,8 +411,15 @@ func (t *Traffic) closeMinute(watched bool) {
 			t.pending[k] = pair[uint64]{p[0] + b[0], p[1] + b[1]}
 		}
 	}
-	if watched && t.keep {
-		t.enqueue(rec)
+}
+
+// flushOpen queues the open minute, as far as it was counted, for the history; on shutdown, so the history
+// holds what the daily totals do.
+func (t *Traffic) flushOpen() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.open != 0 && t.seen {
+		t.queueOpen()
 	}
 }
 
@@ -461,49 +488,95 @@ func (t *Traffic) lastClosed(now time.Time) int64 {
 }
 
 // View returns the traffic over the last five minutes (rng "5m", every reading) or the last day (any other
-// rng: the 1440 minutes up to the latest closed one, a gap where a minute was not watched).
-func (t *Traffic) View(rng string) TrafficView {
+// rng: the 1440 minutes up to the latest closed one before now, a gap where a minute was not watched). It shows
+// at most maxSeries containers, those with the most traffic in the range. The series are copied under the
+// lock and built after it.
+func (t *Traffic) View(rng string, now time.Time) TrafficView {
 	t.mu.Lock()
-	defer t.mu.Unlock()
 	v := TrafficView{TrafficSummary: t.summary(), Range: rng, Step: int64(watchedEvery / time.Second),
 		Times: []int64{}, Containers: []ContainerTraffic{}}
-
-	// The live slots in the range, oldest first; or the range's minutes.
-	var slots []int
-	var minutes []int64
-	if rng == "5m" {
+	live := rng == "5m"
+	var idx []int // per time, the ring slot; -1 for a minute not watched
+	if live {
 		cut := t.last.Add(-historyWindow).UnixMilli()
 		for n := range liveSlots {
 			if i := (t.nextLive + n) % liveSlots; t.liveAt[i] > cut {
-				slots = append(slots, i)
+				idx = append(idx, i)
 				v.Times = append(v.Times, t.liveAt[i])
 			}
 		}
 	} else {
 		v.Range, v.Step = "24h", 60
-		last := t.lastClosed(time.Now())
+		last := t.lastClosed(now)
 		for m := last - minuteSlots + 1; m <= last; m++ {
-			minutes = append(minutes, m)
+			i := slot(m)
+			if t.minuteAt[i] != m {
+				i = -1
+			}
+			idx = append(idx, i)
 			v.Times = append(v.Times, m*60_000)
 		}
 	}
-	latest := (t.nextLive + liveSlots - 1) % liveSlots
-	view := func(f *flow) FlowView {
-		fv := FlowView{}
-		if t.liveAt[latest] == t.last.UnixMilli() {
-			fv.Rx, fv.Tx = float64(f.live[latest][0]), float64(f.live[latest][1])
+	ring := func(f *flow) []pair[float32] {
+		if live {
+			return f.live[:]
 		}
-		s := &Series{Rx: make(Values, len(v.Times)), Tx: make(Values, len(v.Times))}
-		if rng == "5m" {
-			for n, i := range slots {
-				s.Rx[n], s.Tx[n] = float64(f.live[i][0]), float64(f.live[i][1])
-			}
-		} else {
-			for n, m := range minutes {
-				s.Rx[n], s.Tx[n] = math.NaN(), math.NaN()
-				if i := slot(m); t.minuteAt[i] == m {
-					s.Rx[n], s.Tx[n] = math.Round(float64(f.minutes[i][0])), math.Round(float64(f.minutes[i][1]))
+		return f.minutes[:]
+	}
+	// The containers with the most traffic in the range.
+	totals := map[string]float64{}
+	var names []string
+	for key, f := range t.flows {
+		if strings.HasPrefix(key, ctrScope) {
+			r, sum := ring(f), 0.0
+			for _, i := range idx {
+				if i >= 0 {
+					sum += float64(r[i][0]) + float64(r[i][1])
 				}
+			}
+			totals[key] = sum
+			names = append(names, key)
+		}
+	}
+	slices.SortFunc(names, func(a, b string) int { return cmp.Or(cmp.Compare(totals[b], totals[a]), cmp.Compare(a, b)) })
+	names = names[:min(len(names), maxSeries)]
+
+	type taken struct {
+		name   string
+		rx, tx float64
+		today  pair[uint64]
+		vals   []pair[float32]
+	}
+	gap := float32(math.NaN())
+	take := func(key string) taken {
+		f := t.flows[key]
+		tk := taken{name: strings.TrimPrefix(key, ctrScope), vals: make([]pair[float32], len(idx)),
+			today: pair[uint64]{f.today[0] + uint64(f.open[0]), f.today[1] + uint64(f.open[1])}}
+		tk.rx, tk.tx = t.liveRates(f)
+		r := ring(f)
+		for n, i := range idx {
+			if i < 0 {
+				tk.vals[n] = pair[float32]{gap, gap}
+			} else {
+				tk.vals[n] = r[i]
+			}
+		}
+		return tk
+	}
+	host := take(hostScope)
+	ctrs := make([]taken, len(names))
+	for i, key := range names {
+		ctrs[i] = take(key)
+	}
+	t.mu.Unlock()
+
+	view := func(tk taken) FlowView {
+		fv := FlowView{Rx: tk.rx, Tx: tk.tx}
+		s := &Series{Rx: make(Values, len(tk.vals)), Tx: make(Values, len(tk.vals))}
+		for n, p := range tk.vals {
+			s.Rx[n], s.Tx[n] = float64(p[0]), float64(p[1])
+			if !live {
+				s.Rx[n], s.Tx[n] = math.Round(s.Rx[n]), math.Round(s.Tx[n]) // NaN stays NaN
 			}
 		}
 		if s.moves() {
@@ -511,12 +584,10 @@ func (t *Traffic) View(rng string) TrafficView {
 		}
 		return fv
 	}
-	v.Host = view(t.flows[hostScope])
-	for key, f := range t.flows {
-		if name, ok := strings.CutPrefix(key, ctrScope); ok {
-			v.Containers = append(v.Containers, ContainerTraffic{Name: name, FlowView: view(f),
-				TodayRx: f.today[0] + uint64(f.open[0]), TodayTx: f.today[1] + uint64(f.open[1])})
-		}
+	v.Host = view(host)
+	for _, tk := range ctrs {
+		v.Containers = append(v.Containers, ContainerTraffic{Name: tk.name, FlowView: view(tk),
+			TodayRx: tk.today[0], TodayTx: tk.today[1]})
 	}
 	sortContainers(v.Containers)
 	return v

@@ -290,7 +290,11 @@ func (s *Sampler) persist(ctx context.Context) {
 				s.log.Warn("writing traffic totals failed", "err", err)
 			}
 			if s.hist != nil {
-				if err := s.traffic.persistHistory(final, s.hist); err != nil {
+				// The open minute too, as the daily totals count it; with a time budget of its own.
+				s.traffic.flushOpen()
+				hctx, hcancel := context.WithTimeout(context.WithoutCancel(ctx), persistWait)
+				defer hcancel()
+				if err := s.traffic.persistHistory(hctx, s.hist); err != nil {
 					s.log.Warn("writing the history failed", "err", err)
 				}
 			}
@@ -558,7 +562,7 @@ func (s *Sampler) Network(ctx context.Context, rng string) (TrafficView, error) 
 			return TrafficView{}, err
 		}
 	} else {
-		v = s.traffic.View(rng)
+		v = s.traffic.View(rng, s.now())
 	}
 	if v.Previous, err = s.traffic.previous(ctx, s.hist, v.Range, v); err != nil {
 		return TrafficView{}, err
