@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -215,7 +216,10 @@ func TestLocalListReportsUnreadableDocker(t *testing.T) {
 	option := withDocker(f)
 	f.docker = false // configured, but the collector cannot read it
 	e := newServicesEnv(t, option)
-	eventually(t, "the first sample", func() bool { return len(e.srv.System.Snapshot().Notices) > 0 })
+	// The host's notice comes with the first sample, Docker's only with the one after the first container list.
+	eventually(t, "the Docker notice", func() bool {
+		return slices.Contains(e.srv.System.Snapshot().Notices, system.NoticeDocker)
+	})
 	_, found, errs := e.localList()
 	if len(found) != 0 || len(errs) != 1 || errs[0].Target != "docker" || errs[0].Message != system.NoticeDocker {
 		t.Fatalf("local = %+v %+v", found, errs)
