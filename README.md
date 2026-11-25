@@ -21,6 +21,7 @@ It finds your apps but contacts none of them until you click. Status: early deve
 - **Storage:** disks, plus rclone mounts, VFS caches, uploads and transfers.
 - **Security:** failed sign-ins, lockouts, sessions and CrowdSec bans.
 - **System:** host CPU, memory, disks and network, and every container's state and resources.
+- **Backup and restore:** your apps and their keys in one file, encrypted with a passphrase, to restore on another server.
 
 Read-only by design: host mounts are read-only and Docker is reached through a proxy that only answers GET requests.
 One Go binary with the UI embedded and SQLite, running non-root on a distroless image; saved API keys are
