@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 	"testing"
 )
@@ -336,5 +337,64 @@ func TestContainerLinkSetAndCleared(t *testing.T) {
 	}
 	if got, _ := s.ServiceByID(ctx, svc.ID); got.Container != "" {
 		t.Fatalf("container after clearing = %q", got.Container)
+	}
+}
+
+// TestMigration0009KeepsServiceIDsAndNeverReusesThem upgrades a schema-8 database: every service keeps its ID,
+// key and link, and from then on no ID is handed out twice, not even by a restore that replaces every service.
+func TestMigration0009KeepsServiceIDsAndNeverReusesThem(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "observarr.db")
+	raw, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names, _ := fs.Glob(migrationFiles, "migrations/*.sql")
+	for _, name := range names[:8] {
+		body, err := migrationFiles.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := raw.Exec(string(body)); err != nil {
+			t.Fatalf("applying %s: %v", name, err)
+		}
+	}
+	if _, err := raw.Exec(`INSERT INTO services (id, type, name, base_url, api_key, created_at, updated_at, container)
+		VALUES (3, 'sonarr', 'Sonarr', 'http://sonarr:8989', x'03', 1, 1, 'sonarr'),
+		       (7, 'radarr', 'Radarr', 'http://radarr:7878', NULL, 1, 1, '');
+		PRAGMA user_version = 8`); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := Open(context.Background(), path, quiet)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	svcs, err := s.Services(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(svcs) != 2 || svcs[0].ID != 7 || svcs[0].SealedKey != nil || svcs[1].ID != 3 ||
+		string(svcs[1].SealedKey) != "\x03" || svcs[1].Container != "sonarr" {
+		t.Fatalf("services after migration = %+v", svcs)
+	}
+
+	if err := s.DeleteService(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	noKey := func(int64) ([]byte, error) { return nil, nil }
+	created, err := s.CreateService(ctx, Service{Type: "lidarr", Name: "Lidarr", BaseURL: "http://lidarr:8686"}, noKey)
+	if err != nil || created.ID != 8 {
+		t.Fatalf("CreateService after removing 7 = %+v, %v; want ID 8", created, err)
+	}
+	restored, err := s.ImportServices(ctx, true, []Service{{Type: "sonarr", Name: "Sonarr", BaseURL: "http://sonarr:8989"}},
+		nil, func(int, int64) ([]byte, error) { return nil, nil })
+	if err != nil || len(restored) != 1 || restored[0].ID != 9 {
+		t.Fatalf("replacing import = %+v, %v; want ID 9", restored, err)
 	}
 }
