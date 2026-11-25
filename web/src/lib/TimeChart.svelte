@@ -99,8 +99,8 @@
         <defs>
           {#each series as s, k (k)}
             <linearGradient id={`${uid}-fill-${k}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" style:stop-color={s.color} stop-opacity="0.42" />
-              <stop offset="1" style:stop-color={s.color} stop-opacity="0.03" />
+              <stop offset="0" style:stop-color={s.color} style:stop-opacity="var(--area-hi)" />
+              <stop offset="1" style:stop-color={s.color} style:stop-opacity="var(--area-lo)" />
             </linearGradient>
           {/each}
           <clipPath id={`${uid}-plot`}><rect x={PAD.left} y={0} width={plotW} height={height}></rect></clipPath>
@@ -174,7 +174,7 @@
 
   .tip {
     position: absolute; top: 4px; z-index: 2; pointer-events: none; display: grid; gap: 4px; min-width: 150px; max-width: min(260px, 70%);
-    padding: 9px 12px; border-radius: var(--r); background: var(--surface3); border: 1px solid var(--border2);
+    padding: 9px 12px; border-radius: var(--r); background: var(--tip); border: 1px solid var(--tip-edge);
     box-shadow: var(--float); font-size: var(--t-small); color: var(--text2);
   }
   .when { color: var(--text); font-weight: 600; white-space: nowrap; }

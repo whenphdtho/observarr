@@ -204,7 +204,7 @@
     display: grid; gap: 12px; margin: 12px 0 2px 46px; padding: 14px; border-radius: var(--r-lg);
     background: var(--surface2); border: 1px solid var(--border); grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
   }
-  .mini input:not([type='checkbox']) { background: var(--bg); }
+  .mini input:not([type='checkbox']) { background: var(--field); }
   label { display: grid; gap: 6px; font-size: var(--t-body); color: var(--text2); align-content: start; min-width: 0; }
   label.check { grid-column: 1 / -1; display: flex; align-items: flex-start; gap: 8px; color: var(--text); }
   label.check input { flex: none; margin-top: 2px; }

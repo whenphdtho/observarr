@@ -154,12 +154,12 @@
       <defs>
         {#each layers as l, k (k)}
           <linearGradient id={`${uid}-in-${k}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" style:stop-color={l.color} stop-opacity="0.6" />
-            <stop offset="1" style:stop-color={l.color} stop-opacity="0.28" />
+            <stop offset="0" style:stop-color={l.color} style:stop-opacity="var(--band-hi)" />
+            <stop offset="1" style:stop-color={l.color} style:stop-opacity="var(--band-lo)" />
           </linearGradient>
           <linearGradient id={`${uid}-out-${k}`} x1="0" y1="1" x2="0" y2="0">
-            <stop offset="0" style:stop-color={l.color} stop-opacity="0.6" />
-            <stop offset="1" style:stop-color={l.color} stop-opacity="0.28" />
+            <stop offset="0" style:stop-color={l.color} style:stop-opacity="var(--band-hi)" />
+            <stop offset="1" style:stop-color={l.color} style:stop-opacity="var(--band-lo)" />
           </linearGradient>
         {/each}
         <clipPath id={`${uid}-plot`}><rect x={PAD.left} y={0} width={plotW} height={height}></rect></clipPath>
@@ -228,8 +228,8 @@
 
   .tip {
     position: absolute; top: 4px; z-index: 2; pointer-events: none; display: grid; gap: 4px; width: max-content;
-    max-width: min(280px, 78%); padding: 9px 12px; border-radius: var(--r); background: var(--surface3);
-    border: 1px solid var(--border2); box-shadow: var(--float); font-size: var(--t-small); color: var(--text2);
+    max-width: min(280px, 78%); padding: 9px 12px; border-radius: var(--r); background: var(--tip);
+    border: 1px solid var(--tip-edge); box-shadow: var(--float); font-size: var(--t-small); color: var(--text2);
   }
   .when { color: var(--text); font-weight: 600; white-space: nowrap; }
   .row { display: grid; grid-template-columns: minmax(0, 1fr) 6ch 6ch; gap: 8px; align-items: center; }

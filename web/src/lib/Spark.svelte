@@ -31,7 +31,7 @@
     <svg {width} {height}>
       <defs>
         <linearGradient id={`${uid}-g`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" style:stop-color={color} stop-opacity="0.38" />
+          <stop offset="0" style:stop-color={color} style:stop-opacity="var(--spark-hi)" />
           <stop offset="1" style:stop-color={color} stop-opacity="0" />
         </linearGradient>
       </defs>
