@@ -23,7 +23,7 @@ func TestNZBCallRefusesOtherMethods(t *testing.T) {
 	tg := adapter.Target{BaseURL: u, HTTP: adapter.NewHTTPClient()}
 	for _, m := range []string{"pause", "resume", "shutdown", "reload", "editqueue", "append", "scan",
 		"saveconfig", "rate", "writelog", "config", "log", ""} {
-		err := nzbCall(context.Background(), tg, m, nil, func(*json.Decoder) error { return nil })
+		err := nzbCall(context.Background(), tg, m, nil, nzbAnswerBytes, func(*json.Decoder) error { return nil })
 		if !errors.Is(err, errNotAllowed) {
 			t.Errorf("%q: err = %v, want errNotAllowed", m, err)
 		}

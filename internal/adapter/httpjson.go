@@ -73,13 +73,20 @@ const maxPostBytes = 64 << 10
 // StatusError: following it would send the body and credentials to a path the adapter did not choose.
 func PostJSON(ctx context.Context, t Target, path string, body []byte, authorize func(*http.Request),
 	read func(*json.Decoder) error) error {
+	return PostJSONLimit(ctx, t, path, body, authorize, maxBodyBytes, read)
+}
+
+// PostJSONLimit is PostJSON with an answer limit of limit bytes (at most MaxStreamBytes) instead of 4 MiB, under
+// the terms of StreamJSONLimit: read must keep a bounded amount of what it decodes.
+func PostJSONLimit(ctx context.Context, t Target, path string, body []byte, authorize func(*http.Request),
+	limit int64, read func(*json.Decoder) error) error {
 	if len(body) > maxPostBytes {
 		return errors.New("adapter: request body too large")
 	}
 	noRedirect := *t.HTTP
 	noRedirect.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	t.HTTP = &noRedirect
-	return doJSON(ctx, t, http.MethodPost, path, body, maxBodyBytes, authorize, read)
+	return doJSON(ctx, t, http.MethodPost, path, body, min(max(limit, 1), MaxStreamBytes), authorize, read)
 }
 
 // doJSON sends one request to base+path, with body (if not nil) as JSON, and hands the answer, of at most limit

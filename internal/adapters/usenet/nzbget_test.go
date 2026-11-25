@@ -186,6 +186,47 @@ func TestNZBQueue(t *testing.T) {
 	}
 }
 
+// A queue beyond the usual 4 MiB answer is still counted, and kept bounded.
+func TestNZBLongQueue(t *testing.T) {
+	f := newFakeNZB(t)
+	padding := `"Log": ["` + strings.Repeat("x", 1500) + `"]}`
+	many := make([]string, 5000) // some 8 MiB
+	for i := range many {
+		g := nzbGroup(fmt.Sprintf("Big.Buck.Bunny.Part%04d", i), "QUEUED", 1<<20, 1<<20, 0, 1000)
+		many[i] = strings.Replace(g, `"Log": []}`, padding, 1)
+	}
+	f.groups = "[" + strings.Join(many, ",") + "]"
+	got, err := usenet.NewNZBGet().Probe(context.Background(), target(t, f, f.key()), shape.KindQueue)
+	if err != nil {
+		t.Fatalf("queue of %d MiB: %v", len(f.groups)>>20, err)
+	}
+	if q := got.(shape.Queue); q.Total != len(many) || len(q.Items) != shape.MaxQueueItems {
+		t.Fatalf("total %d, %d items", q.Total, len(q.Items))
+	}
+}
+
+// Sizes at the top of NZBGet's two 32-bit halves neither turn negative nor overflow the sum of what is ahead.
+func TestNZBHugeFigures(t *testing.T) {
+	f := newFakeNZB(t)
+	huge := `{"NZBName": "Cosmos.Laundromat.2015.Remux", "Status": "DOWNLOADING",
+		"FileSizeLo": 4294967295, "FileSizeHi": 4294967295, "RemainingSizeLo": 4294967295, "RemainingSizeHi": 4294967295,
+		"PausedSizeLo": 0, "PausedSizeHi": 0, "Health": 1000, "CriticalHealth": 900}`
+	f.groups = "[" + huge + "," + huge + "]"
+	got, err := usenet.NewNZBGet().Probe(context.Background(), target(t, f, f.key()), shape.KindQueue)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := got.(shape.Queue)
+	for i, it := range q.Items {
+		if it.SizeBytes != 1<<62 || it.LeftBytes != 1<<62 || it.ETA == "" || strings.HasPrefix(it.ETA, "-") {
+			t.Errorf("item %d = %+v", i, it)
+		}
+	}
+	if len(q.Items) != 2 || q.Items[1].ETA != q.Items[0].ETA {
+		t.Errorf("what is ahead does not saturate: %+v", q.Items)
+	}
+}
+
 func TestNZBHealth(t *testing.T) {
 	f := newFakeNZB(t)
 	f.status = strings.Replace(nzbStatus(0, 300<<20, true), `"QuotaReached": false`, `"QuotaReached": true`, 1)

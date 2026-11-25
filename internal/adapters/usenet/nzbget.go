@@ -64,6 +64,16 @@ var (
 // maxHistoryRead bounds the history items a health reading reads looking for the last day's failures.
 const maxHistoryRead = 200
 
+const (
+	// nzbAnswerBytes bounds an answer of NZBGet's.
+	nzbAnswerBytes = 4 << 20
+	// nzbQueueBytes bounds the queue listing, which is read as a stream and kept only up to shape.MaxQueueItems:
+	// at about 2 KiB an item, room for some 16,000 items.
+	nzbQueueBytes = 32 << 20
+	// maxBytes caps a byte figure, and the sums of them the queue keeps, far below overflow.
+	maxBytes = 1 << 62
+)
+
 type nzbget struct{}
 
 // NewNZBGet returns the NZBGet adapter.
@@ -86,9 +96,9 @@ func (nzbget) Info() adapter.Info {
 // Logo returns NZBGet's logo.
 func (nzbget) Logo() []byte { return logo("nzbget") }
 
-// nzbCall calls one allowed method with params and hands its result to read. read may return errEnough to stop
-// reading early; nzbCall then succeeds.
-func nzbCall(ctx context.Context, t adapter.Target, method string, params []any,
+// nzbCall calls one allowed method with params and hands its result, of an answer of at most limit bytes, to read.
+// read may return errEnough to stop reading early; nzbCall then succeeds.
+func nzbCall(ctx context.Context, t adapter.Target, method string, params []any, limit int64,
 	read func(*json.Decoder) error) error {
 	if !slices.Contains(nzbMethods, method) {
 		return fmt.Errorf("%w: %s", errNotAllowed, method)
@@ -105,7 +115,7 @@ func nzbCall(ctx context.Context, t adapter.Target, method string, params []any,
 		return err
 	}
 	var refused, answered bool
-	err = adapter.PostJSON(ctx, t, nzbPath, body, authorize, func(d *json.Decoder) error {
+	err = adapter.PostJSONLimit(ctx, t, nzbPath, body, authorize, limit, func(d *json.Decoder) error {
 		err := adapter.DecodeObject(d, map[string]func(*json.Decoder) error{
 			"result": func(d *json.Decoder) error { answered = true; return read(d) },
 			"error": func(d *json.Decoder) error {
@@ -132,11 +142,11 @@ func nzbCall(ctx context.Context, t adapter.Target, method string, params []any,
 
 // nzbCallInto is nzbCall decoding the whole result into v.
 func nzbCallInto(ctx context.Context, t adapter.Target, method string, v any) error {
-	return nzbCall(ctx, t, method, nil, func(d *json.Decoder) error { return d.Decode(v) })
+	return nzbCall(ctx, t, method, nil, nzbAnswerBytes, func(d *json.Decoder) error { return d.Decode(v) })
 }
 
-// join is the 64-bit figure NZBGet sends as two 32-bit halves.
-func join(hi, lo uint32) int64 { return int64(hi)<<32 | int64(lo) }
+// join is the 64-bit figure NZBGet sends as two 32-bit halves, at most maxBytes.
+func join(hi, lo uint32) int64 { return int64(min(uint64(hi)<<32|uint64(lo), maxBytes)) }
 
 func fetchNZBVersion(ctx context.Context, t adapter.Target) (string, time.Duration, error) {
 	var v string
@@ -258,7 +268,7 @@ func probeNZBQueue(ctx context.Context, t adapter.Target) (any, error) {
 	}
 	q := shape.Queue{Items: []shape.QueueItem{}, Speed: st.speed(), Paused: st.DownloadPaused}
 	var ahead int64 // bytes to download before the current item is done
-	err := nzbCall(ctx, t, nzbMethodGroups, []any{0}, func(d *json.Decoder) error {
+	err := nzbCall(ctx, t, nzbMethodGroups, []any{0}, nzbQueueBytes, func(d *json.Decoder) error {
 		var err error
 		q.Total, err = adapter.CountArray(d, shape.MaxQueueItems, func(g nzbGroup) {
 			size, left := join(g.FileSizeHi, g.FileSizeLo), join(g.RemainingSizeHi, g.RemainingSizeLo)
@@ -273,7 +283,7 @@ func probeNZBQueue(ctx context.Context, t adapter.Target) (any, error) {
 				item.Problem = "too many articles are missing to repair it"
 			}
 			if active := max(0, left-join(g.PausedSizeHi, g.PausedSizeLo)); active > 0 && g.Status != "PAUSED" {
-				ahead += active
+				ahead += min(active, maxBytes-ahead) // saturates at maxBytes
 				if q.Speed > 0 && !q.Paused {
 					item.ETA = clock(ahead / q.Speed)
 				}
@@ -347,7 +357,7 @@ func probeNZBHealth(ctx context.Context, t adapter.Target) (any, error) {
 		return nil, err
 	}
 	failed := newFailures(time.Now())
-	if err := nzbCall(ctx, t, nzbMethodHistory, []any{false}, func(d *json.Decoder) error {
+	if err := nzbCall(ctx, t, nzbMethodHistory, []any{false}, nzbAnswerBytes, func(d *json.Decoder) error {
 		return readFailures(d, &failed)
 	}); err != nil {
 		return nil, err
