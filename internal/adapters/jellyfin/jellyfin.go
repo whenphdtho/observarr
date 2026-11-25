@@ -114,9 +114,9 @@ func fetchPublic(ctx context.Context, t adapter.Target) (publicInfo, error) {
 	err := adapter.GetJSON(ctx, t, pathPublicInfo, "", &p)
 	var status adapter.StatusError
 	switch {
-	// Jellyfin answers this without a key: a refusal means something else answers.
+	// Jellyfin answers this without a key: a refusal means something else answers. A server error is an error.
 	case errors.Is(err, adapter.ErrNotJSON), errors.Is(err, adapter.ErrNotFound),
-		errors.Is(err, adapter.ErrUnauthorized), errors.As(err, &status):
+		errors.Is(err, adapter.ErrUnauthorized), errors.As(err, &status) && status < 500:
 		return p, adapter.ErrWrongApp
 	case err != nil:
 		return p, err
@@ -282,7 +282,7 @@ func probeStreams(ctx context.Context, t adapter.Target) (any, error) {
 		if s.Method == shape.PlayTranscode {
 			out.Transcodes++
 		}
-		out.Bitrate += s.Bitrate
+		out.Bitrate += s.Bitrate // each at most maxBitrate, and the sessions are bounded: no overflow
 	}
 	// The server lists the most recently active session first, which changes from one reading to the next; by
 	// user and title, the list keeps still.
@@ -322,7 +322,7 @@ func stream(s session) (shape.Stream, bool) {
 	}
 	video, audio := sourceStreams(it.MediaStreams, audioIndex)
 	out.VideoCodec, out.AudioCodec = shape.ClipTo(video.Codec, 32), shape.ClipTo(audio.Codec, 32)
-	out.Bitrate = max(0, video.BitRate) + max(0, audio.BitRate)
+	out.Bitrate = bitrate(video.BitRate) + bitrate(audio.BitRate)
 	if ti := s.TranscodingInfo; ti != nil && out.Method != shape.PlayDirect && out.Method != "" {
 		if !ti.IsVideoDirect {
 			out.ToVideoCodec = shape.ClipTo(ti.VideoCodec, 32)
@@ -331,12 +331,19 @@ func stream(s session) (shape.Stream, bool) {
 			out.ToAudioCodec = shape.ClipTo(ti.AudioCodec, 32)
 		}
 		if ti.Bitrate > 0 {
-			out.Bitrate = ti.Bitrate
+			out.Bitrate = bitrate(ti.Bitrate)
 		}
 		out.Reasons = reasons(ti.TranscodeReasons)
 	}
 	return out, true
 }
+
+// maxBitrate caps a bitrate the server reports (1 Tbit/s, far above any stream), so the sums of them cannot
+// overflow.
+const maxBitrate = 1 << 40
+
+// bitrate is b, a bitrate the server reports, between 0 and maxBitrate.
+func bitrate(b int64) int64 { return min(max(b, 0), maxBitrate) }
 
 // title names an item: "Series S01E02 · Episode", "Film (2008)", "Artist · Track", or just its name.
 func title(it *item) string {

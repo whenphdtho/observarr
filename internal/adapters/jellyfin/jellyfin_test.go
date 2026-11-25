@@ -262,6 +262,35 @@ func TestProbeStreamsCapsTheList(t *testing.T) {
 	}
 }
 
+// Bitrates beyond any stream's are capped, so their sum cannot overflow.
+func TestProbeStreamsCapsBitrates(t *testing.T) {
+	f, target := newFake(t)
+	huge := `{"UserName":"%s","PlayState":{"PlayMethod":"%s"},"NowPlayingItem":{"Name":"Sintel",` +
+		`"MediaStreams":[{"Type":"Video","BitRate":9223372036854775807},{"Type":"Audio","BitRate":9223372036854775807}]},` +
+		`"TranscodingInfo":{"Bitrate":9223372036854775807}}`
+	f.answers["/Sessions"] = []byte("[" + fmt.Sprintf(huge, "alex", "DirectPlay") + "," +
+		fmt.Sprintf(huge, "sam", "Transcode") + "]")
+	got, err := New().Probe(context.Background(), target, shape.KindStreams)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := got.(shape.Streams)
+	if s.Streams[0].Bitrate != 2<<40 || s.Streams[1].Bitrate != 1<<40 || s.Bitrate != 3<<40 {
+		t.Errorf("bitrates %d and %d, sum %d", s.Streams[0].Bitrate, s.Streams[1].Bitrate, s.Bitrate)
+	}
+}
+
+// A server error on the public info is an error, not another app.
+func TestDetectServerError(t *testing.T) {
+	f, target := newFake(t)
+	f.status["/System/Info/Public"] = http.StatusServiceUnavailable
+	_, err := New().Detect(context.Background(), target)
+	var status adapter.StatusError
+	if err == nil || errors.Is(err, adapter.ErrWrongApp) || !errors.As(err, &status) || status != 503 {
+		t.Fatalf("Detect on a 503 = %v, want the status error", err)
+	}
+}
+
 func TestProbeStreamsNone(t *testing.T) {
 	f, target := newFake(t)
 	f.answers["/Sessions"] = []byte(`[]`)
