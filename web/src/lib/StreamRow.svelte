@@ -10,6 +10,8 @@
   const method = $derived(METHODS[stream.method] ?? '');
   const pct = $derived(formatPercent(stream.progress));
   const bitrate = $derived(formatBitrate(stream.bitrate));
+  // The first line's facts; without any, the line is left out.
+  const who = $derived(stream.user || where || stream.client);
   const codecs = $derived(codecText(stream));
   const why = $derived(stream.reasons.join(', '));
 </script>
@@ -26,12 +28,12 @@
   <!-- Who plays it in what, then on what device how far and how fast: one line where there is room, two in a
        narrow column. The short facts keep their width; the names give way. -->
   <div class="lines">
-    <div class="facts">
+    {#if who}<div class="facts">
       {#if stream.user}<span class="keep" title={stream.user}>{stream.user}</span>{/if}
       {#if where}<span title={where}>{where}</span>{/if}
       {#if stream.client}<span title={stream.client}>{stream.client}</span>{/if}
-    </div>
-    <div class="facts how">
+    </div>{/if}
+    <div class="facts how" class:after={who}>
       {#if stream.device}<span title={stream.device}>{stream.device}</span>{/if}
       <span class="keep state">{stream.paused ? `Paused at ${pct}` : pct}</span>
       {#if bitrate}<span class="keep" title={`${bitrate} sent to the client`}>{bitrate}</span>{/if}
@@ -58,10 +60,10 @@
   .facts > .keep { flex: none; }
   .lines { display: flex; gap: 2px 6px; min-width: 0; }
   .lines > .facts { flex: 0 1 auto; }
-  .lines > .how::before { content: '·'; color: var(--muted); }
+  .lines > .how.after::before { content: '·'; color: var(--muted); }
   @container (max-width: 360px) {
     .lines { flex-direction: column; }
-    .lines > .how::before { content: none; }
+    .lines > .how.after::before { content: none; }
   }
   .why { font-size: var(--t-small); color: var(--muted); overflow-wrap: anywhere; }
   /* A paused stream: its bar fades, its state is said in words. */
