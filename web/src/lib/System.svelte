@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import HostHistory from './HostHistory.svelte';
+  import Backup from './Backup.svelte';
   import Kpi from './Kpi.svelte';
   import Icon from './icons/Icon.svelte';
   import { snapshot, systemError, hostLines, watchTrend } from './data.js';
@@ -302,6 +303,8 @@
       </div>
     {/if}
   </section>
+
+  <Backup />
 </div>
 
 <style>
