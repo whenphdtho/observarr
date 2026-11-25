@@ -81,6 +81,9 @@ type sabError struct {
 
 var errSABRefused = errors.New("SABnzbd refused the request")
 
+// errSABRequest is a failed request whose error would have repeated the key.
+var errSABRequest = errors.New("sabnzbd: request failed")
+
 func (e sabError) failure() error {
 	switch {
 	case e.Error == "":
@@ -100,22 +103,25 @@ func sabGet(ctx context.Context, t adapter.Target, call url.Values, v sabAnswer)
 		q.Set("apikey", t.APIKey)
 	}
 	if err := adapter.GetJSON(ctx, t, "/api?"+q.Encode(), "", v); err != nil {
-		return withoutKey(err)
+		return withoutKey(err, t.APIKey)
 	}
 	return v.failure()
 }
 
-// withoutKey returns err with the query cut from the URL a *url.Error in it names: net/http's errors name the
-// request URL (or the one a redirect led to), and the key is part of its query. The error it is wrapped in already
-// holds that text, so the *url.Error is wrapped afresh.
-func withoutKey(err error) error {
+// withoutKey returns err without the key: net/http's errors name the request URL (or the one a redirect led to),
+// whose query holds the key, and their causes may repeat it (a malformed redirect's Location, say). A *url.Error is
+// rebuilt afresh, with the query cut from its URL and its cause reduced to adapter.BareCause; the error it was
+// wrapped in held that text too, so that goes. Should the key still show, only a fixed error is left.
+func withoutKey(err error, key string) error {
 	var ue *url.Error
-	if !errors.As(err, &ue) {
-		return err
+	if errors.As(err, &ue) {
+		u, _, _ := strings.Cut(ue.URL, "?")
+		err = fmt.Errorf("sabnzbd: request failed: %w", &url.Error{Op: ue.Op, URL: u, Err: adapter.BareCause(ue.Err)})
 	}
-	clean := *ue
-	clean.URL, _, _ = strings.Cut(clean.URL, "?")
-	return fmt.Errorf("sabnzbd: request failed: %w", &clean)
+	if key != "" && (strings.Contains(err.Error(), key) || strings.Contains(err.Error(), url.QueryEscape(key))) {
+		return errSABRequest
+	}
+	return err
 }
 
 type sabVersionAnswer struct {

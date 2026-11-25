@@ -56,3 +56,29 @@ func Describe(err error) (phrase string, unreachable bool) {
 	}
 	return "", false
 }
+
+// BareCause returns, for the cause of a failed request (a *url.Error's Err), an error that keeps only a few of
+// the identities Describe tells apart and none of err's text, which may repeat the request URL: for a caller whose
+// URLs hold a secret.
+func BareCause(err error) error {
+	for _, known := range []error{context.Canceled, context.DeadlineExceeded, ErrCrossHostRedirect, errRefusedAddress} {
+		if errors.Is(err, known) {
+			return known
+		}
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return timeoutError{}
+	}
+	return errNoAnswer
+}
+
+// errNoAnswer is BareCause's cause of any other failure.
+var errNoAnswer = errors.New("no answer")
+
+// timeoutError is a timeout that says nothing more.
+type timeoutError struct{}
+
+func (timeoutError) Error() string   { return "timed out" }
+func (timeoutError) Timeout() bool   { return true }
+func (timeoutError) Temporary() bool { return true }

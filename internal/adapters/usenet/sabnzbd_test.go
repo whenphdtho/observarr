@@ -203,11 +203,17 @@ func TestSABKeyNeverInErrors(t *testing.T) {
 	redirect := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "http://elsewhere.invalid/api?"+r.URL.RawQuery, http.StatusFound)
 	})
+	// A Location that does not parse: net/http's error quotes it, key and all.
+	malformed := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", "/%zz?"+r.URL.RawQuery)
+		w.WriteHeader(http.StatusFound)
+	})
 	closed := httptest.NewServer(http.NotFoundHandler())
 	closed.Close()
 	cu, _ := url.Parse(closed.URL)
 	for name, tg := range map[string]adapter.Target{
 		"cross-host redirect": target(t, redirect, sabKey),
+		"malformed redirect":  target(t, malformed, sabKey),
 		"connection refused":  {BaseURL: cu, APIKey: sabKey, HTTP: adapter.NewHTTPClient()},
 	} {
 		for _, kind := range []shape.Kind{shape.KindHealth, shape.KindQueue} {
