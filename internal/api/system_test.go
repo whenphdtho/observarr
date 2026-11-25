@@ -2,6 +2,7 @@ package api
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
 	"strings"
 	"sync"
@@ -63,29 +64,51 @@ func TestSystemContainers(t *testing.T) {
 
 func TestNetwork(t *testing.T) {
 	e := newServicesEnv(t, withDocker(&fakeCollector{}))
-	eventually(t, "the first sample", func() bool { return len(e.srv.System.Network("5m").Containers) == 1 })
+	eventually(t, "the first sample", func() bool { v, _ := e.srv.System.Network(context.Background(), "5m"); return len(v.Containers) == 1 })
 	if code, data := e.send("POST", "/api/services", `{"type":"keyless","name":"Linked","url":"`+e.appURL+
 		`/open","container":"app"}`); code != 201 {
 		t.Fatalf("create = %d %v", code, data)
 	}
-	if code, _, _ := e.raw("GET", "/api/network?range=1y", "", nil); code != 400 {
-		t.Fatalf("an unknown range = %d, want 400", code)
+	for _, rng := range []string{"2y", "1h", "24H"} {
+		if code, _, _ := e.raw("GET", "/api/network?range="+rng, "", nil); code != 400 {
+			t.Fatalf("network range %q = %d, want 400", rng, code)
+		}
+		if code, _, _ := e.raw("GET", "/api/system/history?range="+rng, "", nil); code != 400 {
+			t.Fatalf("history range %q = %d, want 400", rng, code)
+		}
 	}
-	for _, rng := range []string{"", "5m", "24h"} {
+	steps := map[string][2]int{"24h": {60, 1440}, "7d": {3600, 168}, "30d": {3600, 720}, "1y": {86400, 366}}
+	today := time.Now().Format(time.DateOnly)
+	for _, rng := range []string{"", "5m", "24h", "7d", "30d", "1y"} {
 		code, raw, _ := e.raw("GET", "/api/network?range="+rng, "", nil)
 		var v struct {
 			Range      string
+			Step       int
 			Times      []int64
 			Host       map[string]any
 			Budget     any
 			Containers []map[string]any
+			Previous   any
+			Daily      []struct {
+				Day     string
+				In, Out *uint64
+			}
 		}
 		if code != 200 || json.Unmarshal(raw, &v) != nil {
 			t.Fatalf("GET /api/network?range=%s = %d %s", rng, code, raw)
 		}
 		if v.Range != cmp.Or(rng, "5m") || v.Times == nil || v.Host == nil || v.Budget != nil ||
 			len(v.Containers) != 1 || v.Containers[0]["name"] != "app" || v.Containers[0]["service"] != "Linked" {
-			t.Fatalf("range %q: %s", rng, raw)
+			if !(len(v.Containers) == 0 && steps[rng][0] > 60) { // the longer ranges come from the history, kept nowhere here
+				t.Fatalf("range %q: %s", rng, raw)
+			}
+		}
+		if want, ok := steps[rng]; ok && (v.Step != want[0] || len(v.Times) != want[1]) {
+			t.Fatalf("range %q: step %d, %d times; want %v", rng, v.Step, len(v.Times), want)
+		}
+		if !strings.Contains(string(raw), `"previous":`) || len(v.Daily) != 30 || v.Daily[29].Day != today ||
+			v.Daily[29].In == nil || v.Daily[0].In != nil {
+			t.Fatalf("range %q: previous and daily: %s", rng, raw)
 		}
 		for _, key := range []string{"todayRx", "todayTx", "peakRx", "peakTx"} {
 			if !strings.Contains(string(raw), `"`+key+`":`) {
@@ -101,9 +124,15 @@ type feed struct {
 	subs []chan system.Snapshot
 }
 
-func (f *feed) Snapshot() system.Snapshot         { return system.Snapshot{Notices: []string{"initial"}} }
-func (f *feed) History() []system.HostView        { return nil }
-func (f *feed) Network(string) system.TrafficView { return system.TrafficView{} }
+func (f *feed) Snapshot() system.Snapshot  { return system.Snapshot{Notices: []string{"initial"}} }
+func (f *feed) History() []system.HostView { return nil }
+func (f *feed) HostHistory(context.Context, string) (system.HostSeries, error) {
+	return system.HostSeries{}, nil
+}
+func (f *feed) Network(context.Context, string) (system.TrafficView, error) {
+	return system.TrafficView{}, nil
+}
+func (f *feed) Spark() system.Spark { return system.Spark{} }
 func (f *feed) Subscribe() (<-chan system.Snapshot, func()) {
 	ch := make(chan system.Snapshot, 16)
 	f.mu.Lock()

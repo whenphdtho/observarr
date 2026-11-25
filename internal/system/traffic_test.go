@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sync"
 	"testing"
 	"time"
@@ -93,12 +94,16 @@ func TestTrafficSpreadsBytesOverMinutes(t *testing.T) {
 	if s.Budget == nil || *s.Budget != (Budget{Period: "day", Limit: 1e9, Used: 6600}) {
 		t.Fatalf("budget = %+v", s.Budget)
 	}
-	v := tr.View("24h")
-	if len(v.Times) != 1 || v.Times[0] != at("2026-11-23", "10:00:00").UnixMilli() || v.Host.Series == nil ||
-		v.Host.Series.Rx[0] != 50 || v.Host.Rx != 100 || v.Host.Tx != 10 {
-		t.Fatalf("24h view = %+v %+v", v.Times, v.Host)
+	v := tr.View("24h", tr.last)
+	n := len(v.Times)
+	if n != minuteSlots || v.Step != 60 || v.Times[n-1] != at("2026-11-23", "10:00:00").UnixMilli() ||
+		v.Host.Series == nil || v.Host.Series.Rx[n-1] != 50 || v.Host.Rx != 100 || v.Host.Tx != 10 {
+		t.Fatalf("24h view = %d times ending %v, %+v", n, v.Times[n-1], v.Host)
 	}
-	live := tr.View("5m")
+	if rx := v.Host.Series.Rx[n-2]; !math.IsNaN(rx) {
+		t.Fatalf("a minute before the first reading = %v, want a gap", rx)
+	}
+	live := tr.View("5m", tr.last)
 	if live.Range != "5m" || len(live.Times) != 2 || live.Host.Series.Rx[1] != 100 {
 		t.Fatalf("5m view = %+v %+v", live.Times, live.Host.Series)
 	}
@@ -137,7 +142,7 @@ func TestTrafficCounterResetsCountNothing(t *testing.T) {
 	step(2*maxGap, eth(1<<30, 0), app(11, 1<<30)) // a gap too long to trust
 
 	s := tr.Summary()
-	v := tr.View("5m")
+	v := tr.View("5m", tr.last)
 	if s.TodayRx != 10+10 || len(v.Containers) != 1 || v.Containers[0].TodayRx != 100 {
 		t.Fatalf("today = %d host, %+v; want only the increases (20 host, 100 container)", s.TodayRx, v.Containers)
 	}
@@ -236,8 +241,8 @@ func TestTrafficIsBounded(t *testing.T) {
 	if n := len(tr.flows); n != 1+len(ctrs) {
 		t.Fatalf("%d flows, want the host and the %d containers seen in the last day", n, len(ctrs))
 	}
-	v := tr.View("24h")
-	if len(v.Times) > maxPoints || len(v.Host.Series.Rx) != len(v.Times) || len(v.Containers) != len(ctrs) {
+	v := tr.View("24h", tr.last)
+	if len(v.Times) != minuteSlots || len(v.Host.Series.Rx) != len(v.Times) || len(v.Containers) != len(ctrs) {
 		t.Fatalf("24h view: %d times, %d values, %d containers", len(v.Times), len(v.Host.Series.Rx), len(v.Containers))
 	}
 	if first, last := v.Times[0], v.Times[len(v.Times)-1]; last-first >= 24*time.Hour.Milliseconds() {
@@ -246,7 +251,7 @@ func TestTrafficIsBounded(t *testing.T) {
 	if r := v.Host.Series.Rx[len(v.Times)/2]; r != 100 || v.Containers[0].Series.Tx[3] != 1 {
 		t.Fatalf("averages = %v host, %v container; want 100 and 1", r, v.Containers[0].Series.Tx[3])
 	}
-	if live := tr.View("5m"); len(live.Times) != 5 {
+	if live := tr.View("5m", tr.last); len(live.Times) != 5 {
 		t.Fatalf("5m view holds %d readings, want the 5 of the last five minutes", len(live.Times))
 	}
 }
@@ -277,7 +282,7 @@ func TestSamplerCountsTraffic(t *testing.T) {
 	if snap.Traffic == nil || snap.Traffic.TodayRx != 2000 || snap.Traffic.Budget.Used != 2000 {
 		t.Fatalf("snapshot traffic = %+v", snap.Traffic)
 	}
-	v := s.Network("5m")
+	v, _ := s.Network(ctx, "5m")
 	if v.Host.Rx != 1000 || len(v.Containers) != 1 || v.Containers[0].Name != "app" || v.Containers[0].Rx != 100 ||
 		v.Containers[0].TodayRx != 200 {
 		t.Fatalf("network = %+v %+v; want the host and app only (web has the host's network)", v.Host, v.Containers)

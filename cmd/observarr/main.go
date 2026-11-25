@@ -335,8 +335,8 @@ func collector(cfg config.Config, log *slog.Logger) (*local.Local, error) {
 	return local.New(lc), nil
 }
 
-// upkeep removes expired sessions, old audit rows, login addresses older than auth.KnownFor and old daily
-// traffic totals, now and then hourly, until ctx ends.
+// upkeep removes expired sessions, old audit rows, login addresses older than auth.KnownFor, old daily
+// traffic totals and old history buckets, now and then hourly, until ctx ends.
 func upkeep(ctx context.Context, st *store.Store, log *slog.Logger) {
 	tick := time.NewTicker(time.Hour)
 	defer tick.Stop()
@@ -352,6 +352,9 @@ func upkeep(ctx context.Context, st *store.Store, log *slog.Logger) {
 		}
 		if err := st.PruneTraffic(ctx, now); err != nil && ctx.Err() == nil {
 			log.Warn("removing old traffic totals failed", "err", err)
+		}
+		if err := st.PruneHistory(ctx, now); err != nil && ctx.Err() == nil {
+			log.Warn("removing old history failed", "err", err)
 		}
 		select {
 		case <-ctx.Done():

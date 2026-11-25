@@ -97,7 +97,7 @@ All settings are environment variables.
 | `OBSERVARR_HOST_DISKS` | empty | Comma-separated paths inside the container whose disks are measured (e.g. `/host/media`). Each must exist at startup. |
 | `OBSERVARR_DOCKER_HOST` | unset | Docker socket proxy, `tcp://host:port` or `unix:///path`: container state, health and events (Observarr only issues GET requests). |
 | `OBSERVARR_TRAFFIC_BUDGET` | unset | A traffic budget, down and up together, e.g. `1400GB/day` or `20TB/month` (decimal GB and TB, as providers count). The Network view and the rail then show how much of it is used. |
-| `TZ` | `UTC` | Time zone of the day boundary for daily traffic totals and budgets, e.g. `Europe/Berlin`. |
+| `TZ` | `UTC` | Time zone of the day boundary for daily traffic totals, budgets and the history's hours and days, e.g. `Europe/Berlin`. Hours and days kept before a change of `TZ` begin at the old zone's boundaries and are left out of the week, month and year views. |
 | `OBSERVARR_RESET_DB` | unset | `1` moves a corrupt database aside and starts empty — use once, then unset; setup then needs a fresh setup token. |
 | `OBSERVARR_RESET_KEYS` | unset | `1` drops every saved API key when `secret.key` is missing, so they can be re-entered — use once, then unset. |
 
@@ -112,8 +112,15 @@ local filesystem and Docker volumes do). Go's `GOMEMLIMIT` is honoured too — s
 Everything Observarr keeps lives under `OBSERVARR_DATA`:
 
 - `observarr.db` (plus `observarr.db-wal` and `observarr.db-shm` while running) — the SQLite database,
-  including the audit log (pruned to the newest 90 days or 100,000 entries, whichever is hit first) and daily
-  traffic totals (kept 35 days).
+  including:
+  - the audit log, pruned to the newest 90 days or 100,000 entries, whichever is hit first;
+  - daily traffic totals for the budget, kept 35 days;
+  - the history behind the charts: the host's traffic, each app's traffic and the host's CPU and memory, by
+    minute (kept 48 hours), by hour (kept 35 days) and by local day (kept 800 days, so a year can be compared
+    with the one before). Each bucket holds at most 64 traffic sources — the host, the 62 busiest apps, and the
+    rest summed as one — so the history stays a few tens of MB at most.
+
+  Old rows are removed hourly.
 - `secret.key` — the key that seals every saved API key.
 - `setup-token` — the one-time setup token, present only until setup completes.
 - `observarr.lock` — held while Observarr runs, so a second instance pointed at the same folder exits instead

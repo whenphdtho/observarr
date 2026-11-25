@@ -16,6 +16,7 @@ import (
 	"observarr/internal/collect"
 	"observarr/internal/collect/cgroup"
 	"observarr/internal/collect/docker"
+	"observarr/internal/store"
 )
 
 const (
@@ -27,9 +28,10 @@ const (
 	minBackoff    = time.Second      // first wait before reconnecting the Docker events stream
 	maxBackoff    = time.Minute      // longest wait; a stream that lasted this long resets the wait
 	historyWindow = 5 * time.Minute
-	maxHistory    = 300         // host readings kept at most; event-driven samples can come faster than every 2 s
-	persistEvery  = time.Minute // daily traffic totals are written this often
-	persistWait   = time.Second // longest wait for the last write when stopping
+	maxHistory    = 300              // host readings kept at most; event-driven samples can come faster than every 2 s
+	persistEvery  = time.Minute      // daily traffic totals are written this often
+	persistWait   = time.Second      // longest wait for the last write when stopping
+	historyWait   = 20 * time.Second // longest wait for the history's writes; what is not written waits
 )
 
 // Notices shown instead of figures a source cannot provide. Error text is never shown: it goes to the log.
@@ -113,6 +115,7 @@ type Sampler struct {
 	now      func() time.Time
 	traffic  *Traffic
 	store    TrafficStore // where daily traffic totals are kept; nil = nowhere
+	hist     HistoryStore // where the history is kept; nil = nowhere
 
 	watchedEvery, idleEvery, listEvery, minList, settle, minBackoff, maxBackoff, persistEvery time.Duration // the constants; tests shorten them
 
@@ -146,9 +149,16 @@ func New(c collect.Collector, watchers func() int, log *slog.Logger) *Sampler {
 		snap: Snapshot{Containers: []ContainerView{}, Notices: []string{}}, subs: map[chan Snapshot]struct{}{}}
 }
 
-// KeepTraffic makes the sampler count traffic into t and keep its daily totals in st. Call it before Run.
+// KeepTraffic makes the sampler count traffic into t and keep its daily totals in st, and, when st is a
+// HistoryStore too, the history of the traffic and of the host's CPU and memory. Call it before Run.
 func (s *Sampler) KeepTraffic(st TrafficStore, t *Traffic) {
 	s.store, s.traffic = st, t
+	if hs, ok := st.(HistoryStore); ok {
+		s.hist = hs
+		t.mu.Lock()
+		t.keep = true
+		t.mu.Unlock()
+	}
 }
 
 // Run samples until ctx ends. Call it once.
@@ -161,6 +171,11 @@ func (s *Sampler) Run(ctx context.Context) {
 	if s.store != nil {
 		if err := s.traffic.load(ctx, s.store, s.now()); err != nil && ctx.Err() == nil {
 			s.log.Warn("reading today's traffic failed; today counts from now", "err", err)
+		}
+		if s.hist != nil {
+			if err := s.traffic.restore(ctx, s.hist, s.now()); err != nil && ctx.Err() == nil {
+				s.log.Warn("reading the last day's history failed; it starts from now", "err", err)
+			}
 		}
 		wg.Go(func() { s.persist(ctx) })
 	}
@@ -274,10 +289,27 @@ func (s *Sampler) persist(ctx context.Context) {
 			if err := s.traffic.persist(final, s.store, true); err != nil {
 				s.log.Warn("writing traffic totals failed", "err", err)
 			}
+			if s.hist != nil {
+				// The open minute too, as the daily totals count it; with a time budget of its own.
+				s.traffic.flushOpen()
+				hctx, hcancel := context.WithTimeout(context.WithoutCancel(ctx), persistWait)
+				defer hcancel()
+				if err := s.traffic.persistHistory(hctx, s.hist); err != nil {
+					s.log.Warn("writing the history failed", "err", err)
+				}
+			}
 			return
 		case <-tick.C:
 		}
 		s.report(ctx, "traffic totals", s.traffic.persist(ctx, s.store, false))
+		if s.hist != nil {
+			// A slow database holds up only this: the minutes wait in a bounded queue, and the first failure
+			// is logged until a write succeeds.
+			wctx, cancel := context.WithTimeout(ctx, historyWait)
+			err := s.traffic.persistHistory(wctx, s.hist)
+			cancel()
+			s.report(ctx, "history", err)
+		}
 	}
 }
 
@@ -293,6 +325,7 @@ func (s *Sampler) step(ctx context.Context) {
 	defer s.recovered()
 	now := s.now()
 	s.sampledAt = now
+	cpuRead := s.prevHost != nil // the host's CPU use needs a reading before this one
 	snap := Snapshot{At: now, Containers: []ContainerView{}, Notices: []string{}}
 	snap.Host, snap.Notices = s.host(ctx, now)
 	s.lmu.Lock()
@@ -314,6 +347,9 @@ func (s *Sampler) step(ctx context.Context) {
 		ifs = s.prevHost.h.Net // the reading host just took
 	}
 	s.traffic.observe(now, ifs, counters)
+	if snap.Host != nil && cpuRead {
+		s.traffic.addHost(snap.Host.CPUPercent, snap.Host.MemUsed)
+	}
 	if snap.Host != nil {
 		sum := s.traffic.Summary()
 		snap.Traffic = &sum
@@ -516,8 +552,45 @@ func (s *Sampler) History() []HostView {
 	return out
 }
 
-// Network returns the traffic over rng, "5m" or "24h".
-func (s *Sampler) Network(rng string) TrafficView { return s.traffic.View(rng) }
+// Network returns the traffic over rng (see ValidRange) with the period before it and the last 30 days: "5m"
+// and "24h" from memory, the longer ranges from the history.
+func (s *Sampler) Network(ctx context.Context, rng string) (TrafficView, error) {
+	var v TrafficView
+	var err error
+	if spans[rng].res > store.ResMinute {
+		if v, err = s.traffic.longView(ctx, s.hist, rng, s.now()); err != nil {
+			return TrafficView{}, err
+		}
+	} else {
+		v = s.traffic.View(rng, s.now())
+	}
+	if v.Previous, err = s.traffic.previous(ctx, s.hist, v.Range, v); err != nil {
+		return TrafficView{}, err
+	}
+	if v.Daily, err = s.traffic.daily(ctx, s.hist, s.now()); err != nil {
+		return TrafficView{}, err
+	}
+	return v, nil
+}
+
+// HostHistory returns the host's CPU use and memory used over rng (see ValidRange): every reading for "5m",
+// minute, hour or day averages for the others.
+func (s *Sampler) HostHistory(ctx context.Context, rng string) (HostSeries, error) {
+	if rng != "5m" {
+		return s.traffic.hostHistory(ctx, s.hist, rng, s.now())
+	}
+	h := s.History()
+	out := HostSeries{Range: rng, Step: int64(watchedEvery / time.Second), Times: make([]int64, len(h)),
+		CPU: make(Values, len(h)), MemUsed: make(Values, len(h))}
+	for i, v := range h {
+		out.Times[i], out.CPU[i], out.MemUsed[i] = v.At.UnixMilli(), round2(v.CPUPercent), float64(v.MemUsed)
+	}
+	return out, nil
+}
+
+// Spark returns the host's CPU use and memory used over the last hour, by minute, and the hour before's
+// averages.
+func (s *Sampler) Spark() Spark { return s.traffic.spark(s.now()) }
 
 // Subscribe returns a channel that holds the latest snapshot not yet received, and a cancel function (idempotent).
 func (s *Sampler) Subscribe() (<-chan Snapshot, func()) {
