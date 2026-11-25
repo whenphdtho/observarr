@@ -66,7 +66,7 @@ var allowedPaths = []string{pathVersion, pathNoopAuth, pathStats, pathListMounts
 var errNotAllowed = errors.New("rclone: call not allowed")
 
 // ErrCredentials is returned for a secret that is not of the form "user:password".
-var ErrCredentials = errors.New("credentials: enter them as user:password")
+var ErrCredentials = adapter.ErrCredentials
 
 // maxName bounds a VFS name handed back to vfs/stats; a longer one is skipped.
 const maxName = 1024
@@ -93,25 +93,13 @@ func (rcAdapter) Info() adapter.Info {
 	}
 }
 
-// credentials splits key into user and password. An empty key means none.
-func credentials(key string) (user, pass string, ok bool, err error) {
-	if key == "" {
-		return "", "", false, nil
-	}
-	user, pass, found := strings.Cut(key, ":")
-	if !found || user == "" {
-		return "", "", false, ErrCredentials
-	}
-	return user, pass, true, nil
-}
-
 // call POSTs params (nil for none) as JSON to one allowed remote-control path and hands the answer to read.
 func call(ctx context.Context, t adapter.Target, path string, params map[string]string,
 	read func(*json.Decoder) error) error {
 	if !slices.Contains(allowedPaths, path) {
 		return fmt.Errorf("%w: %s", errNotAllowed, path)
 	}
-	user, pass, withAuth, err := credentials(t.APIKey)
+	authorize, err := adapter.BasicAuth(t.APIKey)
 	if err != nil {
 		return err
 	}
@@ -121,10 +109,6 @@ func call(ctx context.Context, t adapter.Target, path string, params map[string]
 	body, err := json.Marshal(params)
 	if err != nil {
 		return err
-	}
-	var authorize func(*http.Request)
-	if withAuth {
-		authorize = func(r *http.Request) { r.SetBasicAuth(user, pass) }
 	}
 	return adapter.PostJSON(ctx, t, "/"+path, body, authorize, read)
 }
@@ -154,7 +138,7 @@ func displayVersion(v string) string { return shape.Clip(strings.TrimPrefix(v, "
 // Detect confirms that rclone's remote control answers at t (by core/version) and that the credentials, if any,
 // are accepted (by rc/noopauth).
 func (rcAdapter) Detect(ctx context.Context, t adapter.Target) (adapter.Identity, error) {
-	if _, _, _, err := credentials(t.APIKey); err != nil {
+	if _, err := adapter.BasicAuth(t.APIKey); err != nil {
 		return adapter.Identity{}, err
 	}
 	v, _, err := fetchVersion(ctx, t)
@@ -309,10 +293,10 @@ func fetchVFSes(ctx context.Context, t adapter.Target) ([]vfs, int, error) {
 	var names []string
 	total := 0
 	err := call(ctx, t, pathVFSList, nil, func(d *json.Decoder) error {
-		return decodeObject(d, map[string]func(*json.Decoder) error{
+		return adapter.DecodeObject(d, map[string]func(*json.Decoder) error{
 			"vfses": func(d *json.Decoder) error {
 				var err error
-				total, err = decodeCapped(d, shape.MaxMounts, func(name string) {
+				total, err = adapter.CountArray(d, shape.MaxMounts, func(name string) {
 					if name != "" && len(name) <= maxName {
 						names = append(names, name)
 					}
@@ -347,9 +331,9 @@ func fetchVFSes(ctx context.Context, t adapter.Target) ([]vfs, int, error) {
 // still work without them.
 func fetchListedMounts(ctx context.Context, t adapter.Target) (listed []listedMount, known bool, err error) {
 	err = call(ctx, t, pathListMounts, nil, func(d *json.Decoder) error {
-		return decodeObject(d, map[string]func(*json.Decoder) error{
+		return adapter.DecodeObject(d, map[string]func(*json.Decoder) error{
 			"mountPoints": func(d *json.Decoder) error {
-				_, err := decodeCapped(d, maxListedMounts, func(l listedMount) { listed = append(listed, l) })
+				_, err := adapter.CountArray(d, maxListedMounts, func(l listedMount) { listed = append(listed, l) })
 				return err
 			},
 		})
@@ -485,12 +469,12 @@ type transferring struct {
 func decodeStats(d *json.Decoder, out *shape.Mounts) error {
 	var speed float64
 	var bytes, errs int64
-	err := decodeObject(d, map[string]func(*json.Decoder) error{
+	err := adapter.DecodeObject(d, map[string]func(*json.Decoder) error{
 		"speed":  func(d *json.Decoder) error { return d.Decode(&speed) },
 		"bytes":  func(d *json.Decoder) error { return d.Decode(&bytes) },
 		"errors": func(d *json.Decoder) error { return d.Decode(&errs) },
 		"transferring": func(d *json.Decoder) error {
-			n, err := decodeCapped(d, shape.MaxTransfers, func(tr transferring) {
+			n, err := adapter.CountArray(d, shape.MaxTransfers, func(tr transferring) {
 				out.Transfers = append(out.Transfers, shape.Transfer{
 					Name:      shape.Clip(tr.Name),
 					Progress:  min(1, max(0, tr.Percentage/100)),
@@ -504,81 +488,4 @@ func decodeStats(d *json.Decoder, out *shape.Mounts) error {
 	})
 	out.Speed, out.Bytes, out.Errors = max(0, speed), max(0, bytes), max(0, errs)
 	return err
-}
-
-// decodeObject reads a JSON object (or null) from d, handing the value of each key in fields to its function and
-// skipping every other value.
-func decodeObject(d *json.Decoder, fields map[string]func(*json.Decoder) error) error {
-	tok, err := d.Token()
-	if err != nil || tok == nil {
-		return err
-	}
-	if tok != json.Delim('{') {
-		return errors.New("not a JSON object")
-	}
-	for d.More() {
-		key, err := d.Token()
-		if err != nil {
-			return err
-		}
-		name, _ := key.(string)
-		if f, ok := fields[name]; ok {
-			err = f(d)
-		} else {
-			err = skipValue(d)
-		}
-		if err != nil {
-			return err
-		}
-	}
-	_, err = d.Token() // the closing brace
-	return err
-}
-
-// decodeCapped reads a JSON array (or null) from d, handing its first max elements, decoded as T, to each and
-// skipping the rest without keeping them. It returns how many elements there were.
-func decodeCapped[T any](d *json.Decoder, max int, each func(T)) (int, error) {
-	tok, err := d.Token()
-	if err != nil || tok == nil {
-		return 0, err
-	}
-	if tok != json.Delim('[') {
-		return 0, errors.New("not a JSON array")
-	}
-	n := 0
-	for ; d.More(); n++ {
-		if n >= max {
-			if err := skipValue(d); err != nil {
-				return n, err
-			}
-			continue
-		}
-		var v T
-		if err := d.Decode(&v); err != nil {
-			return n, err
-		}
-		each(v)
-	}
-	_, err = d.Token() // the closing bracket
-	return n, err
-}
-
-// skipValue reads one JSON value from d token by token, keeping nothing.
-func skipValue(d *json.Decoder) error {
-	depth := 0
-	for {
-		tok, err := d.Token()
-		if err != nil {
-			return err
-		}
-		switch tok {
-		case json.Delim('{'), json.Delim('['):
-			depth++
-		case json.Delim('}'), json.Delim(']'):
-			depth--
-		}
-		if depth == 0 {
-			return nil
-		}
-	}
 }
