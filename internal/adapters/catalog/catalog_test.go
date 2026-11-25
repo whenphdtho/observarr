@@ -12,8 +12,8 @@ func TestRegisterRegistersUniqueTypes(t *testing.T) {
 	catalog.Register(r)
 
 	infos := r.Infos()
-	if len(infos) != 6 {
-		t.Fatalf("got %d adapters, want 6", len(infos))
+	if len(infos) != 8 {
+		t.Fatalf("got %d adapters, want 8", len(infos))
 	}
 
 	seen := make(map[string]bool, len(infos))
@@ -27,7 +27,7 @@ func TestRegisterRegistersUniqueTypes(t *testing.T) {
 		seen[info.Type] = true
 	}
 
-	for _, want := range []string{"sonarr", "radarr", "lidarr", "prowlarr", "crowdsec", "rclone"} {
+	for _, want := range []string{"sonarr", "radarr", "lidarr", "prowlarr", "crowdsec", "rclone", "sabnzbd", "nzbget"} {
 		if !seen[want] {
 			t.Errorf("catalog is missing type %q", want)
 		}
@@ -38,7 +38,7 @@ func TestRegisterCanLookUpEachType(t *testing.T) {
 	r := adapter.NewRegistry()
 	catalog.Register(r)
 
-	for _, typ := range []string{"sonarr", "radarr", "lidarr", "prowlarr", "crowdsec", "rclone"} {
+	for _, typ := range []string{"sonarr", "radarr", "lidarr", "prowlarr", "crowdsec", "rclone", "sabnzbd", "nzbget"} {
 		a, ok := r.Get(typ)
 		if !ok {
 			t.Errorf("Get(%q): not found", typ)

@@ -210,3 +210,15 @@ func TestClipRespectsMultiByteRuneBoundary(t *testing.T) {
 		t.Error("Clip returned an empty string for a 600-byte input")
 	}
 }
+
+// A queue from an app that hands its downloads to a downloader leaves the downloader's own fields out.
+func TestQueueSpeedAndPausedOnlyWhenSet(t *testing.T) {
+	b, _ := json.Marshal(Queue{Items: []QueueItem{}})
+	if string(b) != `{"total":0,"items":[]}` {
+		t.Errorf("queue without speed = %s", b)
+	}
+	b, _ = json.Marshal(Queue{Items: []QueueItem{}, Speed: 1 << 20, Paused: true})
+	if string(b) != `{"total":0,"items":[],"speed":1048576,"paused":true}` {
+		t.Errorf("downloader queue = %s", b)
+	}
+}

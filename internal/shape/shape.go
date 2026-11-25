@@ -52,6 +52,11 @@ type QueueItem struct {
 type Queue struct {
 	Total int         `json:"total"` // items in the app's queue (may exceed len(Items))
 	Items []QueueItem `json:"items"` // at most MaxQueueItems; adapters must set []QueueItem{}, not nil, so it marshals as [] not null
+	// Speed and Paused are for apps that download the whole queue themselves (a downloader, not an app that hands
+	// its downloads to one): the download speed now, in bytes/s, and whether downloading is paused. Left out when
+	// zero or false, as from an app that does not report them.
+	Speed  int64 `json:"speed,omitempty"`
+	Paused bool  `json:"paused,omitempty"`
 }
 
 // MaxQueueItems bounds the items kept per queue, MaxWarnings the warnings kept per health reading.

@@ -13,7 +13,7 @@
   import { downloading, attention } from './status.js';
   import { mountAttention } from './storage.js';
   import { formatLeft } from './security.js';
-  import { formatBytes, formatPct } from './format.js';
+  import { formatBytes, formatPct, formatRate } from './format.js';
 
   // Overview is the landing view: what needs attention first (or one calm line when nothing does), then the
   // host's throughput and four key figures.
@@ -25,6 +25,8 @@
   const checked = $derived(services.filter((s) => s.readings?.health).length);
   const active = $derived(services.reduce((n, s) => n + downloading(s), 0));
   const queued = $derived(services.reduce((n, s) => n + (s.readings?.queue?.data?.total ?? 0), 0));
+  // The download speed of every service that reports one (a downloader); 0 when none does.
+  const speed = $derived(services.reduce((n, s) => n + (s.readings?.queue?.data?.speed ?? 0), 0));
   const memPct = $derived(host && host.memTotal > 0 ? Math.round((host.memUsed / host.memTotal) * 100) : 0);
   const memParts = $derived(host ? formatBytes(host.memUsed).split(' ') : ['—', '']);
   // The server-wide sign-in limit is the one security state worth a line here; it is read every minute while the
@@ -134,7 +136,7 @@
       <Kpi href="#/apps" tone={servicesTone} label="Services" value={up} unit={`of ${services.length} up`}
         sub={services.length === 0 ? 'No services yet' : up === services.length ? 'All services up' : `${services.length - up} not up`} />
       <Kpi href="#/apps" label="Downloads" value={active} unit="active"
-        sub={`${queued} in queue${queued === 1 ? '' : 's'}`} />
+        sub={`${queued} in queue${queued === 1 ? '' : 's'}${speed > 0 ? ` · ${formatRate(speed)}` : ''}`} />
     {:else}
       <!-- Until the first snapshot an empty list means "not known yet": no counts, no all-clear. -->
       <Kpi href="#/apps" label="Services" value="—" sub="Loading…" />

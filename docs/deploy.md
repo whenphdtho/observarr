@@ -285,3 +285,21 @@ tell a bouncer its version, so the card shows none.
   Linux capability or ability to gain new privileges.
 - Every host and cgroup mount above is read-only (`:ro`); nothing here needs `privileged: true` or extra
   capabilities of its own.
+
+## Connect SABnzbd and NZBGet
+
+Observarr shows a downloader's queue with its speed, whether it is paused, and the downloads that failed in the
+last day. It only reads; it never pauses, deletes or adds anything.
+
+- **SABnzbd:** Apps → Add apps → Add manually → SABnzbd, URL `http://sabnzbd:8080` (add the URL base if you set
+  one, e.g. `http://sabnzbd:8080/sabnzbd`), and the API key from Config → General → Security. The key travels in
+  the URL's query string, as SABnzbd requires; Observarr never logs it or shows it in an error. Use `http://`
+  only on a network you trust, or HTTPS.
+- **NZBGet:** Apps → Add apps → Add manually → NZBGet, URL `http://nzbget:6789`, and the credentials as
+  `user:password` from Settings → Security (`ControlUsername`/`ControlPassword`). A restricted user
+  (`RestrictedUsername`) is enough and cannot change settings. Leave them blank only if no password is set.
+
+Both are found as Docker containers (`sabnzbd/sabnzbd`, `lscr.io/linuxserver/sabnzbd`, `hotio/sabnzbd`,
+`lscr.io/linuxserver/nzbget`, `nzbgetcom/nzbget`) and by a network scan on their default ports. With their config
+folders mounted (see [Adding your apps](configuration.md#adding-your-apps)), the key or credentials are offered
+too.

@@ -206,3 +206,11 @@ The keys are encrypted with AES-256-GCM under a key derived from the passphrase 
 4 lanes) and a random salt; the rest of the file is bound to them, so it cannot be edited unnoticed. For a full
 copy of the server, including history and accounts, back up the data folder and `secret.key` instead (see
 [Recovery](#recovery)).
+
+## Usenet downloaders
+
+SABnzbd and NZBGet keep their settings in one file each rather than a `config.xml`. Mount their config folders
+like the others (e.g. `/srv/sabnzbd/config:/appconfig/sabnzbd:ro`) and Observarr reads `sabnzbd.ini` (the API
+key, port and URL base) or `nzbget.conf` (`ControlUsername`, `ControlPassword` and `ControlPort`). As with every
+found key, it is used only when you tick "Use the API key found in …" when adding the app. Connecting them is in
+[deploy.md](deploy.md#connect-sabnzbd-and-nzbget).
