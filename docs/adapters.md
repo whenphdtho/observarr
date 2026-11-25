@@ -350,3 +350,28 @@ point, state (`mounted`, `active`, or `unmounted` for apps that keep configured 
 and limit, cached files, uploads in progress and queued, errored files and out-of-space — plus the transfer
 speed, totals and at most `shape.MaxTransfers` (20) transfers in progress; `Total` and `ActiveTransfers` keep
 the real counts. The Storage view and the `Mounts` widget render it.
+
+## SABnzbd and NZBGet: two downloaders in one package
+
+`internal/adapters/usenet` holds two adapters, `sabnzbd` and `nzbget`, that report the same things the same way:
+`health` and `queue`. The field names of both APIs are checked against the apps' source and recorded in each
+file's comment.
+
+- **SABnzbd** (`GET /api?mode=…&output=json&apikey=…`) takes its key as a query parameter, and net/http's
+  errors repeat the request URL. Every call goes through `sabGet`, which takes the query out of any `*url.Error`
+  before the error goes anywhere; a test fails if the key shows up in an error. The calls are fixed values
+  (`mode=version`, `queue`, `history&failed_only=1`, `warnings`); none carries a `name`, which would turn a mode
+  into an action.
+- **NZBGet** speaks JSON-RPC over POST at `/jsonrpc`, through `adapter.PostJSON` with an allow-list of the
+  methods it calls (`version`, `status`, `listgroups`, `history`). Its secret is `user:password` for basic auth,
+  read by `adapter.BasicAuth`, the same as rclone's. Its history has no limit, so the adapter reads it as a
+  stream and stops at the first item older than a day (or after 200 items).
+- **The queue shape** carries two optional fields for an app that downloads the whole queue itself: `speed`
+  (bytes/s) and `paused`. Both are left out when zero or false, so an \*arr queue looks as before; the `Queue`
+  widget shows them only when set, and the Overview's Downloads figure adds up every reported speed.
+- **Health** warns of a paused downloader, less than 1 GiB free for downloads, the downloads that failed in the
+  last day (with the newest one's name and reason) and, for SABnzbd, the warnings it logged in the last day.
+- **Discovery:** both recognise their Docker images and read their config folder (`sabnzbd.ini`: `api_key`,
+  `port`, `url_base`; `nzbget.conf`: `ControlUsername`, `ControlPassword`, `ControlPort`) through
+  `adapter.ReadConfigFile`, and both answer a network scan without a key: SABnzbd's `mode=version` needs none,
+  and NZBGet names itself in the `Server` header of every answer, a refusal included.

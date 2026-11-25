@@ -180,3 +180,11 @@ disables buffering; with nginx, add `proxy_buffering off;` to the matching `loca
 - **Monitoring.** `GET /api/health` returns 503 `{"status":"degraded","reason":"…"}` when the database can't be
   written (read-only or full disk). The container's `HEALTHCHECK` already calls it (`observarr -health`); point
   external monitoring at the same endpoint.
+
+## Usenet downloaders
+
+SABnzbd and NZBGet keep their settings in one file each rather than a `config.xml`. Mount their config folders
+like the others (e.g. `/srv/sabnzbd/config:/appconfig/sabnzbd:ro`) and Observarr reads `sabnzbd.ini` (the API
+key, port and URL base) or `nzbget.conf` (`ControlUsername`, `ControlPassword` and `ControlPort`). As with every
+found key, it is used only when you tick "Use the API key found in …" when adding the app. Connecting them is in
+[deploy.md](deploy.md#connect-sabnzbd-and-nzbget).
