@@ -92,7 +92,7 @@ func TestHistoryPrunes(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC)
 	for _, age := range []time.Duration{time.Hour, 47 * time.Hour, 49 * time.Hour, 34 * 24 * time.Hour,
-		36 * 24 * time.Hour, 399 * 24 * time.Hour, 401 * 24 * time.Hour} {
+		36 * 24 * time.Hour, 799 * 24 * time.Hour, 801 * 24 * time.Hour} {
 		ts := now.Add(-age).Unix()
 		m := HistoryMinute{Minute: ts, Hour: ts, Day: ts, Traffic: []SourceBytes{{"host", 1, 1}},
 			Host: &HostAvg{CPU: 1, Mem: 1}}
@@ -115,32 +115,104 @@ func TestHistoryPrunes(t *testing.T) {
 	}
 }
 
-func TestHostTrafficNeedsTheWholePeriod(t *testing.T) {
+func TestHostTrafficNeedsMostOfThePeriod(t *testing.T) {
 	s, _ := openTemp(t)
 	ctx := context.Background()
-	base := int64(1_800_000_000)
+	base := int64(1_800_000_000) // a whole hour
 	if _, _, ok, err := s.HostTraffic(ctx, ResMinute, base, base+600); ok || err != nil {
 		t.Fatalf("an empty history = %v %v", ok, err)
 	}
-	for _, m := range []HistoryMinute{
-		minute(base+300, SourceBytes{"host", 10, 1}, SourceBytes{"container:x", 99, 99}),
-		minute(base+360, SourceBytes{"host", 20, 2}),
-		minute(base+900, SourceBytes{"host", 40, 4}),
-	} {
+	// Twelve minutes, base to base+11 min, each 10/1 bytes for the host and 99 for a container.
+	for k := range int64(12) {
+		m := minute(base+60*k, SourceBytes{"host", 10, 1}, SourceBytes{"container:x", 99, 99})
 		if err := s.AddHistory(ctx, m); err != nil {
 			t.Fatal(err)
 		}
 	}
-	// The history begins five minutes into [base, base+600): it does not cover that period.
-	if _, _, ok, _ := s.HostTraffic(ctx, ResMinute, base, base+600); ok {
-		t.Fatal("a period only partly kept was reported")
+	for _, c := range []struct {
+		res, from, to int64
+		ok            bool
+		rx            uint64
+	}{
+		{ResMinute, base, base + 600, true, 100},          // all 10 minutes
+		{ResMinute, base, base + 900, true, 120},          // 12 of 15: 80%
+		{ResMinute, base, base + 960, false, 0},           // 12 of 16: 75%
+		{ResMinute, base - 3000, base + 600, false, 0},    // 10 of 60
+		{ResHour, base, base + 3600, false, 0},            // the hour holds 12 of its 60 minutes
+		{ResMinute, base + 720, base + 1200, false, 0},    // nothing kept
+		{ResMinute, base + 600, base + 600, false, 0},     // an empty period
+		{ResMinute, base + 600, base + 720, true, 20},     // the last two minutes
+		{ResMinute, base + 660, base + 780, false, 0},     // one of two
+		{ResMinute, base + 60, base + 60 + 300, true, 50}, // five in the middle
+	} {
+		rx, tx, ok, err := s.HostTraffic(ctx, c.res, c.from, c.to)
+		if err != nil || ok != c.ok || rx != c.rx || (ok && tx != c.rx/10) {
+			t.Errorf("res %d [%+d, %+d) = %d/%d %v %v, want %d %v", c.res, c.from-base, c.to-base, rx, tx, ok, err,
+				c.rx, c.ok)
+		}
 	}
-	rx, tx, ok, err := s.HostTraffic(ctx, ResMinute, base+300, base+900)
-	if err != nil || !ok || rx != 30 || tx != 3 {
-		t.Fatalf("host traffic = %d/%d %v %v, want 30/3 from the host's rows only", rx, tx, ok, err)
+}
+
+func TestAddHistoryKeepsEachMinuteOnce(t *testing.T) {
+	s, _ := openTemp(t)
+	ctx := context.Background()
+	base := time.Date(2026, 11, 23, 10, 0, 0, 0, time.UTC).Unix()
+	m := minute(base, SourceBytes{"host", 100, 10}, SourceBytes{"container:a", 7, 7})
+	m.Host = &HostAvg{CPU: 50, Mem: 1000}
+	again := minute(base, SourceBytes{"host", 900, 90}, SourceBytes{"container:a", 70, 70},
+		SourceBytes{"container:b", 1, 1})
+	again.Host = &HostAvg{CPU: 10, Mem: 10}
+	for _, x := range []HistoryMinute{m, again, m} {
+		if err := s.AddHistory(ctx, x); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if _, _, ok, _ := s.HostTraffic(ctx, ResMinute, base+420, base+900); ok {
-		t.Fatal("a period without rows was reported")
+	for _, res := range []int64{ResMinute, ResHour, ResDay} {
+		ts := base - base%res
+		rows, _ := s.TrafficSeries(ctx, res, ts, ts+1)
+		host, _ := s.HostSeries(ctx, res, ts, ts+1)
+		if len(rows) != 2 || rows[0] != (SeriesRow{ts, "container:a", 7, 7, 1}) || rows[1] != (SeriesRow{ts, "host", 100, 10, 1}) ||
+			len(host) != 1 || host[0] != (HostRow{ts, 50, 1000, 1}) {
+			t.Errorf("res %d after writing the minute three times = %v %v", res, rows, host)
+		}
+	}
+}
+
+func TestOtherIsOneRowPerBucket(t *testing.T) {
+	s, _ := openTemp(t)
+	ctx := context.Background()
+	base := time.Date(2026, 11, 23, 10, 0, 0, 0, time.UTC).Unix()
+	// Two minutes of the same hour, each with 70 containers, already capped as the sampler hands them over.
+	for k := range int64(2) {
+		rows := []SourceBytes{{"host", 6000, 600}}
+		for i := range 70 {
+			rows = append(rows, SourceBytes{fmt.Sprintf("container:c%02d", i), 10, 1})
+		}
+		if err := s.AddHistory(ctx, minute(base+60*k, CapSources(rows)...)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, c := range []struct {
+		res, ts int64
+		n       int64
+	}{{ResMinute, base, 1}, {ResMinute, base + 60, 1}, {ResHour, base, 2}, {ResDay, base - base%86400, 2}} {
+		rows, _ := s.TrafficSeries(ctx, c.res, c.ts, c.ts+1)
+		others := 0
+		var other, host SeriesRow
+		for _, r := range rows {
+			switch r.Source {
+			case OtherSource:
+				others++
+				other = r
+			case "host":
+				host = r
+			}
+		}
+		if len(rows) != MaxSources || others != 1 || other.N != c.n || other.Rx != uint64(c.n)*8*10 ||
+			host.N != c.n || host.Rx != uint64(c.n)*6000 {
+			t.Errorf("res %d at %d: %d rows, %d other rows, other %+v, host %+v", c.res, c.ts-base, len(rows), others,
+				other, host)
+		}
 	}
 }
 

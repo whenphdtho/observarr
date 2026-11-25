@@ -14,11 +14,11 @@ const (
 )
 
 // How long each resolution's buckets are kept: minutes for two days (a day and the day before it), hours for
-// 35 days (a week and the week before it, and a month), days for 400 (a year).
+// 35 days (a week and the week before it, and a month), days for 800 (a year and the year before it).
 const (
 	MinutesKeep = 48 * time.Hour
 	HoursKeep   = 35 * 24 * time.Hour
-	DaysKeep    = 400 * 24 * time.Hour
+	DaysKeep    = 800 * 24 * time.Hour
 )
 
 const (
@@ -27,6 +27,8 @@ const (
 	// OtherSource sums the containers beyond the first MaxSources-2 of a bucket.
 	OtherSource = "other"
 	hostSource  = "host"
+	// minCoverage is the share of a period's minutes HostTraffic needs kept to give a total for it, in percent.
+	minCoverage = 80
 )
 
 // SourceBytes is one source's traffic in a bucket, in bytes. Source is "host", "container:<name>" or
@@ -75,9 +77,30 @@ func CapSources(rows []SourceBytes) []SourceBytes {
 }
 
 // AddHistory adds one minute to its minute, hour and day buckets, in one transaction. A bucket keeps at most
-// MaxSources traffic rows: a container it has no room for counts as OtherSource.
+// MaxSources traffic rows: a container it has no room for counts as OtherSource. The minute's host row is
+// written first, and only once: a minute already kept (written again after the clock went back) changes
+// nothing, at any resolution.
 func (s *Store) AddHistory(ctx context.Context, m HistoryMinute) error {
+	var head SourceBytes
+	rest := make([]SourceBytes, 0, len(m.Traffic))
+	for _, r := range m.Traffic {
+		if r.Source == hostSource {
+			head = r
+		} else {
+			rest = append(rest, r)
+		}
+	}
+	withHead := append([]SourceBytes{{Source: hostSource, Rx: head.Rx, Tx: head.Tx}}, rest...)
 	return s.inTx(ctx, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `INSERT INTO traffic_series (res, ts, source, rx, tx, n)
+			VALUES (?, ?, ?, ?, ?, 1) ON CONFLICT (res, ts, source) DO NOTHING`,
+			ResMinute, m.Minute, hostSource, clamp(head.Rx), clamp(head.Tx))
+		if err != nil {
+			return err
+		}
+		if n, err := res.RowsAffected(); err != nil || n == 0 {
+			return err // n == 0: this minute is kept already
+		}
 		add, err := tx.PrepareContext(ctx, `INSERT INTO traffic_series (res, ts, source, rx, tx, n)
 			VALUES (?, ?, ?, ?, ?, 1) ON CONFLICT (res, ts, source)
 			DO UPDATE SET rx = rx + excluded.rx, tx = tx + excluded.tx, n = n + 1`)
@@ -87,13 +110,17 @@ func (s *Store) AddHistory(ctx context.Context, m HistoryMinute) error {
 		defer add.Close()
 		host, err := tx.PrepareContext(ctx, `INSERT INTO host_series (res, ts, cpu, mem, n) VALUES (?, ?, ?, ?, 1)
 			ON CONFLICT (res, ts) DO UPDATE SET cpu = (cpu * n + excluded.cpu) / (n + 1),
-			mem = (mem * n + excluded.mem) / (n + 1), n = n + 1`)
+			mem = CAST(round((CAST(mem AS REAL) * n + excluded.mem) / (n + 1)) AS INTEGER), n = n + 1`)
 		if err != nil {
 			return err
 		}
 		defer host.Close()
 		for _, b := range [...]struct{ res, ts int64 }{{ResMinute, m.Minute}, {ResHour, m.Hour}, {ResDay, m.Day}} {
-			rows, err := admit(ctx, tx, b.res, b.ts, m.Traffic)
+			in := withHead
+			if b.res == ResMinute {
+				in = rest // the minute's host row is written above
+			}
+			rows, err := admit(ctx, tx, b.res, b.ts, in)
 			if err != nil {
 				return err
 			}
@@ -113,7 +140,7 @@ func (s *Store) AddHistory(ctx context.Context, m HistoryMinute) error {
 }
 
 // admit returns rows as the bucket takes them: the host and the containers it already holds, new containers
-// while it has room for them, and the rest summed into OtherSource.
+// while it has room for them, and the rest, with any OtherSource row, summed into a single OtherSource row.
 func admit(ctx context.Context, tx *sql.Tx, res, ts int64, rows []SourceBytes) ([]SourceBytes, error) {
 	q, err := tx.QueryContext(ctx, "SELECT source FROM traffic_series WHERE res = ? AND ts = ?", res, ts)
 	if err != nil {
@@ -135,20 +162,21 @@ func admit(ctx context.Context, tx *sql.Tx, res, ts int64, rows []SourceBytes) (
 		return nil, err
 	}
 	out := make([]SourceBytes, 0, len(rows))
-	other := SourceBytes{Source: OtherSource}
+	other, others := SourceBytes{Source: OtherSource}, false
 	for _, r := range rows {
 		switch {
+		case r.Source == OtherSource:
+			other.Rx, other.Tx, others = other.Rx+r.Rx, other.Tx+r.Tx, true
 		case r.Source == hostSource || held[r.Source]:
 			out = append(out, r)
-		case r.Source != OtherSource && named < MaxSources-2:
+		case named < MaxSources-2:
 			out = append(out, r)
 			named++
 		default:
-			other.Rx += r.Rx
-			other.Tx += r.Tx
+			other.Rx, other.Tx, others = other.Rx+r.Rx, other.Tx+r.Tx, true
 		}
 	}
-	if other.Rx > 0 || other.Tx > 0 {
+	if others {
 		out = append(out, other)
 	}
 	return out, nil
@@ -212,42 +240,17 @@ func (s *Store) HostSeries(ctx context.Context, res, from, to int64) ([]HostRow,
 	return out, rows.Err()
 }
 
-// HostTraffic returns the host's bytes in the res buckets that start in [from, to). ok is false when that
-// period is not covered: there is no row in it, or the oldest res bucket kept starts more than two buckets
-// after from, so the sum would hold only part of the period.
+// HostTraffic returns the host's bytes in the res buckets that start in [from, to). ok is false unless the
+// kept minutes cover at least 80% of that period: a total of a period mostly not watched would mislead.
 func (s *Store) HostTraffic(ctx context.Context, res, from, to int64) (rx, tx uint64, ok bool, err error) {
-	var oldest sql.NullInt64
-	if err := s.db.QueryRowContext(ctx, "SELECT min(ts) FROM traffic_series WHERE res = ?", res).
-		Scan(&oldest); err != nil || !oldest.Valid || oldest.Int64 > from+2*res {
-		return 0, 0, false, err
-	}
 	var n, r, t int64
-	err = s.db.QueryRowContext(ctx, `SELECT count(*), coalesce(sum(rx), 0), coalesce(sum(tx), 0)
+	err = s.db.QueryRowContext(ctx, `SELECT coalesce(sum(n), 0), coalesce(sum(rx), 0), coalesce(sum(tx), 0)
 		FROM traffic_series WHERE res = ? AND ts >= ? AND ts < ? AND source = ?`, res, from, to, hostSource).
 		Scan(&n, &r, &t)
-	return uint64(max(r, 0)), uint64(max(t, 0)), err == nil && n > 0, err
-}
-
-// TrafficDays returns scope's daily totals (see AddTraffic) on the days from from up to but not including to,
-// by day.
-func (s *Store) TrafficDays(ctx context.Context, scope, from, to string) (map[string]TrafficRow, error) {
-	rows, err := s.db.QueryContext(ctx,
-		"SELECT day, rx, tx FROM traffic_daily WHERE scope = ? AND day >= ? AND day < ?", scope, from, to)
-	if err != nil {
-		return nil, err
+	if err != nil || to <= from || n*60*100 < (to-from)*minCoverage {
+		return 0, 0, false, err
 	}
-	defer rows.Close()
-	out := map[string]TrafficRow{}
-	for rows.Next() {
-		r := TrafficRow{Scope: scope}
-		var rx, tx int64
-		if err := rows.Scan(&r.Day, &rx, &tx); err != nil {
-			return nil, err
-		}
-		r.Rx, r.Tx = uint64(max(rx, 0)), uint64(max(tx, 0))
-		out[r.Day] = r
-	}
-	return out, rows.Err()
+	return uint64(max(r, 0)), uint64(max(t, 0)), true, nil
 }
 
 // PruneHistory removes minute buckets older than MinutesKeep, hour buckets older than HoursKeep and day
