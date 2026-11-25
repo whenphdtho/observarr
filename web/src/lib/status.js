@@ -1,7 +1,8 @@
 import { containerStatusClass } from './format.js';
+import { streamsOf, streamText } from './streams.js';
 
 // Summaries of a service's readings shared by the apps rail, the Overview and the cards. They
-// only read the generic shapes (health, queue), never anything app-specific.
+// only read the generic shapes (health, queue, streams), never anything app-specific.
 
 function warnings(svc) {
   return svc.readings?.health?.data?.warnings ?? [];
@@ -38,6 +39,8 @@ export function serviceLine(svc) {
   if (stuck > 0) return { text: 'Up', detail: `${stuck} download${stuck === 1 ? '' : 's'} stuck`, tone: 'warn' };
   const n = downloading(svc);
   if (n > 0) return { text: 'Up', detail: `${n} downloading`, tone: 'ok' };
+  const playing = streamsOf(svc);
+  if (playing?.total > 0) return { text: 'Up', detail: `${playing.total} stream${playing.total === 1 ? '' : 's'}`, tone: 'ok' };
   const version = health.data?.version;
   return { text: 'Up', detail: version ? `v${version}` : '', tone: '' };
 }
@@ -50,7 +53,9 @@ export function cardSummary(svc) {
   const health = svc.readings?.health;
   const queue = svc.readings?.queue;
   const hasQueue = (svc.kinds ?? []).includes('queue');
+  const hasStreams = (svc.kinds ?? []).includes('streams');
   const items = queueItems(svc);
+  const streams = streamsOf(svc);
   const warns = warnings(svc).filter((w) => w.level !== 'info');
 
   let summary;
@@ -62,17 +67,20 @@ export function cardSummary(svc) {
     const waiting = items.length - n;
     if (n > 0) parts.push(`${n} downloading`);
     if (waiting > 0) parts.push(`${waiting} queued`);
+    if (streams?.total > 0) parts.push(streamText(streams));
     if (warns.length > 0) parts.push(`${warns.length} warning${warns.length === 1 ? '' : 's'}`);
     if (parts.length) summary = { text: parts.join(' · '), tone: warns.length || items.some((it) => it.problem) ? 'warn' : '' };
-    else summary = { text: hasQueue ? 'No downloads' : 'No warnings', tone: '' };
+    else summary = { text: hasQueue ? 'No downloads' : hasStreams ? 'Nothing playing' : 'No warnings', tone: '' };
   }
 
   let lead;
   if (health && !svc.up) lead = { kind: 'note', text: health.error || 'Not answering', tone: 'fail' };
   else if (items.length > 0) lead = { kind: 'item', item: items[0] };
+  else if (streams?.streams.length > 0) lead = { kind: 'item', item: streams.streams[0] };
   else if (warns.length > 0) lead = { kind: 'warning', warning: warns[0] };
   else if (hasQueue && queue?.error) lead = { kind: 'note', text: queue.error, tone: 'fail' };
   else if (hasQueue) lead = { kind: 'note', text: 'Queue is empty', tone: '' };
+  else if (hasStreams && svc.readings?.streams?.error) lead = { kind: 'note', text: svc.readings.streams.error, tone: 'fail' };
   else if (health?.data) lead = { kind: 'note', text: `Answers in ${health.data.latencyMs} ms`, tone: '' };
   else lead = { kind: 'note', text: 'Nothing to report', tone: '' };
   return { summary, lead };

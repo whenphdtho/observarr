@@ -10,6 +10,8 @@
   import Icon from './icons/Icon.svelte';
   import { api } from './api.js';
   import { snapshot } from './data.js';
+  import { serviceList } from './live.js';
+  import { streamServices, streamSummary, formatBitrate } from './streams.js';
   import { group, layers, sum, add } from './traffic.js';
   import { rangeOf, integrate, change, coverage, MIN_COVERAGE } from './history.js';
   import { formatMbit, formatPart, formatTotal, totalParts } from './format.js';
@@ -141,9 +143,21 @@
     return budget.limitBytes / new Date(yy, mm, 0).getDate();
   }));
 
+  // A media server's streams, by its name: what it plays now and at what bitrate, beside its traffic.
+  const streaming = $derived(new Map(streamServices($serviceList).map((svc) => [svc.name, streamSummary([svc])])));
+
+  // playing says what a source streams, e.g. "3 streams, 23 Mbit/s", or '' when it streams nothing.
+  function playing(s) {
+    const st = s.key ? streaming.get(s.key) : null;
+    if (!(st?.total > 0)) return '';
+    const rate = formatBitrate(st.bitrate);
+    return `${st.total} stream${st.total === 1 ? '' : 's'}${rate ? `, ${rate}` : ''}`;
+  }
+
   function sub(s) {
     if (!s.key) return 'not attributed to an app';
-    return s.members.length === 1 && s.members[0] === s.label ? 'container' : s.members.join(', ');
+    const what = s.members.length === 1 && s.members[0] === s.label ? 'container' : s.members.join(', ');
+    return [what, playing(s)].filter(Boolean).join(' · ');
   }
 
   function rates(s) {
@@ -281,6 +295,7 @@
                         <!-- A row the chart does not draw keeps an empty swatch, so every name lines up. -->
                         <i class="ring" class:blank={!s.color} style:color={s.color || null}></i>
                         <span class="ellipsis">{s.label}</span>
+                        {#if playing(s)}<span class="plays ellipsis" title={playing(s)}>{playing(s)}</span>{/if}
                       </span>
                       <span class="share" title={`${Math.round(share * 100)}% of today's traffic`}><i style:width={`${share * 100}%`}></i></span>
                     </td>
@@ -345,6 +360,7 @@
   .pair.trend { grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); align-items: stretch; }
   .pair.single { grid-template-columns: minmax(0, 1fr); }
   .app { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 500; }
+  .plays { font-size: var(--t-small); font-weight: 400; color: var(--muted); }
   .share { display: block; height: 2px; margin-top: 6px; border-radius: 1px; background: var(--surface3); overflow: hidden; max-width: 220px; }
   .share i { display: block; height: 100%; background: var(--bar); }
 
