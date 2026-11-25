@@ -233,6 +233,27 @@ CrowdSec's alerts (the events behind each decision, with source country and AS) 
 which can also write to the LAPI. Observarr does not ask for them, so alerts are out of scope. The LAPI does not
 tell a bouncer its version, so the card shows none.
 
+## Connect Overseerr or Jellyseerr
+
+Overseerr, Jellyseerr and Seerr (the two merged into it with version 3) share one API, and one adapter reads
+all three. Its card names the app that answers, shows its requests by state (waiting, approved, processing,
+available, declined, failed), the ten newest requests with their title, type, requester and state, and the
+issues users reported that are still open. Requests waiting for approval and failed requests also show up in
+Needs attention.
+
+1. Copy the API key from **Settings → General → API Key**.
+2. Give Observarr network access to the app (port 5055 by default), e.g. `http://jellyseerr:5055` on a shared
+   Docker network.
+3. In Observarr, **Apps → Add apps**: a running `sctx/overseerr`, `lscr.io/linuxserver/overseerr`,
+   `hotio/overseerr`, `fallenbagel/jellyseerr` or `ghcr.io/seerr-team/seerr` container is found on its own;
+   otherwise **Add manually**, pick Overseerr / Jellyseerr, enter the URL and the key, **Test**, then **Add**.
+
+What Observarr reads, all with GET and about once a minute while someone is watching (the health check every
+30 seconds): the status, request counts, the ten newest requests and the open issues. The app's API key can
+also change things; Observarr never does. Requests carry no titles of their own, so Observarr asks the app for
+each title once (at most two at a time) and remembers it. Requesters are shown by their display name only;
+when the app's display name for a user is their e-mail address, the requester stays blank.
+
 ## Security notes
 
 - **The socket proxy only ever answers GET requests.** Every other endpoint is refused because its own

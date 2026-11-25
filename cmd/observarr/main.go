@@ -100,9 +100,10 @@ func run(cfg config.Config, log *slog.Logger) error {
 	catalog.Register(reg)
 	hub := state.NewHub()
 	httpc := adapter.NewHTTPClient()
-	// The full list of decisions an intrusion prevention system enforces can be long: once a minute is enough.
+	// The full list of decisions an intrusion prevention system enforces can be long, and media requests come in
+	// slowly: once a minute is enough for both.
 	pl := poller.New(poller.Config{Registry: reg, Hub: hub, HTTP: httpc, Log: log,
-		Intervals: map[shape.Kind]time.Duration{shape.KindSecurity: time.Minute}})
+		Intervals: map[shape.Kind]time.Duration{shape.KindSecurity: time.Minute, shape.KindRequests: time.Minute}})
 	defer pl.Close() // deferred after st.Close, so it runs first: no probe outlives the store
 	coll, err := collector(cfg, log)
 	if err != nil {

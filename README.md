@@ -16,8 +16,9 @@ Observarr shows what your \*arr apps, your host and its containers are doing, li
 It finds your apps but contacts none of them until you click. Status: early development.
 
 - **Overview:** what needs attention first, then live throughput, services, downloads, CPU and memory.
-- **Apps:** health, warnings and download queues for Sonarr, Radarr, Lidarr and Prowlarr, and the SABnzbd and NZBGet downloaders.
+- **Apps:** health and warnings for Sonarr, Radarr, Lidarr, Prowlarr, SABnzbd, NZBGet, Jellyfin, Overseerr and Jellyseerr, with the download queues of the \*arr apps and the downloaders.
 - **Now playing:** who watches what on Jellyfin, direct or transcoded and why, and at what bitrate.
+- **Requests:** what Overseerr or Jellyseerr users asked for, and what waits for approval.
 - **Network:** where your traffic goes, by app, live and over 24 hours, with an optional daily or monthly budget.
 - **Storage:** disks, plus rclone mounts, VFS caches, uploads and transfers.
 - **Security:** failed sign-ins, lockouts, sessions and CrowdSec bans.

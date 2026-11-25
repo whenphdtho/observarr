@@ -8,6 +8,7 @@ import (
 	"observarr/internal/adapters/crowdsec"
 	"observarr/internal/adapters/jellyfin"
 	"observarr/internal/adapters/rclone"
+	"observarr/internal/adapters/seerr"
 	"observarr/internal/adapters/usenet"
 )
 
@@ -21,4 +22,5 @@ func Register(r *adapter.Registry) {
 	r.Register(usenet.NewSABnzbd())
 	r.Register(usenet.NewNZBGet())
 	r.Register(jellyfin.New())
+	r.Register(seerr.New())
 }
