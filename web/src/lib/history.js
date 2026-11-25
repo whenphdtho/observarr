@@ -42,6 +42,20 @@ export function integrate(times, values) {
   return total;
 }
 
+// coverage is the share (0 to 1) of a span (ms) that a series has readings for: each known value counts for one
+// usual step. A period just after a start, or with an outage, is only partly covered.
+export function coverage(times, values, span) {
+  const s = step(times);
+  if (!s || !values || !(span > 0)) return 0;
+  let known = 0;
+  for (const v of values) if (Number.isFinite(v)) known++;
+  return Math.min(1, (known * s) / span);
+}
+
+// A period is compared with the one before only when this much of it is known; less would compare a part
+// with a whole.
+export const MIN_COVERAGE = 0.8;
+
 // change is the relative change from before to now (0.12 = 12% more), or null when either is missing or
 // before is zero.
 export function change(now, before) {

@@ -11,7 +11,7 @@
   import { api } from './api.js';
   import { snapshot } from './data.js';
   import { group, layers, sum, add } from './traffic.js';
-  import { rangeOf, integrate, change } from './history.js';
+  import { rangeOf, integrate, change, coverage, MIN_COVERAGE } from './history.js';
   import { formatMbit, formatPart, formatTotal, totalParts } from './format.js';
 
   // Network shows where the traffic goes: the host's rates and today's totals, the traffic of each
@@ -120,11 +120,15 @@
   const day = $derived(range === '24h' ? view : dayOwn);
   const dayIn = $derived(day ? integrate(day.times, day.host.series?.rx) : 0);
   const dayOut = $derived(day ? integrate(day.times, day.host.series?.tx) : 0);
+  // A change is shown only for a period mostly on record: just after a start, part of it would be compared
+  // with the whole of the one before.
+  const dayKnown = $derived(day ? coverage(day.times, day.host.series?.rx, rangeOf('24h').span) >= MIN_COVERAGE : false);
   const mbitLine = (list) => (list ?? []).map((v) => (Number.isFinite(v) ? (v * 8) / 1e6 : null));
   // The range shown: its total, and its change against the period before it.
   const both = (s) => (s ? s.rx.map((v, i) => add(v, s.tx[i])) : []);
   const rangeTotal = $derived(view ? integrate(view.times, both(view.host.series)) : 0);
-  const rangeChange = $derived(view?.previous ? change(rangeTotal, view.previous.in + view.previous.out) : null);
+  const rangeKnown = $derived(view ? coverage(view.times, view.host.series?.rx, shownRange.span) >= MIN_COVERAGE : false);
+  const rangeChange = $derived(view?.previous && rangeKnown ? change(rangeTotal, view.previous.in + view.previous.out) : null);
   // Each app's share of the range: its traffic in and out, summed over the range.
   const shares = $derived(view ? chart.map((l) => ({ label: l.label, color: l.color, value: integrate(view.times, both(l.series)) })) : []);
   const shareTotal = $derived(shares.reduce((n, s) => n + s.value, 0));
@@ -160,11 +164,11 @@
       <Kpi label="Download" value={formatMbit(nowRx)} num={(nowRx * 8) / 1e6} format={(v) => formatMbit((v * 1e6) / 8)} unit="Mbit/s"
         sub={`peak ${formatMbit(Math.max(summary?.peakRx ?? 0, nowRx))} Mbit/s today`}
         spark={mbitLine(day?.host.series?.rx)} sparkColor="var(--down)"
-        change={day?.previous ? { ratio: change(dayIn, day.previous.in), good: 'up', against: 'the 24 hours before' } : null} />
+        change={day?.previous && dayKnown ? { ratio: change(dayIn, day.previous.in), good: 'up', against: 'the 24 hours before' } : null} />
       <Kpi label="Upload" value={formatMbit(nowTx)} num={(nowTx * 8) / 1e6} format={(v) => formatMbit((v * 1e6) / 8)} unit="Mbit/s"
         sub={`peak ${formatMbit(Math.max(summary?.peakTx ?? 0, nowTx))} Mbit/s today`}
         spark={mbitLine(day?.host.series?.tx)} sparkColor="var(--up)"
-        change={day?.previous ? { ratio: change(dayOut, day.previous.out), good: 'up', against: 'the 24 hours before' } : null} />
+        change={day?.previous && dayKnown ? { ratio: change(dayOut, day.previous.out), good: 'up', against: 'the 24 hours before' } : null} />
       <Kpi label="Today" value={totalParts(todayTotal)[0]} unit={totalParts(todayTotal)[1]}
         sub={budget?.period === 'day' ? `limit ${formatTotal(budget.limitBytes)}` :
           `↓ ${formatTotal(today.rx)} · ↑ ${formatTotal(today.tx)}`}
