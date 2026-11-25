@@ -10,6 +10,7 @@ next to its adapter and served at /api/icons/<type>.svg:
   internal/adapters/arr/icons/sonarr.svg    Sonarr    from Simple Icons (CC0-1.0), https://simpleicons.org
   internal/adapters/arr/icons/radarr.svg    Radarr    from Simple Icons (CC0-1.0)
   internal/adapters/rclone/icon.svg         rclone    from Simple Icons (CC0-1.0)
+  internal/adapters/jellyfin/icon.svg       Jellyfin  from Simple Icons (CC0-1.0)
   internal/adapters/arr/icons/prowlarr.svg  Prowlarr  from homarr-labs/dashboard-icons (Apache-2.0)
   internal/adapters/crowdsec/icon.svg       CrowdSec  from homarr-labs/dashboard-icons (Apache-2.0)
   internal/adapters/arr/icons/lidarr.svg    Lidarr    redrawn after homarr-labs/dashboard-icons (Apache-2.0)

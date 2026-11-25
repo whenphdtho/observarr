@@ -194,3 +194,49 @@ const (
 	MaxMounts    = 20
 	MaxTransfers = 20
 )
+
+// KindStreams is filled by media servers: what is being played right now, how, and what it costs the server.
+const KindStreams Kind = "streams"
+
+// How a stream is played.
+const (
+	PlayDirect       = "direct"       // the client plays the file as it is
+	PlayDirectStream = "directstream" // the server repackages it, and may convert the audio, but sends the video as it is
+	PlayTranscode    = "transcode"    // the server converts the video
+)
+
+// Stream is one session playing something.
+type Stream struct {
+	User     string  `json:"user"`             // the account, as the app names it
+	Client   string  `json:"client"`           // the app it plays in, e.g. a web or TV client
+	Device   string  `json:"device,omitempty"` // the device it plays on, as the app names it
+	Title    string  `json:"title"`            // e.g. "Series S01E02 · Episode" or "Film (2008)"
+	Paused   bool    `json:"paused"`
+	Progress float64 `json:"progress"` // 0..1; 0 when the length is unknown
+	Method   string  `json:"method"`   // PlayDirect, PlayDirectStream or PlayTranscode; "" if the app does not say
+	// Reasons say in plain words why the server converts anything (e.g. "audio codec not supported"); never nil.
+	Reasons []string `json:"reasons"`
+	// VideoCodec and AudioCodec are the codecs of the file; ToVideoCodec and ToAudioCodec what the server converts
+	// them to, empty while a stream is sent as it is.
+	VideoCodec   string `json:"videoCodec,omitempty"`
+	AudioCodec   string `json:"audioCodec,omitempty"`
+	ToVideoCodec string `json:"toVideoCodec,omitempty"`
+	ToAudioCodec string `json:"toAudioCodec,omitempty"`
+	Bitrate      int64  `json:"bitrate"` // bits/s sent to the client; 0 if unknown
+}
+
+// Streams is filled by apps that play media to clients. The counts cover every stream, the list the first ones.
+// It never holds a client's network address.
+type Streams struct {
+	Total      int      `json:"total"`      // sessions playing something, paused ones included
+	Paused     int      `json:"paused"`     // of them, paused
+	Transcodes int      `json:"transcodes"` // of them, with the video converted (PlayTranscode)
+	Bitrate    int64    `json:"bitrate"`    // bits/s of all streams whose bitrate is known
+	Streams    []Stream `json:"streams"`    // at most MaxStreams; [] not nil
+}
+
+// MaxStreams bounds the streams kept per reading, MaxStreamReasons the reasons kept per stream.
+const (
+	MaxStreams       = 50
+	MaxStreamReasons = 8
+)

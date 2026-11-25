@@ -303,3 +303,24 @@ Both are found as Docker containers (`sabnzbd/sabnzbd`, `lscr.io/linuxserver/sab
 `lscr.io/linuxserver/nzbget`, `nzbgetcom/nzbget`) and by a network scan on their default ports. With their config
 folders mounted (see [Adding your apps](configuration.md#adding-your-apps)), the key or credentials are offered
 too.
+
+## Connect Jellyfin
+
+Observarr shows who is watching what on Jellyfin, how — direct play, direct stream or transcode, with
+Jellyfin's reasons for converting — and at what bitrate, on the Overview ("Now playing"), on the Jellyfin card
+and next to Jellyfin's traffic in the Network view.
+
+1. **Create an API key:** in Jellyfin, Dashboard → API Keys → **+**, name it `Observarr`. Deleting it there
+   revokes it.
+2. **Give Observarr network access** to Jellyfin's HTTP port (8096 by default). In Compose, share a network and
+   use the container name, e.g. `http://jellyfin:8096`. Docker discovery recognises the `jellyfin/jellyfin`,
+   `lscr.io/linuxserver/jellyfin` and `hotio/jellyfin` images, and the network scan finds Jellyfin on port 8096.
+   Behind a reverse proxy with a base path, include it: `https://media.example.org/jellyfin`.
+3. **Add it:** Apps → Add apps → Add manually → Jellyfin, the URL and the key, **Test**, then **Add**.
+
+What Observarr does with the key: it reads `GET /System/Info` (version, pending restart) and
+`GET /Sessions` (what plays now, every 10 s while someone watches, every 2 minutes otherwise) and nothing else.
+An API key is an administrator's key in Jellyfin; Observarr only ever reads with it, and keeps it sealed like
+any other. The clients' IP addresses that Jellyfin reports with each session are never read or stored.
+
+Emby is not supported.

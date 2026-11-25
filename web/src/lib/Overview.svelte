@@ -2,6 +2,7 @@
   import HostChart from './HostChart.svelte';
   import Rail from './Rail.svelte';
   import Kpi from './Kpi.svelte';
+  import NowPlaying from './NowPlaying.svelte';
   import Icon from './icons/Icon.svelte';
   import Skeleton from './Skeleton.svelte';
   import { flip } from 'svelte/animate';
@@ -15,8 +16,8 @@
   import { formatLeft } from './security.js';
   import { formatBytes, formatPct, formatRate } from './format.js';
 
-  // Overview is the landing view: what needs attention first (or one calm line when nothing does), then the
-  // host's throughput and four key figures.
+  // Overview is the landing view: what needs attention first (or one calm line when nothing does), what media
+  // servers play (when one is added), then the host's throughput and four key figures.
   // services is the (search-filtered) service list; onjump(id) shows a service's card.
   let { services, onjump } = $props();
 
@@ -128,6 +129,8 @@
       </ul>
     </section>
   {/if}
+
+  <NowPlaying {services} {onjump} />
 
   <HostChart />
 

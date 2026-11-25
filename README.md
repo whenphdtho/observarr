@@ -17,6 +17,7 @@ It finds your apps but contacts none of them until you click. Status: early deve
 
 - **Overview:** what needs attention first, then live throughput, services, downloads, CPU and memory.
 - **Apps:** health, warnings and download queues for Sonarr, Radarr, Lidarr and Prowlarr, and the SABnzbd and NZBGet downloaders.
+- **Now playing:** who watches what on Jellyfin, direct or transcoded and why, and at what bitrate.
 - **Network:** where your traffic goes, by app, live and over 24 hours, with an optional daily or monthly budget.
 - **Storage:** disks, plus rclone mounts, VFS caches, uploads and transfers.
 - **Security:** failed sign-ins, lockouts, sessions and CrowdSec bans.
