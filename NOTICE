@@ -7,16 +7,16 @@ The logos of the apps Observarr monitors belong to their projects and are tradem
 shows them only to identify those apps; their use does not imply endorsement. Each is a one-colour version kept
 next to its adapter and served at /api/icons/<type>.svg:
 
-  internal/adapters/arr/icons/sonarr.svg    Sonarr    from Simple Icons (CC0-1.0), https://simpleicons.org
-  internal/adapters/arr/icons/radarr.svg    Radarr    from Simple Icons (CC0-1.0)
-  internal/adapters/rclone/icon.svg         rclone    from Simple Icons (CC0-1.0)
-  internal/adapters/jellyfin/icon.svg       Jellyfin  from Simple Icons (CC0-1.0)
-  internal/adapters/arr/icons/prowlarr.svg  Prowlarr  from homarr-labs/dashboard-icons (Apache-2.0)
-  internal/adapters/crowdsec/icon.svg       CrowdSec  from homarr-labs/dashboard-icons (Apache-2.0)
-  internal/adapters/arr/icons/lidarr.svg    Lidarr    redrawn after homarr-labs/dashboard-icons (Apache-2.0)
-  internal/adapters/usenet/icons/sabnzbd.svg  SABnzbd  from homarr-labs/dashboard-icons (Apache-2.0)
-  internal/adapters/usenet/icons/nzbget.svg   NZBGet   redrawn after homarr-labs/dashboard-icons (Apache-2.0)
-  internal/adapters/seerr/icon.svg          Overseerr from homarr-labs/dashboard-icons (Apache-2.0)
+  internal/adapters/arr/icons/sonarr.svg      Sonarr     from Simple Icons (CC0-1.0), https://simpleicons.org
+  internal/adapters/arr/icons/radarr.svg      Radarr     from Simple Icons (CC0-1.0)
+  internal/adapters/rclone/icon.svg           rclone     from Simple Icons (CC0-1.0)
+  internal/adapters/jellyfin/icon.svg         Jellyfin   from Simple Icons (CC0-1.0)
+  internal/adapters/arr/icons/prowlarr.svg    Prowlarr   from homarr-labs/dashboard-icons (Apache-2.0)
+  internal/adapters/crowdsec/icon.svg         CrowdSec   from homarr-labs/dashboard-icons (Apache-2.0)
+  internal/adapters/arr/icons/lidarr.svg      Lidarr     redrawn after homarr-labs/dashboard-icons (Apache-2.0)
+  internal/adapters/usenet/icons/sabnzbd.svg  SABnzbd    from homarr-labs/dashboard-icons (Apache-2.0)
+  internal/adapters/usenet/icons/nzbget.svg   NZBGet     redrawn after homarr-labs/dashboard-icons (Apache-2.0)
+  internal/adapters/seerr/icon.svg            Overseerr  from homarr-labs/dashboard-icons (Apache-2.0)
 
 Changes to the dashboard-icons files: the colours were flattened to one colour (light paint became cut-outs),
 fills were reduced to path data, and the Lidarr and NZBGet marks were redrawn from their outlines.

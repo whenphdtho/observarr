@@ -294,6 +294,8 @@ func (a arrAdapter) ReadConfig(name string, dir fs.FS) (adapter.Candidate, bool,
 		return adapter.Candidate{}, false, nil
 	}
 	if err != nil {
+		// Shown to the user after the folder's name; it names config.xml already, e.g. "config.xml is not a
+		// regular file", "config.xml exceeds 1048576 bytes" or "config.xml is a symbolic link, not read".
 		return adapter.Candidate{}, false, err
 	}
 

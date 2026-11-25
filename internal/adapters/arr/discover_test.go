@@ -686,8 +686,8 @@ func TestReadConfigOversizedFile(t *testing.T) {
 	fsys := fstest.MapFS{"config.xml": {Data: big}}
 	a := arr.New(definitionFor(t, "sonarr")).(adapter.ConfigReader)
 	_, _, err := a.ReadConfig("sonarr", fsys)
-	if err == nil {
-		t.Fatal("ReadConfig with a >1 MiB config.xml: want an error, got nil")
+	if err == nil || err.Error() != "config.xml exceeds 1048576 bytes" {
+		t.Fatalf("ReadConfig with a >1 MiB config.xml: err = %v, want one naming config.xml", err)
 	}
 }
 
