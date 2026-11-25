@@ -269,13 +269,17 @@ func (s *Server) refuseInsecure(w http.ResponseWriter, r *http.Request) bool {
 // attempt reserves a login attempt for key, or answers 429 when it is locked out.
 func (s *Server) attempt(w http.ResponseWriter, key string) bool {
 	ok, wait := s.Limiter.Attempt(key)
-	if ok {
-		return true
+	if !ok {
+		tooMany(w, wait, "too many failed logins")
 	}
+	return ok
+}
+
+// tooMany answers 429: what happened, and to try again after wait.
+func tooMany(w http.ResponseWriter, wait time.Duration, what string) {
 	w.Header().Set("Retry-After", strconv.Itoa(max(1, int(math.Ceil(wait.Seconds())))))
 	minutes := max(1, int(math.Ceil(wait.Minutes())))
-	writeError(w, http.StatusTooManyRequests, "too many failed logins — try again in "+strconv.Itoa(minutes)+" min")
-	return false
+	writeError(w, http.StatusTooManyRequests, what+" — try again in "+strconv.Itoa(minutes)+" min")
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request, sess store.Session) {
@@ -363,9 +367,9 @@ func (s *Server) makeRoomForFailures(now time.Time) {
 	}
 }
 
-// withHashSlot runs fn, which hashes or checks a password, once one of the server's hash slots is free. Each
-// argon2 run holds its memory cost (19 MiB for our hashes), so bounding concurrent runs bounds memory under a
-// flood of logins. It reports false, without running fn, if the request ends while waiting; there is no one
+// withHashSlot runs fn, which hashes or checks a password or derives a settings file's key, once one of the
+// server's hash slots is free. Each argon2 run holds its memory cost (19 MiB for a password, 64 MiB for a settings
+// file), so bounding concurrent runs bounds memory under a flood of logins. It reports false, without running fn, if the request ends while waiting; there is no one
 // left to answer then.
 func (s *Server) withHashSlot(ctx context.Context, fn func()) bool {
 	select {

@@ -466,19 +466,33 @@ func (s *Server) validate(in serviceInput) (spec, error) {
 	if err != nil {
 		return spec{}, err
 	}
-	sp.name = strings.TrimSpace(in.Name)
+	return sp.named(in.Name, in.Container)
+}
+
+// named checks a service's name and container link and adds them to sp.
+func (sp spec) named(name, container string) (spec, error) {
+	sp.name = strings.TrimSpace(name)
 	if n := utf8.RuneCountInString(sp.name); n < 1 || n > maxServiceName {
 		return spec{}, errors.New("name: 1-64 characters")
 	}
-	if in.Container != "" && !containerName.MatchString(in.Container) {
+	if container != "" && !containerName.MatchString(container) {
 		return spec{}, errors.New("container: a Docker container name (letters, digits, _ . -), at most 255 characters")
 	}
-	sp.container = in.Container
+	sp.container = container
 	return sp, nil
 }
 
 // checkTarget checks the type, URL and key. The URL is returned without a trailing slash.
 func (s *Server) checkTarget(in targetInput) (spec, error) {
+	sp, err := s.parseTarget(in)
+	if err == nil && in.APIKey == "" && sp.adapter.Info().NeedsAPIKey {
+		return spec{}, errors.New("apiKey: required for " + sp.adapter.Info().Name)
+	}
+	return sp, err
+}
+
+// parseTarget is checkTarget without requiring a key, for an app whose key is to be entered later.
+func (s *Server) parseTarget(in targetInput) (spec, error) {
 	a, ok := s.Registry.Get(in.Type)
 	if !ok {
 		return spec{}, errors.New("type: unknown app type")
@@ -493,9 +507,6 @@ func (s *Server) checkTarget(in targetInput) (spec, error) {
 	// A control character could never be a real key, and in a header it fails only once the request is made.
 	if strings.ContainsFunc(in.APIKey, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
 		return spec{}, errors.New("apiKey: no control characters")
-	}
-	if in.APIKey == "" && a.Info().NeedsAPIKey {
-		return spec{}, errors.New("apiKey: required for " + a.Info().Name)
 	}
 	return spec{adapter: a, target: adapter.Target{BaseURL: u, APIKey: in.APIKey, HTTP: s.HTTP}}, nil
 }

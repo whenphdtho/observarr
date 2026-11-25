@@ -180,3 +180,29 @@ disables buffering; with nginx, add `proxy_buffering off;` to the matching `loca
 - **Monitoring.** `GET /api/health` returns 503 `{"status":"degraded","reason":"…"}` when the database can't be
   written (read-only or full disk). The container's `HEALTHCHECK` already calls it (`observarr -health`); point
   external monitoring at the same endpoint.
+
+## Backup and restore
+
+**System → Backup and restore** moves your setup to another server, or keeps a copy of it, as one file
+(`observarr-settings-YYYY-MM-DD.json`).
+
+- **What it holds:** every app (type, name, URL, linked container) with its API key, and the finds you dismissed.
+  Never user accounts or passwords, sessions, the audit log, traffic and host history, the setup token or
+  `secret.key`.
+- **Export** encrypts the keys with a passphrase you type (at least 12 characters). Everything else stays
+  readable JSON, so you can see what the file holds. Keep the passphrase: without it the keys cannot be
+  restored. Or choose **Leave keys out**: the file then holds no secrets, and each app shows "API key missing"
+  after restoring until you enter its key again.
+- **Restore** reads the file and its passphrase and shows what it holds before anything is saved. Then choose
+  **Add alongside** (apps whose name is already in use here are skipped) or **Replace all** (every app saved here
+  is removed first), and apply. Either way all of it is saved at once or not at all. Restored apps are contacted
+  only by the normal polling afterwards; their keys are re-encrypted with this server's `secret.key`.
+- A wrong passphrase, or a file changed after export, restores nothing. Every URL is checked as when adding an
+  app by hand; apps of a type this Observarr does not know are skipped and listed. Files over 1 MiB are refused.
+- Exports, restores and wrong passphrases are written to the audit log; after 5 wrong passphrases in 15 minutes
+  restoring pauses for that user.
+
+The keys are encrypted with AES-256-GCM under a key derived from the passphrase with argon2id (64 MiB, 3 passes,
+4 lanes) and a random salt; the rest of the file is bound to them, so it cannot be edited unnoticed. For a full
+copy of the server, including history and accounts, back up the data folder and `secret.key` instead (see
+[Recovery](#recovery)).
