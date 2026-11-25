@@ -6,6 +6,7 @@ import (
 	"observarr/internal/adapter"
 	"observarr/internal/adapters/arr"
 	"observarr/internal/adapters/crowdsec"
+	"observarr/internal/adapters/jellyfin"
 	"observarr/internal/adapters/rclone"
 )
 
@@ -16,4 +17,5 @@ func Register(r *adapter.Registry) {
 	}
 	r.Register(crowdsec.New())
 	r.Register(rclone.New())
+	r.Register(jellyfin.New())
 }
