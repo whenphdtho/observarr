@@ -52,7 +52,7 @@ export function chartShift(node, params) {
     update(next) {
       const p = prev;
       prev = next;
-      if (!p || !p.span || ms(1) === 0 || document.hidden) return;
+      if (!p || !next || !p.span || ms(1) === 0 || document.hidden) return;
       if (Math.abs(next.span - p.span) > p.span * 0.05 || next.width !== p.width) return;
       const dx = ((next.t0 - p.t0) / next.span) * next.width;
       if (!(dx > 0.2) || dx > 40) return;

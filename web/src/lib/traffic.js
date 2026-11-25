@@ -3,9 +3,17 @@
 
 // PALETTE colours the sources with the most traffic today, in this order; every other source
 // counts towards "Other" (OTHER), which is the host's traffic no coloured source explains. The
-// hues keep at least 3:1 against the cards and stay apart for colour-blind readers.
-export const PALETTE = ['#3987e5', '#199e70', '#9085e9', '#c98500', '#d55181'];
-export const OTHER = '#7a778c';
+// colours are the data tokens of app.css.
+export const PALETTE = ['var(--series-1)', 'var(--series-2)', 'var(--series-3)', 'var(--series-4)', 'var(--series-5)'];
+export const OTHER = 'var(--series-other)';
+
+// add sums two rates of one moment; a moment neither has (null, a gap in the history) stays a gap.
+export function add(a, b) {
+  const fa = Number.isFinite(a);
+  const fb = Number.isFinite(b);
+  if (!fa && !fb) return null;
+  return (fa ? a : 0) + (fb ? b : 0);
+}
 
 // sum adds the numbers of a list of objects under key.
 export function sum(list, key) {
@@ -37,7 +45,7 @@ export function group(containers) {
     g.todayTx += c.todayTx;
     if (c.series) {
       g.series = g.series
-        ? { rx: g.series.rx.map((v, i) => v + (c.series.rx[i] ?? 0)), tx: g.series.tx.map((v, i) => v + (c.series.tx[i] ?? 0)) }
+        ? { rx: g.series.rx.map((v, i) => add(v, c.series.rx[i])), tx: g.series.tx.map((v, i) => add(v, c.series.tx[i])) }
         : { rx: [...c.series.rx], tx: [...c.series.tx] };
     }
   }
@@ -47,11 +55,12 @@ export function group(containers) {
 
 // layers returns the coloured sources and "Other" for the chart and its legend. Other is the
 // host's traffic minus the coloured sources, never below zero: app traffic between containers
-// can make the sources add up to more than the host's.
+// can make the sources add up to more than the host's. A gap in the host's series stays a gap.
 export function layers(sources, host, today) {
   const shown = sources.slice(0, PALETTE.length).map((s, i) => ({ ...s, color: PALETTE[i] }));
   const hostSeries = host.series ?? { rx: [], tx: [] };
-  const rest = (key) => hostSeries[key].map((v, i) => Math.max(0, v - shown.reduce((n, s) => n + (s.series?.[key][i] ?? 0), 0)));
+  const rest = (key) => hostSeries[key].map((v, i) =>
+    (Number.isFinite(v) ? Math.max(0, v - shown.reduce((n, s) => n + (s.series?.[key][i] || 0), 0)) : null));
   const other = {
     key: '', label: 'Other', members: [], color: OTHER,
     rx: Math.max(0, host.rx - sum(shown, 'rx')), tx: Math.max(0, host.tx - sum(shown, 'tx')),

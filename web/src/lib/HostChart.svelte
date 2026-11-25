@@ -1,7 +1,7 @@
 <script>
   import Num from './Num.svelte';
   import Skeleton from './Skeleton.svelte';
-  import AreaChart from './AreaChart.svelte';
+  import TimeChart from './TimeChart.svelte';
   import { history, snapshot } from './data.js';
   import { serviceList } from './live.js';
   import { formatMbit, formatPct } from './format.js';
@@ -45,11 +45,11 @@
   {:else if showNet}
     <div class="nums">
       <div class="num-block">
-        <span class="legend"><i class="sw down"></i>Download</span>
+        <span class="legend"><i class="ring" style:color="var(--down)"></i>Download</span>
         <span class="big num"><Num value={mbit(rx)} format={(v) => formatMbit((v * 1e6) / 8)} /><small>Mbit/s</small></span>
       </div>
       <div class="num-block">
-        <span class="legend"><i class="sw up"></i>Upload</span>
+        <span class="legend"><i class="ring" style:color="var(--up)"></i>Upload</span>
         <span class="big num"><Num value={mbit(tx)} format={(v) => formatMbit((v * 1e6) / 8)} /><small>Mbit/s</small></span>
       </div>
       {#if traffic}
@@ -68,14 +68,14 @@
         {/each}
       </p>
     {/if}
-    <AreaChart {times} format={tick}
-      series={[{ values: $history.map((h) => mbit(sum(h.net, 'rx'))), color: 'var(--down)' },
-        { values: $history.map((h) => mbit(sum(h.net, 'tx'))), color: 'var(--up)' }]}
+    <TimeChart {times} format={tick} value={(v) => `${formatMbit((v * 1e6) / 8)} Mbit/s`} live legend={false}
+      series={[{ label: 'Download', values: $history.map((h) => mbit(sum(h.net, 'rx'))), color: 'var(--down)' },
+        { label: 'Upload', values: $history.map((h) => mbit(sum(h.net, 'tx'))), color: 'var(--up)' }]}
       label={`Network throughput over the last five minutes in Mbit/s: now ${formatMbit(rx)} down, ${formatMbit(tx)} up`} />
   {:else}
     <div class="nums">
       <div class="num-block">
-        <span class="legend"><i class="sw down"></i>CPU</span>
+        <span class="legend"><i class="ring" style:color="var(--cpu)"></i>CPU</span>
         <span class="big num"><Num value={Math.max(0, latest.cpuPercent)} /><small>%</small></span>
       </div>
       <div class="num-block">
@@ -83,8 +83,8 @@
         <span class="mid num">{latest.load.map((l) => l.toFixed(2)).join(' · ')}</span>
       </div>
     </div>
-    <AreaChart {times} max={100} format={(v) => `${v}%`}
-      series={[{ values: $history.map((h) => h.cpuPercent), color: 'var(--down)' }]}
+    <TimeChart {times} max={100} format={(v) => `${v}%`} value={formatPct} live legend={false}
+      series={[{ label: 'CPU', values: $history.map((h) => h.cpuPercent), color: 'var(--cpu)' }]}
       label={`CPU usage over the last five minutes, now ${formatPct(latest.cpuPercent)}`} />
   {/if}
 </section>
@@ -95,8 +95,6 @@
   .nums { display: flex; gap: 12px 32px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 10px; min-width: 0; }
   .num-block { display: grid; gap: 4px; min-width: 0; }
   .legend { display: flex; align-items: center; gap: 7px; font-size: var(--t-sm); color: var(--text2); }
-  .sw.down { background: var(--down); }
-  .sw.up { background: var(--up); }
   .big { font-size: var(--t-2xl); font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; white-space: nowrap; }
   .mid { font-size: var(--t-lg); font-weight: 600; line-height: 1.4; white-space: nowrap; }
   small { font-size: var(--t-base); font-weight: 450; color: var(--muted); margin-left: 5px; letter-spacing: 0; }

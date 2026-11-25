@@ -8,7 +8,7 @@
   import { reveal, conceal, ms, EASE } from './motion.js';
   import { onMount, untrack } from 'svelte';
   import { api } from './api.js';
-  import { snapshot } from './data.js';
+  import { snapshot, hostLines, watchTrend } from './data.js';
   import { synced } from './live.js';
   import { downloading, attention } from './status.js';
   import { mountAttention } from './storage.js';
@@ -37,6 +37,7 @@
       lockedSec = 0;
     }
   }
+  onMount(watchTrend);
   onMount(() => {
     loadLock();
     const id = setInterval(loadLock, 60 * 1000);
@@ -142,9 +143,12 @@
     {#if host}
       <Kpi href="#/system" label="CPU" value={formatPct(host.cpuPercent)} num={host.cpuPercent} format={formatPct}
         sub={`${host.cpus} core${host.cpus === 1 ? '' : 's'} · load ${host.load[0].toFixed(2)}`}
-        bar={Math.min(100, host.cpuPercent)} barTone={host.cpuPercent >= 90 ? 'warn' : ''} />
+        tone={host.cpuPercent >= 90 ? 'warn' : ''} spark={$hostLines.cpu} sparkColor="var(--cpu)"
+        change={$hostLines.cpuChange !== null ? { ratio: $hostLines.cpuChange, good: 'down', against: 'the hour before' } : null} />
       <Kpi href="#/system" label="Memory" value={memParts[0]} unit={memParts[1]}
-        sub={`of ${formatBytes(host.memTotal)} · ${memPct}%`} bar={memPct} barTone={memPct >= 90 ? 'warn' : ''} />
+        sub={`of ${formatBytes(host.memTotal)} · ${memPct}%`} tone={memPct >= 90 ? 'warn' : ''}
+        spark={$hostLines.mem} sparkColor="var(--mem)" sparkMin={null}
+        change={$hostLines.memChange !== null ? { ratio: $hostLines.memChange, good: 'down', against: 'the hour before' } : null} />
     {:else}
       <Kpi href="#/system" label="CPU" value="—" sub="No host figures" />
       <Kpi href="#/system" label="Memory" value="—" sub="No host figures" />
@@ -157,7 +161,7 @@
 </div>
 
 <style>
-  .overview { display: grid; gap: 32px; }
+  .overview { display: grid; gap: 20px; }
 
   /* Nothing to look at: one quiet line leads the page. */
   .calm { margin-bottom: -8px; }
@@ -182,9 +186,11 @@
   /* A problem that just appeared: its row lights once and settles to its usual wash. */
   .fresh .issue { animation: fresh 1.4s var(--ease); }
   .fresh.fail .issue { animation-name: fresh-fail; }
-  @keyframes fresh { from { background: rgba(227, 166, 80, 0.2); } }
-  @keyframes fresh-fail { from { background: rgba(236, 108, 125, 0.26); } }
-  .fail .issue:hover { background: rgba(236, 108, 125, 0.14); }
+  @keyframes fresh { from { background: var(--warn-flash); } }
+  @keyframes fresh-fail { from { background: var(--fail-flash); } }
+  .warn .issue { background: var(--warn-wash); }
+  .warn .issue:hover { background: var(--warn-wash-hi); }
+  .fail .issue:hover { background: var(--fail-wash-hi); }
   .issue:hover .title { text-decoration: underline; text-underline-offset: 3px; }
   .issue:focus-visible { outline-offset: 0; }
   .issue .dot { margin-top: 7px; width: 8px; height: 8px; }

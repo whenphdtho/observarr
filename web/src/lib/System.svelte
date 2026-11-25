@@ -1,8 +1,9 @@
 <script>
-  import HostChart from './HostChart.svelte';
+  import { onMount } from 'svelte';
+  import HostHistory from './HostHistory.svelte';
   import Kpi from './Kpi.svelte';
   import Icon from './icons/Icon.svelte';
-  import { snapshot, systemError } from './data.js';
+  import { snapshot, systemError, hostLines, watchTrend } from './data.js';
   import { matches } from './status.js';
   import { diskParts } from './storage.js';
   import { now } from './ticker.js';
@@ -14,6 +15,9 @@
   // Observarr can see, from the sampler's Snapshot (system.Snapshot) that Shell loads and the live
   // stream keeps current. query narrows the containers table.
   let { query = '' } = $props();
+
+  onMount(watchTrend);
+  const HOUR = 'the hour before';
 
   const host = $derived($snapshot?.host ?? null);
   const disks = $derived(host?.disks ?? []);
@@ -123,10 +127,12 @@
   {#if host}
     <div class="kpis">
       <Kpi label="CPU" value={formatPct(host.cpuPercent)} num={host.cpuPercent} format={formatPct} sub={`${host.cpus} core${host.cpus === 1 ? '' : 's'}`}
-        bar={Math.min(100, host.cpuPercent)} barTone={host.cpuPercent >= 90 ? 'warn' : ''} />
+        tone={host.cpuPercent >= 90 ? 'warn' : ''} spark={$hostLines.cpu} sparkColor="var(--cpu)"
+        change={$hostLines.cpuChange !== null ? { ratio: $hostLines.cpuChange, good: 'down', against: HOUR } : null} />
       <Kpi label="Memory" value={formatBytes(host.memUsed)}
         sub={`of ${formatBytes(host.memTotal)} · ${barPercent(host.memUsed, host.memTotal)}%`}
-        bar={barPercent(host.memUsed, host.memTotal)} barTone={barPercent(host.memUsed, host.memTotal) >= 90 ? 'warn' : ''} />
+        tone={barPercent(host.memUsed, host.memTotal) >= 90 ? 'warn' : ''} spark={$hostLines.mem} sparkColor="var(--mem)" sparkMin={null}
+        change={$hostLines.memChange !== null ? { ratio: $hostLines.memChange, good: 'down', against: HOUR } : null} />
       {#if host.swapTotal === 0}
         <Kpi label="Swap" value="—" sub="No swap" />
       {:else}
@@ -138,7 +144,7 @@
         sub={`load ${host.load.map((l) => l.toFixed(2)).join(' · ')}`} />
     </div>
 
-    <HostChart />
+    <HostHistory />
 
     {#if disks.length > 0 || net.length > 0}
       <div class="pair" class:single={disks.length === 0 || net.length === 0}>
@@ -299,9 +305,9 @@
 </div>
 
 <style>
-  .system { display: grid; gap: 28px; }
+  .system { display: grid; gap: 20px; }
 
-  .pair { display: grid; gap: 28px 32px; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; }
+  .pair { display: grid; gap: 20px; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; }
   .pair.single { grid-template-columns: minmax(0, 1fr); }
 
   .unit { font-size: var(--t-sm); font-weight: 400; color: var(--muted); }
