@@ -137,8 +137,10 @@ guessing at them. Check with `stat -fc %T /sys/fs/cgroup` on the host: `cgroup2f
 - **History:** every minute the host's traffic, each app's traffic and the host's CPU and memory are written
   to the database, and added up into hours and local days (same `TZ`). The day chart reads the last day back
   after a restart; the week and month charts use hours, the year chart days. A stretch when Observarr was not
-  running stays a gap. The five-minute chart is live only and starts empty after a restart. If the database is
-  slow, up to two hours of minutes wait in memory and the oldest are dropped beyond that (logged once).
+  running stays a gap, and a change against the period before is shown only when at least 80% of that period
+  was recorded. The five-minute chart is live only and starts empty after a restart. If the database is slow,
+  up to two hours of minutes wait in memory and the oldest are dropped beyond that; a minute that fails to be
+  written five times in a row is dropped too (both logged once).
 - **Budget:** `OBSERVARR_TRAFFIC_BUDGET=1400GB/day` or `=20TB/month` (decimal units: 1 GB = 10^9 bytes)
   counts down and up together, the way most providers do; a monthly budget adds up the calendar month's days.
 - **Units:** rates are in Mbit/s and totals in GB/TB, as providers count; memory and disks stay in binary
