@@ -9,7 +9,6 @@
 
   const method = $derived(METHODS[stream.method] ?? '');
   const pct = $derived(formatPercent(stream.progress));
-  const device = $derived([stream.client, stream.device].filter(Boolean).join(' · '));
   const bitrate = $derived(formatBitrate(stream.bitrate));
   const codecs = $derived(codecText(stream));
   const why = $derived(stream.reasons.join(', '));
@@ -24,13 +23,19 @@
     aria-label={`${stream.title}: ${pct} played${stream.paused ? ', paused' : ''}`}>
     <i style:width={pct}></i>
   </div>
-  <!-- The short facts keep their width; where it plays gives way first. -->
-  <div class="facts">
-    {#if stream.user}<span class="keep" title={stream.user}>{stream.user}</span>{/if}
-    {#if where}<span title={where}>{where}</span>{/if}
-    {#if device}<span title={device}>{device}</span>{/if}
-    <span class="keep state">{stream.paused ? `Paused at ${pct}` : pct}</span>
-    {#if bitrate}<span class="keep" title={`${bitrate} sent to the client`}>{bitrate}</span>{/if}
+  <!-- Who plays it in what, then on what device how far and how fast: one line where there is room, two in a
+       narrow column. The short facts keep their width; the names give way. -->
+  <div class="lines">
+    <div class="facts">
+      {#if stream.user}<span class="keep" title={stream.user}>{stream.user}</span>{/if}
+      {#if where}<span title={where}>{where}</span>{/if}
+      {#if stream.client}<span title={stream.client}>{stream.client}</span>{/if}
+    </div>
+    <div class="facts how">
+      {#if stream.device}<span title={stream.device}>{stream.device}</span>{/if}
+      <span class="keep state">{stream.paused ? `Paused at ${pct}` : pct}</span>
+      {#if bitrate}<span class="keep" title={`${bitrate} sent to the client`}>{bitrate}</span>{/if}
+    </div>
   </div>
   {#if detail && codecs}
     <div class="facts"><span title={`Codecs: ${codecs}`}>{codecs}</span></div>
@@ -41,7 +46,7 @@
 </div>
 
 <style>
-  .stream { display: grid; gap: 6px; min-width: 0; }
+  .stream { display: grid; gap: 6px; min-width: 0; container-type: inline-size; }
   .head { display: flex; align-items: center; gap: 10px; min-width: 0; }
   .title { flex: 1; font-weight: 500; font-size: var(--t-body); }
   .chip {
@@ -51,6 +56,13 @@
   /* A transcode is what costs the server: its chip carries the accent, the direct methods stay quiet. */
   .chip.transcode { color: var(--accent-text); border-color: var(--accent); background: var(--accent-wash); }
   .facts > .keep { flex: none; }
+  .lines { display: flex; gap: 2px 6px; min-width: 0; }
+  .lines > .facts { flex: 0 1 auto; }
+  .lines > .how::before { content: '·'; color: var(--muted); }
+  @container (max-width: 360px) {
+    .lines { flex-direction: column; }
+    .lines > .how::before { content: none; }
+  }
   .why { font-size: var(--t-small); color: var(--muted); overflow-wrap: anywhere; }
   /* A paused stream: its bar fades, its state is said in words. */
   .paused .bar > i { opacity: 0.45; }

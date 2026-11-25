@@ -146,9 +146,10 @@
   // A media server's streams, by its name: what it plays now and at what bitrate, beside its traffic.
   const streaming = $derived(new Map(streamServices($serviceList).map((svc) => [svc.name, streamSummary([svc])])));
 
-  // playing says what a source streams, e.g. "3 streams, 23 Mbit/s", or '' when it streams nothing.
+  // playing says what a source streams, e.g. "3 streams, 23 Mbit/s", or '' when it streams nothing. Only a source
+  // linked to a service is matched: a container that merely bears a media server's name is not that server.
   function playing(s) {
-    const st = s.key ? streaming.get(s.key) : null;
+    const st = s.linked ? streaming.get(s.key) : null;
     if (!(st?.total > 0)) return '';
     const rate = formatBitrate(st.bitrate);
     return `${st.total} stream${st.total === 1 ? '' : 's'}${rate ? `, ${rate}` : ''}`;

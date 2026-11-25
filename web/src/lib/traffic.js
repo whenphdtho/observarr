@@ -28,16 +28,17 @@ export function links(services) {
 }
 
 // group merges containers (GET /api/network's containers) into sources, most traffic today first:
-// { key, label, members, rx, tx, todayRx, todayTx, series: { rx, tx } | null }.
+// { key, label, linked, members, rx, tx, todayRx, todayTx, series: { rx, tx } | null }; linked: grouped by service.
 export function group(containers) {
   const byKey = new Map();
   for (const c of containers) {
     const key = c.service || c.name;
     let g = byKey.get(key);
     if (!g) {
-      g = { key, label: key, members: [], rx: 0, tx: 0, todayRx: 0, todayTx: 0, series: null };
+      g = { key, label: key, linked: false, members: [], rx: 0, tx: 0, todayRx: 0, todayTx: 0, series: null };
       byKey.set(key, g);
     }
+    g.linked ||= Boolean(c.service); // grouped under a service, not only a container's name
     g.members.push(c.name);
     g.rx += c.rx;
     g.tx += c.tx;
