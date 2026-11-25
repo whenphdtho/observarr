@@ -64,11 +64,14 @@ type Server struct {
 	healthMu     sync.Mutex
 	healthAt     time.Time // time of the latest write probe
 	healthReason string    // why that probe failed; "" if it did not
+
+	importLimiter *auth.Limiter // slows down passphrase guessing on settings import, per user
 }
 
 // Handler returns the complete HTTP handler. Call it once, before serving.
 func (s *Server) Handler() http.Handler {
 	s.hashSlots = make(chan struct{}, runtime.NumCPU())
+	s.importLimiter = auth.NewLimiter(time.Now)
 	if s.pingEvery == 0 {
 		s.pingEvery = 25 * time.Second
 	}
@@ -105,6 +108,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/discovery/network", s.requireSession(s.discoverNetwork))
 	mux.Handle("POST /api/discovery/linked", s.requireSession(s.discoverLinked))
 	mux.Handle("POST /api/discovery/{id}/dismiss", s.requireSession(s.dismissSuggestion))
+	mux.Handle("POST /api/settings/export", s.requireSession(s.exportSettings))
+	mux.Handle("POST /api/settings/import", s.requireSession(s.importSettings))
 	// Any other API request, including a wrong method on a known path, is a 404: simpler than 405 with Allow.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "unknown API endpoint")

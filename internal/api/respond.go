@@ -26,11 +26,16 @@ func writeError(w http.ResponseWriter, status int, message string) {
 // Requiring application/json also blocks cross-site form posts: a browser can only send that type
 // cross-origin after a CORS preflight, which Observarr never allows.
 func readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
+	return readJSONUpTo(w, r, v, maxJSONBody)
+}
+
+// readJSONUpTo is readJSON for a body of up to limit bytes.
+func readJSONUpTo(w http.ResponseWriter, r *http.Request, v any, limit int64) bool {
 	if mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type")); mt != "application/json" {
 		writeError(w, http.StatusUnsupportedMediaType, "request body must be JSON")
 		return false
 	}
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxJSONBody))
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, limit))
 	dec.DisallowUnknownFields()
 	err := dec.Decode(v)
 	if err == nil {
