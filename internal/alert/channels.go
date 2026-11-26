@@ -57,7 +57,7 @@ type Sender interface {
 // Settings are a channel's settings that are not secret. Each type uses some of them.
 type Settings struct {
 	Server   string `json:"server,omitempty"`   // ntfy, gotify
-	Topic    string `json:"topic,omitempty"`    // ntfy
+	Topic    string `json:"topic,omitempty"`    // only in ntfy channels saved before the topic became a secret
 	ChatID   string `json:"chatId,omitempty"`   // telegram
 	Host     string `json:"host,omitempty"`     // email
 	Port     int    `json:"port,omitempty"`     // email
@@ -65,6 +65,7 @@ type Settings struct {
 	Username string `json:"username,omitempty"` // email
 	From     string `json:"from,omitempty"`     // email
 	To       string `json:"to,omitempty"`       // email: addresses separated by commas
+	Helo     string `json:"helo,omitempty"`     // email: the name to greet the server with; "" for From's domain
 }
 
 // Secrets are a channel's secret fields by name: tokens, addresses holding a token, passwords.
@@ -104,28 +105,38 @@ type kind struct {
 var Types = []string{"ntfy", "discord", "webhook", "email", "gotify", "telegram"}
 
 var kinds = map[string]kind{
-	"ntfy": {settings: []string{"server", "topic"}, secrets: []string{"token"},
-		check: checkNtfy, checkSecrets: tokenWithoutSpaces, target: func(s Settings, _ Secrets) string { return hostOf(s.Server) + "/" + s.Topic },
-		sender: func(s Settings, sec Secrets, d Deps) Sender { return ntfy{s, sec["token"], d.HTTP} }},
+	// An ntfy topic is what lets anyone read or post to it on a public server: it is kept as a secret.
+	"ntfy": {settings: []string{"server"}, secrets: []string{"topic", "token"}, required: []string{"topic"},
+		check: checkNtfy, checkSecrets: checkNtfyTopic, target: func(s Settings, _ Secrets) string { return hostOf(s.Server) + "/…" },
+		sender: func(s Settings, sec Secrets, d Deps) Sender {
+			return ntfy{s.Server, sec["topic"], sec["token"], d.HTTP}
+		},
+	},
 	"discord": {secrets: []string{"url"}, required: []string{"url"},
 		checkSecrets: checkDiscord, target: func(_ Settings, sec Secrets) string { return "webhook on " + hostOf(sec["url"]) },
 		sender: func(_ Settings, sec Secrets, d Deps) Sender { return discord{sec["url"], d.HTTP} }},
 	"webhook": {secrets: []string{"url", "secret"}, required: []string{"url"},
 		checkSecrets: checkWebhook, target: func(_ Settings, sec Secrets) string { return originOf(sec["url"]) },
 		sender: func(_ Settings, sec Secrets, d Deps) Sender { return webhook{sec["url"], sec["secret"], d.HTTP} }},
-	"email": {settings: []string{"host", "port", "security", "username", "from", "to"}, secrets: []string{"password"},
+	"email": {settings: []string{"host", "port", "security", "username", "from", "to", "helo"}, secrets: []string{"password"},
 		check: checkEmail, checkSecrets: checkEmailPassword, target: func(s Settings, _ Secrets) string { return s.To },
 		sender: func(s Settings, sec Secrets, d Deps) Sender { return email{s, sec["password"], d} }},
 	"gotify": {settings: []string{"server"}, secrets: []string{"token"}, required: []string{"token"},
-		check: checkGotify, checkSecrets: tokenWithoutSpaces, target: func(s Settings, _ Secrets) string { return hostOf(s.Server) },
+		check: checkGotify, checkSecrets: checkToken, target: func(s Settings, _ Secrets) string { return hostOf(s.Server) },
 		sender: func(s Settings, sec Secrets, d Deps) Sender { return gotify{s.Server, sec["token"], d.HTTP} }},
 	"telegram": {settings: []string{"chatId"}, secrets: []string{"token"}, required: []string{"token"},
 		check: checkTelegram, checkSecrets: checkTelegramToken, target: func(s Settings, _ Secrets) string { return "chat " + s.ChatID },
 		sender: func(s Settings, sec Secrets, d Deps) Sender { return telegram{s.ChatID, sec["token"], d} }},
 }
 
-// maxSecret bounds a secret field, in bytes.
-const maxSecret = 2048
+const (
+	// maxSecret bounds a secret field, in bytes.
+	maxSecret = 2048
+	// minSecret is the shortest token or password accepted, so a status line that echoes one always has it
+	// blanked (see Secrets.redacted); minSigningSecret is the shortest webhook signing secret.
+	minSecret        = 8
+	minSigningSecret = 16
+)
 
 // CheckChannel validates a channel of type typ and returns its settings normalised: every setting it does not use
 // is refused, as is any secret it does not know, and every secret it requires must be there.
@@ -196,7 +207,7 @@ func NewSender(typ string, s Settings, sec Secrets, d Deps) Sender {
 
 func settingFields(s *Settings) map[string]any {
 	return map[string]any{"server": s.Server, "topic": s.Topic, "chatId": s.ChatID, "host": s.Host, "port": s.Port,
-		"security": s.Security, "username": s.Username, "from": s.From, "to": s.To}
+		"security": s.Security, "username": s.Username, "from": s.From, "to": s.To, "helo": s.Helo}
 }
 
 func isZero(v any) bool { return v == "" || v == 0 }
@@ -209,6 +220,23 @@ func ParseSettings(body []byte) (Settings, error) {
 	}
 	err := decodeStrict(body, &s)
 	return s, err
+}
+
+// LiftTopic moves an ntfy topic kept among the settings, as channels saved before it became a secret have it, into
+// the secrets. It reports whether there was one to move.
+func LiftTopic(typ string, s Settings, sec Secrets) (Settings, Secrets, bool) {
+	if typ != "ntfy" || s.Topic == "" {
+		return s, sec, false
+	}
+	sec = maps.Clone(sec)
+	if sec == nil {
+		sec = Secrets{}
+	}
+	if sec["topic"] == "" {
+		sec["topic"] = s.Topic
+	}
+	s.Topic = ""
+	return s, sec, true
 }
 
 // SecretsContext binds a channel's sealed secrets to its row, so they cannot be moved to another one.
@@ -264,25 +292,31 @@ func checkServer(server *string, def string) error {
 	if err != nil {
 		return errors.New("server: an http:// or https:// address, without user name, query or fragment")
 	}
+	// One server is written one way: the host in lower case, without the scheme's own port.
+	u.Host = strings.TrimSuffix(strings.ToLower(u.Host), map[string]string{"http": ":80", "https": ":443"}[u.Scheme])
 	*server = u.String()
 	return nil
 }
 
-func tokenWithoutSpaces(_ Settings, sec Secrets) error {
-	if strings.ContainsFunc(sec["token"], unicode.IsSpace) {
+// checkToken checks an access token, when there is one: no spaces, at least minSecret characters.
+func checkToken(_ Settings, sec Secrets) error {
+	t := sec["token"]
+	switch {
+	case strings.ContainsFunc(t, unicode.IsSpace):
 		return errors.New("token: no spaces")
+	case t != "" && utf8.RuneCountInString(t) < minSecret:
+		return fmt.Errorf("token: at least %d characters", minSecret)
 	}
 	return nil
 }
 
-func checkNtfy(s *Settings) error {
-	if err := checkServer(&s.Server, "https://ntfy.sh"); err != nil {
-		return err
-	}
-	if !ntfyTopic.MatchString(s.Topic) {
+func checkNtfy(s *Settings) error { return checkServer(&s.Server, "https://ntfy.sh") }
+
+func checkNtfyTopic(s Settings, sec Secrets) error {
+	if !ntfyTopic.MatchString(sec["topic"]) {
 		return errors.New("topic: 1 to 64 letters, digits, - or _")
 	}
-	return nil
+	return checkToken(s, sec)
 }
 
 func checkGotify(s *Settings) error { return checkServer(&s.Server, "") }
@@ -298,6 +332,9 @@ func checkDiscord(_ Settings, sec Secrets) error {
 func checkWebhook(_ Settings, sec Secrets) error {
 	if _, err := checkURL(sec["url"], true); err != nil {
 		return fmt.Errorf("url: %w", err)
+	}
+	if k := sec["secret"]; k != "" && utf8.RuneCountInString(k) < minSigningSecret {
+		return fmt.Errorf("secret: at least %d characters", minSigningSecret)
 	}
 	return nil
 }
@@ -320,6 +357,7 @@ func checkTelegramToken(_ Settings, sec Secrets) error {
 const maxRecipients = 10
 
 func checkEmail(s *Settings) error {
+	s.Host = strings.ToLower(s.Host)
 	if !hostName.MatchString(s.Host) {
 		return errors.New("host: the mail server's host name or address")
 	}
@@ -337,9 +375,12 @@ func checkEmail(s *Settings) error {
 	if len(s.Username) > 256 || strings.ContainsFunc(s.Username, unicode.IsControl) {
 		return errors.New("username: at most 256 bytes, no control characters")
 	}
+	if s.Helo != "" && (!hostName.MatchString(s.Helo) || strings.HasPrefix(s.Helo, "[")) {
+		return errors.New("helo: a host name")
+	}
 	from, err := mail.ParseAddress(s.From)
-	if err != nil {
-		return errors.New("from: one address")
+	if err != nil || !plainAddress(from.Address) {
+		return errors.New("from: one address, without quotes in it")
 	}
 	s.From = from.String()
 	to, err := mail.ParseAddressList(s.To)
@@ -348,15 +389,28 @@ func checkEmail(s *Settings) error {
 	}
 	list := make([]string, len(to))
 	for i, a := range to {
+		if !plainAddress(a.Address) {
+			return errors.New("to: addresses without quotes in them")
+		}
 		list[i] = a.Address
 	}
 	s.To = strings.Join(list, ", ")
 	return nil
 }
 
+// plainAddress reports whether addr is written the same without quotes, as the mail commands and the To header
+// send it: an address whose local part needs them ("a b"@example.com) is refused rather than sent wrong.
+func plainAddress(addr string) bool {
+	return (&mail.Address{Address: addr}).String() == "<"+addr+">" && !strings.ContainsAny(addr, "\" ,<>\\")
+}
+
 func checkEmailPassword(s Settings, sec Secrets) error {
-	if (s.Username == "") != (sec["password"] == "") {
+	p := sec["password"]
+	if (s.Username == "") != (p == "") {
 		return errors.New("username and password: both or neither")
+	}
+	if p != "" && utf8.RuneCountInString(p) < minSecret {
+		return fmt.Errorf("password: at least %d characters", minSecret)
 	}
 	return nil
 }
@@ -382,9 +436,8 @@ func originOf(raw string) string {
 // The senders.
 
 type ntfy struct {
-	s     Settings
-	token string
-	http  *http.Client
+	server, topic, token string
+	http                 *http.Client
 }
 
 func (n ntfy) Send(ctx context.Context, m Message) error {
@@ -397,7 +450,7 @@ func (n ntfy) Send(ctx context.Context, m Message) error {
 	case m.Severity == Warning:
 		priority, tag = 4, "warning"
 	}
-	body, err := json.Marshal(map[string]any{"topic": n.s.Topic, "title": m.heading(), "message": m.Text,
+	body, err := json.Marshal(map[string]any{"topic": n.topic, "title": m.heading(), "message": m.Text,
 		"priority": priority, "tags": []string{tag}, "click": m.URL})
 	if err != nil {
 		return err
@@ -406,7 +459,7 @@ func (n ntfy) Send(ctx context.Context, m Message) error {
 	if n.token != "" {
 		h.Set("Authorization", "Bearer "+n.token)
 	}
-	return post(ctx, n.http, n.s.Server+"/", h, body)
+	return post(ctx, n.http, n.server+"/", h, body)
 }
 
 type discord struct {
@@ -432,8 +485,8 @@ func (d discord) Send(ctx context.Context, m Message) error {
 	case m.Severity == Warning:
 		colour = colourWarning
 	}
-	embed := map[string]any{"title": clip(m.heading(), 256), "description": clip(m.Text, 4000), "color": colour,
-		"timestamp": m.Time.UTC().Format(time.RFC3339)}
+	embed := map[string]any{"title": clip(escapeMarkdown(m.heading()), 256),
+		"description": clip(escapeMarkdown(m.Text), 4000), "color": colour, "timestamp": m.Time.UTC().Format(time.RFC3339)}
 	if m.URL != "" {
 		embed["url"] = m.URL
 	}
@@ -525,6 +578,13 @@ func (t telegram) Send(ctx context.Context, m Message) error {
 	}
 	return post(ctx, t.d.HTTP, t.d.TelegramAPI+"/bot"+t.token+"/sendMessage", http.Header{}, body)
 }
+
+// markdown escapes what Discord reads as formatting, so text an app reports shows as it is: it can make no link,
+// heading, quote, spoiler or code.
+var markdown = strings.NewReplacer(`\`, `\\`, "*", `\*`, "_", `\_`, "~", `\~`, "`", "\\`", ">", `\>`, "|", `\|`,
+	"[", `\[`, "]", `\]`, "(", `\(`, ")", `\)`, "#", `\#`)
+
+func escapeMarkdown(s string) string { return markdown.Replace(s) }
 
 // clip cuts s to at most n characters.
 func clip(s string, n int) string {

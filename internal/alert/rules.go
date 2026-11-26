@@ -102,6 +102,9 @@ func (r Rules) Check() error {
 	if _, err := clock(r.Quiet.To); err != nil {
 		return fmt.Errorf("quiet.to: %w", err)
 	}
+	if r.Quiet.From == r.Quiet.To {
+		return errors.New("quiet: from and to must differ")
+	}
 	if r.Link != "" {
 		if _, err := checkURL(r.Link, false); err != nil {
 			return fmt.Errorf("link: %w", err)
@@ -112,6 +115,15 @@ func (r Rules) Check() error {
 
 // on reports whether rule is switched on.
 func (r Rules) on(rule Rule) bool { return r.Enabled[rule] }
+
+// everyRule is r with every rule switched on.
+func (r Rules) everyRule() Rules {
+	r.Enabled = make(map[Rule]bool, len(AllRules))
+	for _, rule := range AllRules {
+		r.Enabled[rule] = true
+	}
+	return r
+}
 
 // debounce is how long a condition of rule must last before it is reported: long enough that a blip is not.
 func (r Rules) debounce(rule Rule) time.Duration {

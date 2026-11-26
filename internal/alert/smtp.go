@@ -15,6 +15,7 @@ import (
 	"net"
 	"net/smtp"
 	"net/textproto"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -62,6 +63,9 @@ func (e email) Send(ctx context.Context, m Message) error {
 		return err
 	}
 	defer c.Close()
+	if err := c.Hello(heloName(e.s)); err != nil {
+		return err
+	}
 	if e.s.Security == "starttls" {
 		if ok, _ := c.Extension("STARTTLS"); !ok {
 			return errNoStartTLS
@@ -107,12 +111,48 @@ func (e email) Send(ctx context.Context, m Message) error {
 	return c.Quit()
 }
 
+// heloName is the name Observarr greets the mail server with: the one set, else the domain of the From address,
+// else this host's name. Some servers refuse the "localhost" Go would say otherwise.
+func heloName(s Settings) string {
+	if s.Helo != "" {
+		return s.Helo
+	}
+	if _, domain, ok := strings.Cut(addrOf(s.From), "@"); ok && hostName.MatchString(domain) && !strings.HasPrefix(domain, "[") {
+		return domain
+	}
+	if h, err := os.Hostname(); err == nil && hostName.MatchString(h) {
+		return h
+	}
+	return "localhost"
+}
+
 // addrOf is the bare address of a checked "Name <address>".
 func addrOf(s string) string {
 	if i := strings.LastIndexByte(s, '<'); i >= 0 {
 		return strings.TrimSuffix(s[i+1:], ">")
 	}
 	return s
+}
+
+// fold writes a header field as name (with its colon) and value, folded before a space so that no line passes 78
+// characters where that is possible: an encoded subject is a run of encoded words of at most 75 characters each,
+// separated by spaces.
+func fold(name, value string) string {
+	var b strings.Builder
+	b.WriteString(name)
+	n := len(name)
+	for _, word := range strings.Split(value, " ") {
+		if n+1+len(word) > 78 && n > 1 {
+			b.WriteString("\r\n ")
+			n = 1
+		} else {
+			b.WriteByte(' ')
+			n++
+		}
+		b.WriteString(word)
+		n += len(word)
+	}
+	return b.String()
 }
 
 // composeMail is m as a mail in plain text and simple HTML. Every header value is either checked (the addresses)
@@ -122,9 +162,9 @@ func composeMail(from, to string, m Message) ([]byte, error) {
 	mw := multipart.NewWriter(&buf)
 	id := make([]byte, 12)
 	rand.Read(id)
-	subject := mime.QEncoding.Encode("utf-8", "[Observarr] "+strings.Join(strings.Fields(m.heading()), " "))
-	fmt.Fprintf(&buf, "From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nMessage-ID: <%s@observarr>\r\n"+
-		"MIME-Version: 1.0\r\nAuto-Submitted: auto-generated\r\nContent-Type: multipart/alternative; boundary=%s\r\n\r\n",
+	subject := fold("Subject:", mime.QEncoding.Encode("utf-8", "[Observarr] "+strings.Join(strings.Fields(m.heading()), " ")))
+	fmt.Fprintf(&buf, "From: %s\r\nTo: %s\r\n%s\r\nDate: %s\r\nMessage-ID: <%s@observarr>\r\n"+
+		"MIME-Version: 1.0\r\nAuto-Submitted: auto-generated\r\nContent-Type: multipart/alternative;\r\n boundary=%s\r\n\r\n",
 		from, to, subject, m.Time.Format(time.RFC1123Z), hex.EncodeToString(id), mw.Boundary())
 
 	text := m.Text + "\r\n"

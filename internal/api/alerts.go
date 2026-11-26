@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -173,14 +174,26 @@ func (s *Server) updateAlertChannel(w http.ResponseWriter, r *http.Request, sess
 	}
 	changed := p.Settings != nil || len(p.Secrets) > 0
 	if p.Settings != nil {
-		moved := p.Settings.Server != settings.Server || p.Settings.Host != settings.Host
-		for name, v := range sec {
-			if _, entered := p.Secrets[name]; moved && v != "" && !entered {
+		next, err := alert.CheckSettings(ch.Type, *p.Settings)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		// Compared as checked, so "https://NTFY.sh:443" is the server it was and another server is not.
+		if moved := next.Server != settings.Server || next.Host != settings.Host; moved {
+			if name := unentered(sec, p.Secrets, nil); name != "" {
 				writeError(w, http.StatusBadRequest, "enter the "+name+" again when changing the server")
 				return
 			}
 		}
-		settings = *p.Settings
+		settings = next
+	}
+	// A webhook's signing secret goes only to the address it was entered for.
+	if u, ok := p.Secrets["url"]; ok && ch.Type == "webhook" && u != sec["url"] {
+		if name := unentered(sec, p.Secrets, []string{"secret"}); name != "" {
+			writeError(w, http.StatusBadRequest, "enter the "+name+" again when changing the address")
+			return
+		}
 	}
 	if secErr != nil && !changed {
 		writeError(w, http.StatusUnprocessableEntity, secErr.Error())
@@ -242,6 +255,16 @@ func (s *Server) updateAlertChannel(w http.ResponseWriter, r *http.Request, sess
 	writeJSON(w, http.StatusOK, s.view(ch))
 }
 
+// unentered names a saved secret, of names (all when nil), that entered does not hold again; "" when none.
+func unentered(saved, entered map[string]string, names []string) string {
+	for _, name := range slices.Sorted(maps.Keys(saved)) {
+		if _, ok := entered[name]; saved[name] != "" && !ok && (names == nil || slices.Contains(names, name)) {
+			return name
+		}
+	}
+	return ""
+}
+
 func (s *Server) deleteAlertChannel(w http.ResponseWriter, r *http.Request, sess store.Session) {
 	ch, ok := s.channelByID(w, r)
 	if !ok {
@@ -261,11 +284,19 @@ func (s *Server) deleteAlertChannel(w http.ResponseWriter, r *http.Request, sess
 }
 
 // testAlertChannel sends a test message now and answers with the result; a channel that passes may be enabled.
+// One test runs per channel at a time, and a session sends at most testsPerMinute.
 func (s *Server) testAlertChannel(w http.ResponseWriter, r *http.Request, sess store.Session) {
 	ch, ok := s.channelByID(w, r)
 	if !ok {
 		return
 	}
+	done, err := s.alertTests.start(ch.ID, sess.CSRF, time.Now())
+	if err != nil {
+		w.Header().Set("Retry-After", "10")
+		writeError(w, http.StatusTooManyRequests, err.Error())
+		return
+	}
+	defer done()
 	passed, note := s.Alerts.Test(r.Context(), ch)
 	result := ": delivered"
 	if !passed {
@@ -346,24 +377,49 @@ func (s *Server) alertLog(w http.ResponseWriter, r *http.Request, _ store.Sessio
 	writeJSON(w, http.StatusOK, out)
 }
 
-// alertsFiring answers with the alerts firing now, worst first, for the shell's indicator.
-func (s *Server) alertsFiring(w http.ResponseWriter, _ *http.Request, _ store.Session) {
-	type firing struct {
-		Key      string    `json:"key"`
-		Rule     string    `json:"rule"`
-		Severity string    `json:"severity"`
-		Title    string    `json:"title"`
-		Message  string    `json:"message"`
-		View     string    `json:"view"`
-		Since    time.Time `json:"since"`
+const (
+	testsPerMinute  = 6
+	maxTestSessions = 64 // sessions whose recent tests are remembered; beyond, the oldest are forgotten
+)
+
+// alertTests limits the tests sent by hand: one at a time per channel, testsPerMinute per session.
+type alertTests struct {
+	mu      sync.Mutex
+	running map[int64]bool
+	recent  map[string][]time.Time // by session (its CSRF token): when its tests of the last minute began
+}
+
+// start begins a test of channel id for session key at now, or says why it may not; done ends it.
+func (t *alertTests) start(id int64, key string, now time.Time) (done func(), err error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.running == nil {
+		t.running, t.recent = map[int64]bool{}, map[string][]time.Time{}
 	}
-	list := s.Alerts.Firing()
-	out := make([]firing, len(list))
-	for i, a := range list {
-		out[i] = firing{Key: a.Key, Rule: string(a.Rule), Severity: string(a.Severity), Title: a.Title,
-			Message: a.Message, View: a.View, Since: a.Since}
+	if t.running[id] {
+		return nil, errors.New("a test of this channel is under way")
 	}
-	writeJSON(w, http.StatusOK, out)
+	recent := slices.DeleteFunc(t.recent[key], func(at time.Time) bool { return now.Sub(at) >= time.Minute })
+	if len(recent) >= testsPerMinute {
+		return nil, fmt.Errorf("at most %d tests a minute; wait a moment", testsPerMinute)
+	}
+	if _, known := t.recent[key]; !known && len(t.recent) >= maxTestSessions {
+		for k, times := range t.recent {
+			if len(times) == 0 || now.Sub(times[len(times)-1]) >= time.Minute {
+				delete(t.recent, k)
+			}
+		}
+		if len(t.recent) >= maxTestSessions {
+			return nil, errors.New("too many tests at once; wait a moment")
+		}
+	}
+	t.recent[key] = append(recent, now)
+	t.running[id] = true
+	return func() {
+		t.mu.Lock()
+		delete(t.running, id)
+		t.mu.Unlock()
+	}, nil
 }
 
 // channelByID loads the channel named by the {id} path value, answering 404 or 500 itself when it cannot.

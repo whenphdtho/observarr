@@ -30,8 +30,9 @@ const (
 
 // events streams live state as Server-Sent Events: first a "snapshot" of every service and a "system" event with the
 // host and container figures, then a "service" or "removed" event per change, a "system" event per new sample (at
-// most one per systemEvery; a newer sample replaces one not sent yet), and a "ping" event now and then, so proxies
-// keep the connection open and the browser can tell a stalled stream from a quiet one. The first message also sets
+// most one per systemEvery; a newer sample replaces one not sent yet), an "attention" event with what needs
+// attention whenever that list changes (the first right after the snapshot), and a "ping" event now and then, so
+// proxies keep the connection open and the browser can tell a stalled stream from a quiet one. The first message also sets
 // the browser's reconnection delay, spread at random so that tabs do not all return at once after a restart. The
 // stream ends when the client leaves, when the server shuts down (the request context
 // ends), when its session is ended by another one's "sign out others", when the session is found gone at a ping
@@ -99,10 +100,19 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, sess store.Sessi
 		samples, stop = s.System.Subscribe()
 		defer stop()
 	}
+	var attention <-chan struct{} // nil without alerts: never ready
+	if s.Alerts != nil {
+		var stop func()
+		attention, stop = s.Alerts.WatchAttention()
+		defer stop()
+	}
 	var buf bytes.Buffer // holds one encoded event at a time, reused so that events cost no new buffer
 	retry := fmt.Appendf(nil, "retry: %d\n\n", retryBase.Milliseconds()+rand.Int64N(retryBase.Milliseconds()))
 	if !send(retry) || !send(s.event(&buf, "snapshot", s.Hub.Snapshot())) ||
 		!send(s.event(&buf, "system", s.systemSnapshot())) {
+		return
+	}
+	if s.Alerts != nil && !send(s.event(&buf, "attention", s.Alerts.Attention())) {
 		return
 	}
 	lastSample = time.Now()
@@ -131,6 +141,8 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, sess store.Sessi
 		case <-flush:
 			msg, lastSample = s.event(&buf, "system", *pending), time.Now()
 			pending, flush = nil, nil
+		case <-attention:
+			msg = s.event(&buf, "attention", s.Alerts.Attention())
 		case <-ping.C:
 			if _, err := s.Sessions.Lookup(r); err != nil {
 				return

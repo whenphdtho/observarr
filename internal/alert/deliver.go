@@ -1,6 +1,7 @@
 package alert
 
 import (
+	"context"
 	"fmt"
 	"math/rand/v2"
 	"strings"
@@ -31,9 +32,10 @@ type gate struct {
 	heldMore   int
 }
 
-// admit decides what becomes of m now: StatusQueued (send it), StatusHeld or StatusSuppressed.
+// admit decides what becomes of m now: StatusQueued (send it), StatusHeld or StatusSuppressed. In quiet hours only
+// a critical alert goes out; that something is over, critical or not, waits for the summary.
 func (g *gate) admit(now time.Time, r Rules, m Message) string {
-	if m.Severity != Critical && r.quietAt(now) {
+	if (m.Severity != Critical || m.Event == EventResolved) && r.quietAt(now) {
 		if len(g.held) < maxHeld {
 			g.held = append(g.held, m)
 		} else {
@@ -94,9 +96,10 @@ func (g *gate) due(now time.Time, r Rules) []Message {
 
 // worker delivers one channel's messages, one at a time, so a slow channel holds up nothing but itself.
 type worker struct {
-	id   int64
-	jobs chan job
-	stop chan struct{} // closed when the channel is removed or disabled
+	id     int64
+	jobs   chan job
+	ctx    context.Context // ends when the channel is removed or disabled, or the Service ends
+	cancel context.CancelFunc
 
 	// Guarded by the Service's lock.
 	name    string

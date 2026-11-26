@@ -202,3 +202,29 @@ func TestEntriesAreBounded(t *testing.T) {
 		t.Fatalf("sent %d, overflow %d; want %d and 10", len(got), st.e.Overflow, maxEntries)
 	}
 }
+
+// A figure that flaps across the critical line is sent once when it first crosses, not at every crossing; only a
+// severity worse than the one last sent goes out again, and a restart remembers which that was.
+func TestFlappingSeverityIsSentOnce(t *testing.T) {
+	st := newStepper(t)
+	c := Condition{Key: "disk//", Rule: RuleStorage, Severity: Warning, Scope: "host", Title: "Disk / nearly full"}
+	st.known["host"] = true
+	st.want(st.at(0, c))
+	st.want(st.at(5*time.Minute, c), "firing disk//")
+	for i := range 6 {
+		c.Severity = []Severity{Critical, Warning}[i%2]
+		want := []string(nil)
+		if i == 0 {
+			want = []string{"firing disk//"}
+		}
+		st.want(st.at(time.Duration(6+i)*time.Minute, c), want...)
+	}
+	if s := st.saved["disk//"]; s.NotifiedSeverity != Critical || s.Severity != Warning {
+		t.Fatalf("saved = %+v", s)
+	}
+
+	after := newStepper(t, st.saved["disk//"])
+	after.known["host"] = true
+	c.Severity = Critical
+	after.want(after.at(0, c))
+}

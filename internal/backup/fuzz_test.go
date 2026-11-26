@@ -67,3 +67,41 @@ func FuzzParse(f *testing.F) {
 		}
 	})
 }
+
+// FuzzSealOpen seals alert channels' secrets with the rest of a file and reads them back: whatever the channels
+// and secrets, the file parses and opens to exactly what was sealed. Each run derives the key twice, so it is slow.
+func FuzzSealOpen(f *testing.F) {
+	f.Add(int64(1), "ntfy", "Phone", []byte(`{"server":"https://ntfy.sh"}`), "topic", "alerts", "token", "tk_12345678")
+	f.Add(int64(-7), "webhook", "Höök  ", []byte(`null`), "url", "https://hook.example/x?t=1", "secret", "\x00\xff")
+	f.Fuzz(func(t *testing.T, id int64, typ, name string, settings []byte, k1, v1, k2, v2 string) {
+		if !json.Valid(settings) {
+			return
+		}
+		file := File{Format: Format, Version: Version, Services: []Service{}, Dismissed: []string{},
+			Alerts: &Alerts{Rules: json.RawMessage(`{}`), Channels: []Channel{{ID: id, Type: typ, Name: name,
+				Settings: settings, Secrets: []string{k1, k2}}}}}
+		keys := Keys{Services: map[int64]string{}, Channels: map[int64]map[string]string{id: {k1: v1, k2: v2}}}
+		if err := Seal(&file, keys, "a passphrase of some length"); err != nil {
+			t.Fatal(err)
+		}
+		raw, err := json.Marshal(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		parsed, err := Parse(raw)
+		if err != nil {
+			t.Fatalf("a sealed file does not parse: %v", err)
+		}
+		got, err := Open(parsed, "a passphrase of some length")
+		if err != nil {
+			t.Fatalf("a sealed file does not open: %v", err)
+		}
+		want, _ := json.Marshal(keys) // as JSON: invalid UTF-8 comes back replaced, both ways alike
+		if back, _ := json.Marshal(got); string(back) != string(want) {
+			t.Fatalf("opened %s, sealed %s", back, want)
+		}
+		if _, err := Open(parsed, "another passphrase of some length"); err != ErrPassphrase {
+			t.Fatalf("a wrong passphrase: %v", err)
+		}
+	})
+}

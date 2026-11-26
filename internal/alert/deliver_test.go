@@ -106,3 +106,27 @@ func TestRulesCheck(t *testing.T) {
 		t.Error("an unknown field was accepted")
 	}
 }
+
+// That an alert is over can wait: in quiet hours it is held for the summary, even a critical one.
+func TestQuietHoursHoldResolved(t *testing.T) {
+	r := DefaultRules()
+	r.Quiet = Quiet{On: true, From: "22:00", To: "07:00"}
+	night := time.Date(2026, 11, 26, 23, 30, 0, 0, time.Local)
+	var g gate
+	m := msg(Critical, "Sintel is down")
+	m.Event = EventResolved
+	if s := g.admit(night, r, m); s != StatusHeld {
+		t.Fatalf("a critical alert resolved at night: %s", s)
+	}
+	if s := g.admit(night.Add(9*time.Hour), r, m); s != StatusQueued {
+		t.Fatalf("resolved by day: %s", s)
+	}
+}
+
+func TestQuietHoursMustDiffer(t *testing.T) {
+	r := DefaultRules()
+	r.Quiet = Quiet{From: "22:00", To: "22:00"}
+	if err := r.Check(); err == nil {
+		t.Fatal("quiet hours from 22:00 to 22:00 were accepted")
+	}
+}

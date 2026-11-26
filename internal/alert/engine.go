@@ -36,18 +36,20 @@ type Note struct {
 // Saved is a firing alert as it is kept across restarts.
 type Saved struct {
 	Condition
-	Since    time.Time
-	Notified time.Time // zero: never sent
+	Since            time.Time
+	Notified         time.Time // zero: never sent
+	NotifiedSeverity Severity  // the severity it was last sent with
 }
 
 // entry is one followed condition: pending until it has lasted its debounce, then firing until it is gone.
 type entry struct {
 	Condition
-	since    time.Time // first seen
-	gone     time.Time // since when it is missing; zero while present
-	firing   bool
-	notified time.Time // last sent; zero when never
-	restored bool      // it was firing before this start
+	since       time.Time // first seen
+	gone        time.Time // since when it is missing; zero while present
+	firing      bool
+	notified    time.Time // last sent; zero when never
+	notifiedSev Severity  // the severity last sent: only a worse one is sent again before the repeat interval
+	restored    bool      // it was firing before this start
 }
 
 // Engine decides, from one evaluation to the next, which conditions are reported, repeated and over. It holds
@@ -65,7 +67,7 @@ func NewEngine(now time.Time, saved []Saved) *Engine {
 	for _, s := range saved {
 		if len(e.entries) < maxEntries {
 			e.entries[s.Key] = &entry{Condition: s.Condition, since: s.Since, firing: true, notified: s.Notified,
-				restored: true}
+				notifiedSev: cmp.Or(s.NotifiedSeverity, s.Severity), restored: true}
 		}
 	}
 	return e
@@ -87,18 +89,19 @@ func (e *Engine) Step(now time.Time, r Rules, conds []Condition, known map[strin
 			en = &entry{since: now}
 			e.entries[c.Key] = en
 		}
-		worse := en.firing && rank(c.Severity) < rank(en.Severity)
+		// Worse than what was sent last: a severity that flaps across a line is sent once per new worst.
+		worse := en.firing && rank(c.Severity) < rank(en.notifiedSev)
 		changed := en.Title != c.Title || en.Message != c.Message || en.Severity != c.Severity
 		en.Condition, en.gone = c, time.Time{}
 		switch {
 		case !en.firing && now.Sub(en.since) >= r.debounce(c.Rule):
-			en.firing, en.notified = true, now
+			en.firing, en.notified, en.notifiedSev = true, now, c.Severity
 			notes = append(notes, Note{Event: EventFiring, Condition: c, Since: en.since})
 		case worse:
-			en.notified = now
+			en.notified, en.notifiedSev = now, c.Severity
 			notes = append(notes, Note{Event: EventFiring, Condition: c, Since: en.since})
 		case en.firing && r.RepeatHours > 0 && now.Sub(en.notified) >= time.Duration(r.RepeatHours)*time.Hour:
-			en.notified = now
+			en.notified, en.notifiedSev = now, c.Severity
 			notes = append(notes, Note{Event: EventRepeat, Condition: c, Since: en.since})
 		case !changed || !en.firing:
 			continue
@@ -133,12 +136,14 @@ func (e *Engine) Step(now time.Time, r Rules, conds []Condition, known map[strin
 			del = append(del, key)
 		}
 	}
-	slices.SortFunc(notes, func(a, b Note) int { return cmp.Compare(rank(a.Severity), rank(b.Severity)) })
+	slices.SortStableFunc(notes, func(a, b Note) int {
+		return cmp.Or(cmp.Compare(rank(a.Severity), rank(b.Severity)), cmp.Compare(a.Key, b.Key))
+	})
 	return notes, put, del
 }
 
 func (en *entry) saved() Saved {
-	return Saved{Condition: en.Condition, Since: en.since, Notified: en.notified}
+	return Saved{Condition: en.Condition, Since: en.since, Notified: en.notified, NotifiedSeverity: en.notifiedSev}
 }
 
 // Firing returns the firing alerts, worst first, then oldest first.

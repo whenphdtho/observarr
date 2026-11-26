@@ -17,11 +17,13 @@ import (
 const maxImportChannels = 100
 
 // importedChannel is an alert channel a settings import adds, or would add.
+// Every imported channel starts switched off: a file, even one without encrypted keys, is never trusted to send
+// alerts anywhere until a test from this server got through.
 type importedChannel struct {
 	Type      string `json:"type"`
 	Name      string `json:"name"`
 	Secrets   string `json:"secrets"`             // "included"; "missing": to be entered again; "none"
-	Enabled   bool   `json:"enabled"`             // it sends at once: it was enabled and has what it needs
+	Note      string `json:"note"`                // what it takes to switch it on
 	NameTaken bool   `json:"nameTaken,omitempty"` // in a preview: a saved channel has this name, so "add" skips it
 }
 
@@ -74,8 +76,7 @@ type alertPlan struct {
 }
 
 // planAlerts checks the alerts of f. Channels of an unknown type are skipped; any other fault fails the file. A
-// channel keeps its secrets only when the file brought them, and is enabled only when it was and has every secret
-// it had.
+// channel keeps its secrets only when the file brought every one it lists, and is always imported switched off.
 func (s *Server) planAlerts(ctx context.Context, f backup.File, keys backup.Keys) (alertPlan, error) {
 	var p alertPlan
 	if f.Alerts == nil {
@@ -120,7 +121,8 @@ func (s *Server) planAlerts(ctx context.Context, f backup.File, keys backup.Keys
 	return p, nil
 }
 
-// planChannel checks one channel of a settings file with the secrets the file brought for it, if any.
+// planChannel checks one channel of a settings file with the secrets the file brought for it, if any: exactly the
+// secrets it lists, checked as they will be saved.
 func planChannel(c backup.Channel, sec alert.Secrets) (store.AlertChannel, alert.Secrets, importedChannel, error) {
 	name, err := channelName(c.Name)
 	if err != nil {
@@ -134,21 +136,35 @@ func planChannel(c backup.Channel, sec alert.Secrets) (store.AlertChannel, alert
 	if err != nil {
 		return store.AlertChannel{}, nil, importedChannel{}, fmt.Errorf("settings: %v", err)
 	}
-	out := importedChannel{Type: c.Type, Name: name, Secrets: "none"}
-	complete := true
-	for _, field := range c.Secrets {
+	for field := range sec {
+		if !slices.Contains(c.Secrets, field) {
+			return store.AlertChannel{}, nil, importedChannel{}, fmt.Errorf("the keys hold a %s the channel does not list", field)
+		}
+	}
+	listed := slices.Clone(c.Secrets)
+	if len(listed) == 0 {
+		sec = nil
+	}
+	// A file from before the ntfy topic became a secret has it among the settings, in plain text.
+	settings, sec, lifted := alert.LiftTopic(c.Type, settings, sec)
+	if lifted {
+		listed = append(listed, "topic")
+	}
+	complete := len(listed) > 0
+	for _, field := range listed {
 		if sec[field] == "" {
 			complete = false
 		}
 	}
+	out := importedChannel{Type: c.Type, Name: name, Secrets: "none", Note: "send a test to switch it on"}
 	switch {
-	case len(c.Secrets) == 0:
+	case len(listed) == 0:
 		settings, err = alert.CheckChannel(c.Type, settings, nil)
 	case complete:
 		out.Secrets = "included"
 		settings, err = alert.CheckChannel(c.Type, settings, sec)
 	default: // saved without its secrets, to be entered again
-		out.Secrets, sec = "missing", nil
+		out.Secrets, out.Note, sec = "missing", "enter its secrets again, then send a test to switch it on", nil
 		settings, err = alert.CheckSettings(c.Type, settings)
 	}
 	if err != nil {
@@ -158,9 +174,7 @@ func planChannel(c backup.Channel, sec alert.Secrets) (store.AlertChannel, alert
 	if err != nil {
 		return store.AlertChannel{}, nil, importedChannel{}, err
 	}
-	out.Enabled = c.Enabled && complete
-	return store.AlertChannel{Type: c.Type, Name: name, Settings: body, Rules: rules, Enabled: out.Enabled,
-		Tested: out.Enabled}, sec, out, nil
+	return store.AlertChannel{Type: c.Type, Name: name, Settings: body, Rules: rules}, sec, out, nil
 }
 
 // apply returns what store.ImportServices imports of p, leaving out the channels whose names are taken unless

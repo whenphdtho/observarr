@@ -38,11 +38,29 @@ type Service struct {
 	ctx  context.Context // the Service's lifetime, from Start
 	runs sync.WaitGroup  // the evaluation loop and the workers
 
-	mu      sync.Mutex // guards the fields below and the workers' guarded fields
-	rules   Rules
-	engine  *Engine
-	workers map[int64]*worker
-	overrun int // Engine.Overflow last logged
+	mu        sync.Mutex // guards the fields below and the workers' guarded fields
+	rules     Rules
+	engine    *Engine
+	workers   map[int64]*worker
+	overrun   int    // Engine.Overflow last logged
+	attention []Item // what needs attention now, from the latest evaluation; nil before the first
+	watchers  map[chan struct{}]bool
+}
+
+// Item is one thing that needs attention now, as the UI lists it: every condition of every rule, before any
+// debounce, whether its alert is switched on or not. Firing tells whether it is an alert firing now; Since is when
+// the condition began.
+type Item struct {
+	Key      string    `json:"key"`
+	Rule     Rule      `json:"rule"`
+	Severity Severity  `json:"severity"`
+	Service  int64     `json:"service,omitempty"`
+	Name     string    `json:"name"`
+	Title    string    `json:"title"`
+	Message  string    `json:"message"`
+	View     string    `json:"view"`
+	Firing   bool      `json:"firing"`
+	Since    time.Time `json:"since"`
 }
 
 // New returns a Service; Start starts it.
@@ -56,7 +74,13 @@ func New(cfg Config) *Service {
 	if cfg.Backoff == 0 {
 		cfg.Backoff = 2 * time.Second
 	}
-	return &Service{cfg: cfg, rules: DefaultRules(), workers: map[int64]*worker{}}
+	return &Service{cfg: cfg, rules: DefaultRules(), workers: map[int64]*worker{}, watchers: map[chan struct{}]bool{}}
+}
+
+// savedBody is how a firing alert is kept in the store: its condition and the severity it was last sent with.
+type savedBody struct {
+	Condition
+	NotifiedSeverity Severity `json:"notifiedSeverity,omitempty"`
 }
 
 // Start loads the rules, the alerts that were firing before and the channels, then evaluates until ctx ends.
@@ -68,12 +92,16 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 	saved := make([]Saved, 0, len(rows))
 	for _, row := range rows {
-		a := Saved{Since: row.Since, Notified: row.Notified}
-		if json.Unmarshal(row.Body, &a.Condition) == nil && a.Key == row.Key {
-			saved = append(saved, a)
+		var b savedBody
+		if json.Unmarshal(row.Body, &b) == nil && b.Key == row.Key {
+			saved = append(saved, Saved{Condition: b.Condition, Since: row.Since, Notified: row.Notified,
+				NotifiedSeverity: cmp.Or(b.NotifiedSeverity, b.Severity)})
 		}
 	}
 	s.engine = NewEngine(s.cfg.Now(), saved)
+	if err := s.liftTopics(ctx); err != nil {
+		return err
+	}
 	if err := s.Reload(ctx); err != nil {
 		return err
 	}
@@ -83,6 +111,39 @@ func (s *Service) Start(ctx context.Context) error {
 
 // Wait waits until the Service has stopped after its context ended: no delivery is under way any more.
 func (s *Service) Wait() { s.runs.Wait() }
+
+// liftTopics keeps the topic of ntfy channels saved before it became a secret among their secrets.
+func (s *Service) liftTopics(ctx context.Context) error {
+	chans, err := s.cfg.Store.AlertChannels(ctx)
+	if err != nil {
+		return err
+	}
+	for _, ch := range chans {
+		settings, err := ParseSettings(ch.Settings)
+		if err != nil {
+			continue
+		}
+		sec, err := OpenSecrets(s.cfg.Box, ch.ID, ch.Secrets)
+		if err != nil {
+			continue // its secrets must be entered again anyway, the topic with them
+		}
+		settings, sec, lifted := LiftTopic(ch.Type, settings, sec)
+		if !lifted {
+			continue
+		}
+		next := ch
+		if next.Settings, err = json.Marshal(settings); err != nil {
+			return err
+		}
+		if next.Secrets, err = SealSecrets(s.cfg.Box, ch.ID, sec); err != nil {
+			return err
+		}
+		if err := s.cfg.Store.UpdateAlertChannel(ctx, next, ch); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 func (s *Service) loop(ctx context.Context) {
 	tick := time.NewTicker(s.cfg.Every)
@@ -123,11 +184,14 @@ func (s *Service) evaluate(ctx context.Context) {
 
 	s.mu.Lock()
 	r := s.rules
-	conds, known := Evaluate(in, r)
+	// Every rule is evaluated for the attention list; the engine gets the ones switched on.
+	all, known := Evaluate(in, r.everyRule())
+	conds := slices.DeleteFunc(slices.Clone(all), func(c Condition) bool { return !r.on(c.Rule) })
 	notes, put, del := s.engine.Step(now, r, conds, known, services)
 	overflow := s.engine.Overflow
 	logged := s.overrun
 	s.overrun = overflow
+	s.setAttention(all)
 	s.mu.Unlock()
 	if overflow > logged {
 		s.cfg.Log.Warn("too many alert conditions at once; some are ignored", "ignored", overflow-logged)
@@ -143,10 +207,57 @@ func (s *Service) evaluate(ctx context.Context) {
 	s.flush(ctx, now)
 }
 
+// setAttention keeps the attention list of conds, worst first, and tells the watchers when it changed. Callers
+// hold s.mu.
+func (s *Service) setAttention(conds []Condition) {
+	firing := map[string]Saved{}
+	for _, a := range s.engine.Firing() {
+		firing[a.Key] = a
+	}
+	items := make([]Item, len(conds))
+	for i, c := range conds {
+		f, ok := firing[c.Key]
+		items[i] = Item{Key: c.Key, Rule: c.Rule, Severity: c.Severity, Service: c.Service, Name: c.Name,
+			Title: c.Title, Message: c.Message, View: c.View, Firing: ok, Since: f.Since}
+	}
+	slices.SortStableFunc(items, func(a, b Item) int { return cmp.Compare(rank(a.Severity), rank(b.Severity)) })
+	if s.attention != nil && slices.Equal(items, s.attention) {
+		return
+	}
+	s.attention = items
+	for ch := range s.watchers {
+		select {
+		case ch <- struct{}{}:
+		default: // a signal is waiting already
+		}
+	}
+}
+
+// Attention returns what needs attention now, worst first; nil until the first evaluation, when nothing is known.
+func (s *Service) Attention() []Item {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.attention
+}
+
+// WatchAttention returns a channel that holds a signal when the attention list changed since it was last
+// received, and a function that stops the watch.
+func (s *Service) WatchAttention() (<-chan struct{}, func()) {
+	ch := make(chan struct{}, 1)
+	s.mu.Lock()
+	s.watchers[ch] = true
+	s.mu.Unlock()
+	return ch, func() {
+		s.mu.Lock()
+		delete(s.watchers, ch)
+		s.mu.Unlock()
+	}
+}
+
 func (s *Service) save(ctx context.Context, put []Saved, del []string) error {
 	rows := make([]store.AlertState, 0, len(put))
 	for _, a := range put {
-		body, err := json.Marshal(a.Condition)
+		body, err := json.Marshal(savedBody{Condition: a.Condition, NotifiedSeverity: a.NotifiedSeverity})
 		if err != nil {
 			return err
 		}
@@ -213,6 +324,10 @@ func (s *Service) enqueue(ctx context.Context, entry store.AlertLogEntry, m Mess
 		s.cfg.Log.Warn("writing the alert log failed", "err", err)
 	}
 	for _, w := range queued {
+		if w.ctx.Err() != nil {
+			s.setDelivery(w, id, StatusDropped, 0, s.stopped())
+			continue
+		}
 		select {
 		case w.jobs <- job{logID: id, m: m}:
 		default:
@@ -226,18 +341,35 @@ func (s *Service) sortedWorkers() []*worker {
 	return slices.SortedFunc(maps.Values(s.workers), func(a, b *worker) int { return cmp.Compare(a.id, b.id) })
 }
 
-// work delivers w's messages until w is stopped or the Service ends.
+// work delivers w's messages until w is stopped or the Service ends; what is still queued then is dropped.
 func (s *Service) work(w *worker) {
 	for {
 		select {
-		case <-s.ctx.Done():
-			return
-		case <-w.stop:
-			return
+		case <-w.ctx.Done():
+			for {
+				select {
+				case j := <-w.jobs:
+					s.setDelivery(w, j.logID, StatusDropped, 0, s.stopped())
+				default:
+					return
+				}
+			}
 		case j := <-w.jobs:
+			if w.ctx.Err() != nil {
+				s.setDelivery(w, j.logID, StatusDropped, 0, s.stopped())
+				continue
+			}
 			s.deliver(w, j)
 		}
 	}
+}
+
+// stopped says why a worker stopped: Observarr stops, or its channel was switched off or removed.
+func (s *Service) stopped() string {
+	if s.ctx.Err() != nil {
+		return "Observarr stopped before it was sent"
+	}
+	return "the channel was switched off or removed"
 }
 
 // deliver sends one message, trying again with back-off when that may help, and records what became of it.
@@ -248,7 +380,7 @@ func (s *Service) deliver(w *worker, j job) {
 	var err error
 	n := 1
 	for ; ; n++ {
-		ctx, cancel := context.WithTimeout(s.ctx, sendTimeout)
+		ctx, cancel := context.WithTimeout(w.ctx, sendTimeout)
 		err = sender.Send(ctx, j.m)
 		cancel()
 		if err == nil || permanent(err) || n == attempts {
@@ -256,12 +388,15 @@ func (s *Service) deliver(w *worker, j job) {
 		}
 		select {
 		case <-time.After(backoff(s.cfg.Backoff, n)):
-		case <-s.ctx.Done():
-		case <-w.stop:
+		case <-w.ctx.Done():
 		}
-		if s.ctx.Err() != nil || isClosed(w.stop) {
+		if w.ctx.Err() != nil {
 			break
 		}
+	}
+	if err != nil && w.ctx.Err() != nil { // cut short: not the channel's fault
+		s.setDelivery(w, j.logID, StatusDropped, n, s.stopped())
+		return
 	}
 	status := StatusSent
 	if err != nil {
@@ -274,30 +409,26 @@ func (s *Service) deliver(w *worker, j job) {
 	s.record(w, j.logID, status, n, note, err == nil)
 }
 
-func isClosed(ch <-chan struct{}) bool {
-	select {
-	case <-ch:
-		return true
-	default:
-		return false
+// record writes what became of log entry logID on w's channel, and the channel's latest result.
+func (s *Service) record(w *worker, logID int64, status string, n int, note string, ok bool) {
+	s.setDelivery(w, logID, status, n, note)
+	if err := s.cfg.Store.SetAlertChannelResult(context.WithoutCancel(s.ctx), w.id, s.cfg.Now(), ok, note, false,
+		nil, nil); err != nil {
+		s.cfg.Log.Warn("writing the channel's result failed", "err", err)
 	}
 }
 
-// record writes what became of log entry logID on w's channel, and the channel's latest result.
-func (s *Service) record(w *worker, logID int64, status string, n int, note string, ok bool) {
-	ctx := context.WithoutCancel(s.ctx)
-	now := s.cfg.Now()
+// setDelivery writes what became of log entry logID on w's channel.
+func (s *Service) setDelivery(w *worker, logID int64, status string, n int, note string) {
+	if logID == 0 {
+		return
+	}
 	s.mu.Lock()
 	name := w.name
 	s.mu.Unlock()
-	if logID != 0 {
-		if err := s.cfg.Store.SetAlertDelivery(ctx, logID, store.AlertDelivery{ChannelID: w.id, Channel: name,
-			Status: status, Attempts: n, Note: note, At: now}); err != nil {
-			s.cfg.Log.Warn("writing the alert log failed", "err", err)
-		}
-	}
-	if err := s.cfg.Store.SetAlertChannelResult(ctx, w.id, now, ok, note, false, nil, nil); err != nil {
-		s.cfg.Log.Warn("writing the channel's result failed", "err", err)
+	if err := s.cfg.Store.SetAlertDelivery(context.WithoutCancel(s.ctx), logID, store.AlertDelivery{ChannelID: w.id,
+		Channel: name, Status: status, Attempts: n, Note: note, At: s.cfg.Now()}); err != nil {
+		s.cfg.Log.Warn("writing the alert log failed", "err", err)
 	}
 }
 
@@ -345,7 +476,8 @@ func (s *Service) Reload(ctx context.Context) error {
 		keep[a.ch.ID] = true
 		w, ok := s.workers[a.ch.ID]
 		if !ok {
-			w = &worker{id: a.ch.ID, jobs: make(chan job, queueSize), stop: make(chan struct{})}
+			w = &worker{id: a.ch.ID, jobs: make(chan job, queueSize)}
+			w.ctx, w.cancel = context.WithCancel(s.ctx)
 			s.workers[a.ch.ID] = w
 			s.runs.Go(func() { s.work(w) })
 		}
@@ -357,7 +489,7 @@ func (s *Service) Reload(ctx context.Context) error {
 	}
 	for id, w := range s.workers {
 		if !keep[id] {
-			close(w.stop)
+			w.cancel()
 			delete(s.workers, id)
 		}
 	}
@@ -430,14 +562,4 @@ func (s *Service) SetRules(ctx context.Context, r Rules) error {
 	s.rules = r
 	s.mu.Unlock()
 	return nil
-}
-
-// Firing returns the alerts firing now, worst first.
-func (s *Service) Firing() []Saved {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.engine == nil {
-		return []Saved{}
-	}
-	return s.engine.Firing()
 }

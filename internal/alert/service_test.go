@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -212,7 +213,7 @@ func TestRestartDoesNotSendAgain(t *testing.T) {
 	if r.count() != 2 {
 		t.Fatalf("%d messages after the restart, want none new", r.count()-2)
 	}
-	if f := e.alert.Firing(); len(f) != 2 || !f[0].Since.Equal(t0) {
+	if f := e.alert.Attention(); len(f) != 2 || !f[0].Firing || !f[1].Firing || !f[0].Since.Equal(t0) {
 		t.Fatalf("firing = %+v", f)
 	}
 }
@@ -261,5 +262,101 @@ func TestTestMarksTheChannelTested(t *testing.T) {
 	}
 	if ch, _ := e.st.AlertChannelByID(context.Background(), id); !ch.Tested {
 		t.Fatal("a passed test did not mark the channel tested")
+	}
+}
+
+// The attention list holds every rule's conditions at once, before any debounce, and says which of them fire.
+func TestAttentionListsEveryRule(t *testing.T) {
+	e := newEnv(t)
+	rules := quick()
+	rules.Enabled[RuleHealth] = false
+	e.start(rules)
+	if e.alert.Attention() != nil {
+		t.Fatal("an attention list before the first evaluation")
+	}
+	watch, stop := e.alert.WatchAttention()
+	defer stop()
+	e.down(1)
+	e.hub.Record(2, shape.KindHealth, shape.Reading{Data: shape.Health{Warnings: []shape.Warning{
+		{Level: shape.LevelError, Message: "cache out of space"}, {Level: shape.LevelWarning, Message: "slow disk"}}}})
+	e.alert.evaluate(context.Background())
+	select {
+	case <-watch:
+	default:
+		t.Fatal("no signal after the list changed")
+	}
+	got := e.alert.Attention()
+	if len(got) != 3 || got[0].Severity != Critical || got[2].Severity != Warning {
+		t.Fatalf("attention = %+v", got)
+	}
+	for _, it := range got {
+		if it.Firing != (it.Rule == RuleDown) || it.Service == 0 || it.View == "" {
+			t.Errorf("item = %+v", it)
+		}
+	}
+	e.alert.evaluate(context.Background())
+	select {
+	case <-watch:
+		t.Fatal("a signal although nothing changed")
+	default:
+	}
+}
+
+// Messages still queued for a channel that is switched off are recorded as dropped, not left queued.
+func TestQueuedMessagesAreDroppedWhenTheChannelGoes(t *testing.T) {
+	e := newEnv(t)
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(release) })
+	id := e.channel(srv.URL)
+	e.start(quick())
+	e.down(1)
+	e.down(2)
+	e.alert.evaluate(context.Background())
+	ch, _ := e.st.AlertChannelByID(context.Background(), id)
+	off := ch
+	off.Enabled = false
+	if err := e.st.UpdateAlertChannel(context.Background(), off, ch); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.alert.Reload(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "the queued message is dropped", func() bool {
+		for _, l := range e.log() {
+			if l.Deliveries[0].Status == StatusDropped {
+				return true
+			}
+		}
+		return false
+	})
+	for _, l := range e.log() {
+		if d := l.Deliveries[0]; d.Status == StatusQueued {
+			t.Fatalf("still queued: %+v", l)
+		}
+	}
+}
+
+// An ntfy channel saved with its topic among the settings has it among the secrets after a start.
+func TestTopicMovesIntoTheSecrets(t *testing.T) {
+	e := newEnv(t)
+	ch, err := e.st.CreateAlertChannel(context.Background(), store.AlertChannel{Type: "ntfy", Name: "Phone",
+		Settings: []byte(`{"server":"https://ntfy.sh","topic":"old-topic"}`), Rules: []string{"down"}, Enabled: true,
+		Tested: true}, func(id int64) ([]byte, error) { return SealSecrets(e.box, id, Secrets{"token": "tk_12345678"}) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.start(quick())
+	got, _ := e.st.AlertChannelByID(context.Background(), ch.ID)
+	sec, err := OpenSecrets(e.box, ch.ID, got.Secrets)
+	if err != nil || strings.Contains(string(got.Settings), "old-topic") || sec["topic"] != "old-topic" ||
+		sec["token"] != "tk_12345678" || !got.Enabled {
+		t.Fatalf("channel = %s %v (%v)", got.Settings, sec, err)
 	}
 }

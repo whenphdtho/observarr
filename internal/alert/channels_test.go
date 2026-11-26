@@ -74,7 +74,7 @@ func sender(t *testing.T, typ string, s Settings, sec Secrets) Sender {
 
 func TestNtfyPayload(t *testing.T) {
 	r := newReceiver(t)
-	s := sender(t, "ntfy", Settings{Server: r.URL + "/", Topic: "observarr-alerts"}, Secrets{"token": "tk_abc123"})
+	s := sender(t, "ntfy", Settings{Server: r.URL + "/"}, Secrets{"topic": "observarr-alerts", "token": "tk_abc123"})
 	if err := s.Send(context.Background(), sample); err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestDiscordPayload(t *testing.T) {
 
 func TestWebhookPayloadAndSignature(t *testing.T) {
 	r := newReceiver(t)
-	s := sender(t, "webhook", Settings{}, Secrets{"url": r.URL + "/hook?token=abc", "secret": "hmac-secret"})
+	s := sender(t, "webhook", Settings{}, Secrets{"url": r.URL + "/hook?token=abc", "secret": "hmac-secret-0123456"})
 	if err := s.Send(context.Background(), sample); err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +131,7 @@ func TestWebhookPayloadAndSignature(t *testing.T) {
 	r.mu.Lock()
 	raw := r.bodies[0]
 	r.mu.Unlock()
-	mac := hmac.New(sha256.New, []byte("hmac-secret"))
+	mac := hmac.New(sha256.New, []byte("hmac-secret-0123456"))
 	mac.Write(raw)
 	if got := req.Header.Get(SignatureHeader); got != "sha256="+hex.EncodeToString(mac.Sum(nil)) {
 		t.Fatalf("signature = %q", got)
@@ -196,7 +196,7 @@ func TestRedirectsAreNotFollowed(t *testing.T) {
 		http.Redirect(w, r, elsewhere.URL+"/stolen", http.StatusTemporaryRedirect)
 	}))
 	t.Cleanup(redirect.Close)
-	s := sender(t, "webhook", Settings{}, Secrets{"url": redirect.URL, "secret": "s3cret"})
+	s := sender(t, "webhook", Settings{}, Secrets{"url": redirect.URL, "secret": "s3cret-s3cret-s3cret"})
 	err := s.Send(context.Background(), sample)
 	if err == nil || !permanent(err) || elsewhere.count() != 0 {
 		t.Fatalf("Send = %v, followed: %v", err, elsewhere.count() != 0)
@@ -236,8 +236,11 @@ func TestCheckChannel(t *testing.T) {
 		s   Settings
 		sec Secrets
 	}{
-		{"ntfy", Settings{Topic: "alerts"}, nil},
-		{"gotify", Settings{Server: "http://192.168.1.5:8080"}, Secrets{"token": "abc"}},
+		{"ntfy", Settings{}, Secrets{"topic": "alerts"}},
+		{"gotify", Settings{Server: "http://192.168.1.5:8080"}, Secrets{"token": "abcdefgh"}},
+		{"webhook", Settings{}, Secrets{"url": "https://hook.example/x", "secret": "0123456789abcdef"}},
+		{"email", Settings{Host: "mail.example.com", Security: "tls", Username: "alex", From: "o@example.com",
+			To: "alex@example.com", Helo: "observarr.example.com"}, Secrets{"password": "12345678"}},
 		{"email", Settings{Host: "mail.example.com", Security: "starttls", From: "Observarr <o@example.com>",
 			To: "alex@example.com, sam@example.com"}, nil},
 	}
@@ -246,10 +249,10 @@ func TestCheckChannel(t *testing.T) {
 			t.Errorf("%s: %v", c.typ, err)
 		}
 	}
-	if s, _ := CheckChannel("ntfy", Settings{Topic: "a"}, nil); s.Server != "https://ntfy.sh" {
+	if s, _ := CheckChannel("ntfy", Settings{}, Secrets{"topic": "a"}); s.Server != "https://ntfy.sh" {
 		t.Errorf("ntfy default server = %q", s.Server)
 	}
-	if s, _ := CheckChannel("email", good[2].s, nil); s.Port != 587 || s.To != "alex@example.com, sam@example.com" {
+	if s, _ := CheckChannel("email", good[len(good)-1].s, nil); s.Port != 587 || s.To != "alex@example.com, sam@example.com" {
 		t.Errorf("email = %+v", s)
 	}
 	bad := map[string]struct {
@@ -258,10 +261,19 @@ func TestCheckChannel(t *testing.T) {
 		sec Secrets
 	}{
 		"unknown type":      {"pager", Settings{}, nil},
-		"setting of other":  {"ntfy", Settings{Topic: "a", Host: "x"}, nil},
-		"unknown secret":    {"ntfy", Settings{Topic: "a"}, Secrets{"password": "x"}},
-		"topic":             {"ntfy", Settings{Topic: "a b"}, nil},
-		"server user":       {"ntfy", Settings{Server: "https://u:p@ntfy.example", Topic: "a"}, nil},
+		"setting of other":  {"ntfy", Settings{Host: "x"}, Secrets{"topic": "a"}},
+		"topic as setting":  {"ntfy", Settings{Topic: "a"}, nil},
+		"no topic":          {"ntfy", Settings{}, nil},
+		"unknown secret":    {"ntfy", Settings{}, Secrets{"topic": "a", "password": "x"}},
+		"topic":             {"ntfy", Settings{}, Secrets{"topic": "a b"}},
+		"server user":       {"ntfy", Settings{Server: "https://u:p@ntfy.example"}, Secrets{"topic": "a"}},
+		"short token":       {"ntfy", Settings{}, Secrets{"topic": "a", "token": "1234567"}},
+		"short gotify":      {"gotify", Settings{Server: "http://g"}, Secrets{"token": "abc"}},
+		"short password":    {"email", Settings{Host: "m", Security: "tls", Username: "u", From: "a@b", To: "c@d"}, Secrets{"password": "1234567"}},
+		"short hmac":        {"webhook", Settings{}, Secrets{"url": "https://hook.example/x", "secret": "0123456789abcde"}},
+		"quoted from":       {"email", Settings{Host: "m", Security: "tls", From: `"a b"@example.com`, To: "c@d"}, nil},
+		"quoted to":         {"email", Settings{Host: "m", Security: "tls", From: "a@b", To: `"c d"@example.com`}, nil},
+		"helo":              {"email", Settings{Host: "m", Security: "tls", From: "a@b", To: "c@d", Helo: "a b"}, nil},
 		"server scheme":     {"gotify", Settings{Server: "ftp://g"}, Secrets{"token": "a"}},
 		"missing secret":    {"gotify", Settings{Server: "http://g"}, nil},
 		"webhook userinfo":  {"webhook", Settings{}, Secrets{"url": "https://u:p@hook.example/x"}},
@@ -270,7 +282,7 @@ func TestCheckChannel(t *testing.T) {
 		"plain email":       {"email", Settings{Host: "m", Security: "none", From: "a@b", To: "c@d"}, nil},
 		"user without pass": {"email", Settings{Host: "m", Security: "tls", Username: "u", From: "a@b", To: "c@d"}, nil},
 		"header injection":  {"email", Settings{Host: "m", Security: "tls", From: "a@b\r\nBcc: x@y", To: "c@d"}, nil},
-		"control in secret": {"ntfy", Settings{Topic: "a"}, Secrets{"token": "a\nb"}},
+		"control in secret": {"ntfy", Settings{}, Secrets{"topic": "a", "token": "abcdefgh\nb"}},
 	}
 	for name, c := range bad {
 		if _, err := CheckChannel(c.typ, c.s, c.sec); err == nil {
@@ -326,5 +338,46 @@ func TestHostileReceiverEndsInTime(t *testing.T) {
 				t.Fatalf("note = %q", note)
 			}
 		})
+	}
+}
+
+// Discord shows text an app reports as it is: nothing in it formats, links or quotes.
+func TestDiscordEscapesMarkdown(t *testing.T) {
+	r := newReceiver(t)
+	tls := httptest.NewTLSServer(r.Config.Handler)
+	t.Cleanup(tls.Close)
+	sec := Secrets{"url": tls.URL + "/api/webhooks/1/secret-token"}
+	snd := NewSender("discord", Settings{}, sec, Deps{HTTP: tls.Client()})
+	m := sample
+	m.Title = "# [click](https://evil.example) **now**"
+	m.Text = "> `rm` ~~x~~ ||spoiler|| _a_ \\ done"
+	if err := snd.Send(context.Background(), m); err != nil {
+		t.Fatal(err)
+	}
+	_, body := r.last(t)
+	embed := body["embeds"].([]any)[0].(map[string]any)
+	if got := embed["title"]; got != `\# \[click\]\(https://evil.example\) \*\*now\*\*` {
+		t.Errorf("title = %q", got)
+	}
+	if got := embed["description"]; got != "\\> \\`rm\\` \\~\\~x\\~\\~ \\|\\|spoiler\\|\\| \\_a\\_ \\\\ done" {
+		t.Errorf("description = %q", got)
+	}
+}
+
+// The ntfy topic is a secret: it never shows in where a channel sends, and a topic saved among the settings, as
+// before, moves into the secrets.
+func TestNtfyTopicIsSecret(t *testing.T) {
+	if got := Target("ntfy", Settings{Server: "https://ntfy.sh"}, Secrets{"topic": "my-secret-topic"}); strings.Contains(got, "my-secret-topic") {
+		t.Fatalf("target = %q", got)
+	}
+	s, sec, lifted := LiftTopic("ntfy", Settings{Server: "https://ntfy.sh", Topic: "old-topic"}, Secrets{"token": "tk_12345678"})
+	if !lifted || s.Topic != "" || sec["topic"] != "old-topic" || sec["token"] != "tk_12345678" {
+		t.Fatalf("lifted = %v %+v %v", lifted, s, sec)
+	}
+	if _, err := CheckChannel("ntfy", s, sec); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, lifted := LiftTopic("gotify", Settings{Topic: "x"}, nil); lifted {
+		t.Fatal("lifted a topic of another type")
 	}
 }

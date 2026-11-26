@@ -46,12 +46,11 @@ type SecurityState struct {
 	ServerLocked time.Duration // how long the server-wide limit still refuses new addresses
 }
 
-// Evaluate lists every condition of the enabled rules, and the scopes that were read. It mirrors the "Needs
-// attention" list of the UI (attention in web/src/lib/status.js and mountAttention in storage.js) and adds what
-// only alerts need: thresholds, traffic and sign-ins. The UI keeps its own list, worked out from the live data it
-// already holds the moment it changes and filtered by its search; alerts wait out blips first (see Rules.debounce).
+// Evaluate lists every condition of the enabled rules, and the scopes that were read. Its conditions of every rule
+// are also the UI's "Needs attention" list (see Service.Attention); alerts wait out blips first (see
+// Rules.debounce). Each condition's key is unique in the list.
 func Evaluate(in Input, r Rules) (conds []Condition, known map[string]bool) {
-	e := evaluation{rules: r, known: map[string]bool{}}
+	e := evaluation{rules: r, known: map[string]bool{}, keys: map[string]bool{}}
 	for i := range in.Services {
 		e.service(&in.Services[i])
 	}
@@ -68,9 +67,15 @@ type evaluation struct {
 	rules Rules
 	out   []Condition
 	known map[string]bool
+	keys  map[string]bool // every key given out, so that two alike conditions (two equal titles) stay two
 }
 
 func (e *evaluation) add(c Condition) {
+	k := c.Key
+	for n := 1; e.keys[k]; n++ {
+		k = c.Key + "#" + strconv.Itoa(n)
+	}
+	e.keys[k], c.Key = true, k
 	if e.rules.on(c.Rule) {
 		e.out = append(e.out, c)
 	}
@@ -128,7 +133,9 @@ func (e *evaluation) service(svc *state.ServiceState) {
 			if w.Source != "" {
 				msg = w.Source + ": " + w.Message
 			}
-			e.add(Condition{Key: "health/" + strconv.FormatInt(id, 10) + "/" + digest(w.Source, w.Message),
+			// The key names the warning by where it comes from, not by its text: a figure in it that changes is
+			// still the same problem, sent once.
+			e.add(Condition{Key: "health/" + strconv.FormatInt(id, 10) + "/" + digest(w.Source) + "/" + string(w.Level),
 				Rule: RuleHealth, Severity: sev, Scope: scope(id, "health"), Service: id, Name: svc.Name,
 				Title: svc.Name + " reports a problem", Message: msg, View: view})
 		}

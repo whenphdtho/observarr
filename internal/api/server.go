@@ -60,6 +60,8 @@ type Server struct {
 	failMu   sync.Mutex
 	failures map[failKey]failCount // the failures each group's latest audit row counts
 
+	alertTests alertTests // the alert channel tests under way and sent lately
+
 	proxyMu     sync.Mutex
 	proxyLogins map[string]time.Time // when each proxy-asserted user's login was last audited
 
@@ -105,7 +107,6 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/system/history", s.requireSession(s.systemHistory))
 	mux.Handle("GET /api/network", s.requireSession(s.network))
 	mux.Handle("GET /api/security", s.requireSession(s.security))
-	mux.Handle("GET /api/security/lock", s.requireSession(s.securityLock))
 	mux.Handle("POST /api/security/sign-out-others", s.requireSession(s.signOutOthers))
 	mux.Handle("GET /api/discovery", s.requireSession(s.discoveryState))
 	mux.Handle("GET /api/discovery/local", s.requireSession(s.discoverLocal))
@@ -123,7 +124,6 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle("GET /api/alerts/rules", s.requireSession(s.alertRules))
 		mux.Handle("PUT /api/alerts/rules", s.requireSession(s.setAlertRules))
 		mux.Handle("GET /api/alerts/log", s.requireSession(s.alertLog))
-		mux.Handle("GET /api/alerts/firing", s.requireSession(s.alertsFiring))
 	}
 	// Any other API request, including a wrong method on a known path, is a 404: simpler than 405 with Allow.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {

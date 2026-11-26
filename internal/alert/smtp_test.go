@@ -5,9 +5,11 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"mime"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/mail"
 	"net/textproto"
 	"strconv"
 	"strings"
@@ -183,5 +185,52 @@ func TestEmailDialRefusesMetadataAddresses(t *testing.T) {
 	err := NewSender("email", s, nil, d).Send(context.Background(), sample)
 	if !adapter.IsRefusedAddress(err) {
 		t.Fatalf("Send = %v, want refused", err)
+	}
+}
+
+// The server is greeted with the name set, else the From address's domain, never "localhost".
+func TestEmailGreetsWithAName(t *testing.T) {
+	f, d, s := newFakeSMTP(t, true, false)
+	sec := Secrets{"password": "mail-password"}
+	if err := NewSender("email", s, sec, d).Send(context.Background(), sample); err != nil {
+		t.Fatal(err)
+	}
+	if cmds, _ := f.received(); cmds[0] != "false EHLO example.com" {
+		t.Fatalf("greeting = %q", cmds[0])
+	}
+	s.Helo = "observarr.example.net"
+	if err := NewSender("email", s, sec, d).Send(context.Background(), sample); err != nil {
+		t.Fatal(err)
+	}
+	if cmds, _ := f.received(); !strings.Contains(strings.Join(cmds, "\n"), "false EHLO observarr.example.net") {
+		t.Fatalf("greeting = %q", cmds)
+	}
+}
+
+// A title that holds a line break cannot add a header, and a long subject is folded into lines that fit.
+func TestMailHeadersHoldOnlyWhatTheyShould(t *testing.T) {
+	m := sample
+	m.Title = "Sintel\r\nBcc: someone@example.net\r\n\r\nis down " + strings.Repeat("ünïcödé ", 30)
+	raw, err := composeMail("Observarr <o@example.com>", "alex@example.com", m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	head, _, _ := strings.Cut(string(raw), "\r\n\r\n")
+	for line := range strings.SplitSeq(head, "\r\n") {
+		if len(line) > 78 {
+			t.Errorf("header line of %d characters: %q", len(line), line)
+		}
+		if strings.HasPrefix(strings.ToLower(line), "bcc:") {
+			t.Errorf("a title added a header: %q", line)
+		}
+	}
+	msg, err := mail.ReadMessage(strings.NewReader(string(raw)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	subject, err := new(mime.WordDecoder).DecodeHeader(msg.Header.Get("Subject"))
+	if err != nil || !strings.HasPrefix(subject, "[Observarr] Sintel Bcc: someone@example.net is down ünïcödé") ||
+		len(msg.Header["Bcc"]) != 0 {
+		t.Fatalf("subject = %q (%v), header = %v", subject, err, msg.Header)
 	}
 }

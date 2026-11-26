@@ -153,13 +153,6 @@ func (s *Server) security(w http.ResponseWriter, r *http.Request, _ store.Sessio
 	writeJSON(w, http.StatusOK, v)
 }
 
-// securityLock is the one figure of GET /api/security the Overview shows: how long the server-wide sign-in limit
-// still refuses new addresses. It reads only memory, so it can be asked often.
-func (s *Server) securityLock(w http.ResponseWriter, _ *http.Request, _ store.Session) {
-	_, serverLocked := s.Limiter.Status()
-	writeJSON(w, http.StatusOK, map[string]int{"serverLockedSec": seconds(serverLocked)})
-}
-
 // signOutOthers ends every session but the caller's own.
 func (s *Server) signOutOthers(w http.ResponseWriter, r *http.Request, sess store.Session) {
 	n, err := s.Sessions.EndOthers(r)

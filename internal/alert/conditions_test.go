@@ -2,6 +2,7 @@ package alert
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -120,5 +121,42 @@ func TestEvaluateHostAndSecurity(t *testing.T) {
 	in.System = system.Snapshot{At: t0, Notices: []string{system.NoticeDockerError}}
 	if _, known := Evaluate(in, DefaultRules()); known["containers"] {
 		t.Fatal("containers known while Docker cannot be read")
+	}
+}
+
+// A health warning keeps its key while its text changes (a count that goes up is the same problem), and two
+// warnings alike in every way stay two conditions.
+func TestConditionKeys(t *testing.T) {
+	read := func(n int) []Condition {
+		health := shape.Health{Warnings: []shape.Warning{
+			{Level: shape.LevelWarning, Message: strconv.Itoa(n) + " requests waiting for approval"},
+			{Level: shape.LevelWarning, Message: "a request failed"},
+			{Level: shape.LevelError, Message: "a request failed"},
+		}}
+		queue := shape.Queue{Items: []shape.QueueItem{
+			{Title: "Sintel", Status: "failed"}, {Title: "Sintel", Status: "failed"}, {Title: "Sintel#1", Status: "failed"},
+		}}
+		conds, _ := Evaluate(Input{Now: t0, Services: []state.ServiceState{
+			svc(7, "Asks", true, map[shape.Kind]shape.Reading{shape.KindHealth: {Data: health},
+				shape.KindQueue: {Data: queue}}, shape.KindQueue),
+		}}, DefaultRules())
+		return conds
+	}
+	first, second := read(3), read(4)
+	if len(first) != 6 || len(second) != 6 {
+		t.Fatalf("conditions = %q", keysOf(first))
+	}
+	keys := map[string]bool{}
+	for i := range first {
+		if first[i].Key != second[i].Key {
+			t.Errorf("key changed with the text: %s -> %s", first[i].Key, second[i].Key)
+		}
+		if keys[first[i].Key] {
+			t.Errorf("key %s given twice", first[i].Key)
+		}
+		keys[first[i].Key] = true
+	}
+	if second[0].Message != "4 requests waiting for approval" {
+		t.Errorf("message = %q", second[0].Message)
 	}
 }
