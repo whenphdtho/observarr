@@ -674,3 +674,49 @@ func TestNoGoroutineLeak(t *testing.T) {
 		return runtime.NumGoroutine() <= baseline+2 // small slack for the runtime/test harness itself
 	})
 }
+
+// TestStuckAndCrashingServicesDoNotStallOthers runs a service whose app never answers and one whose adapter always
+// panics next to a healthy one: the healthy one keeps being probed, the others show an error, and Close ends all
+// of them at once, leaving no goroutine behind.
+func TestStuckAndCrashingServicesDoNotStallOthers(t *testing.T) {
+	stuck := newFakeAdapter("stuck", shape.KindHealth, shape.KindQueue)
+	stuck.delay = time.Hour
+	crash := newFakeAdapter("crash", shape.KindHealth)
+	crash.probe = func(shape.Kind, int) (any, error) { panic("boom") }
+	ok := newFakeAdapter("ok", shape.KindHealth)
+	reg := adapter.NewRegistry()
+	hub := state.NewHub()
+	for i, fa := range []*fakeAdapter{stuck, crash, ok} {
+		reg.Register(fa)
+		hub.Put(state.ServiceState{ID: int64(i + 1), Type: fa.info.Type, Name: fa.info.Type, Kinds: fa.info.Kinds})
+	}
+	baseline := runtime.NumGoroutine()
+	p := New(Config{Registry: reg, Hub: hub, Log: slog.New(slog.NewTextHandler(discard{}, nil)),
+		Timeout: 50 * time.Millisecond, Intervals: map[shape.Kind]time.Duration{shape.KindHealth: 10 * time.Millisecond}})
+	for i, typ := range []string{"stuck", "crash", "ok"} {
+		p.Start(context.Background(), Service{ID: int64(i + 1), Type: typ, BaseURL: mustURL(t, "http://x")})
+	}
+
+	eventually(t, 2*time.Second, func() bool { return ok.callCount(shape.KindHealth) >= 20 })
+	errorOf := func(id int64) string {
+		for _, s := range hub.Snapshot() {
+			if s.ID == id {
+				return s.Readings[shape.KindHealth].Error
+			}
+		}
+		return ""
+	}
+	eventually(t, 2*time.Second, func() bool { return errorOf(1) != "" && errorOf(2) == "adapter crashed" })
+	if e := errorOf(3); e != "" {
+		t.Errorf("healthy service shows %q", e)
+	}
+
+	closed := make(chan struct{})
+	go func() { p.Close(); close(closed) }()
+	select {
+	case <-closed:
+	case <-time.After(time.Second):
+		t.Fatal("Close did not return within a second")
+	}
+	eventually(t, 2*time.Second, func() bool { return runtime.NumGoroutine() <= baseline+2 })
+}
