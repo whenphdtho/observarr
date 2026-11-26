@@ -5,6 +5,7 @@
   import { widgets } from './shapes/index.js';
   import { formatPct, formatBytes, formatPercent, containerStatusClass } from './format.js';
   import { serviceStatus, cardSummary } from './status.js';
+  import { attention } from './live.js';
   import { hostOf } from './urls.js';
   import Icon from './icons/Icon.svelte';
 
@@ -23,10 +24,10 @@
   let removing = $state(false);
 
   const host = $derived(hostOf(service.url));
-  const status = $derived(serviceStatus(service));
+  const status = $derived(serviceStatus(service, $attention));
   const health = $derived(service.readings?.health ?? null);
   const version = $derived(health?.data?.version ?? '');
-  const card = $derived(cardSummary(service));
+  const card = $derived(cardSummary(service, $attention));
   const lead = $derived(card.lead);
   const detailsId = $derived(`service-details-${service.id}`);
   const container = $derived(service.container);

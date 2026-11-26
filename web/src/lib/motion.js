@@ -23,13 +23,15 @@ export function curve(name) {
 }
 
 // ease gives the same curve as a function of progress (0..1), for Svelte: the cubic Bézier of the token, solved
-// for x by bisection.
+// for x by bisection. It is kept once the stylesheet gave it; while the token is still empty, the fallback serves
+// but is not kept.
 const eases = new Map();
 export function ease(name) {
   if (!eases.has(name)) {
-    const [x1, y1, x2, y2] = (curve(name).match(/-?[\d.]+/g) ?? [0.25, 0.1, 0.25, 1]).map(Number);
+    const text = token(`--ease-${name}`);
+    const [x1, y1, x2, y2] = (text.match(/-?[\d.]+/g) ?? [0.25, 0.1, 0.25, 1]).map(Number);
     const at = (a, b, t) => 3 * a * t * (1 - t) ** 2 + 3 * b * t * t * (1 - t) + t ** 3;
-    eases.set(name, (x) => {
+    const fn = (x) => {
       let lo = 0;
       let hi = 1;
       for (let i = 0; i < 20; i++) {
@@ -38,7 +40,9 @@ export function ease(name) {
         else hi = mid;
       }
       return at(y1, y2, (lo + hi) / 2);
-    });
+    };
+    if (!text) return fn;
+    eases.set(name, fn);
   }
   return eases.get(name);
 }
@@ -89,14 +93,15 @@ export function leave() {
 export const FLIP = { get duration() { return ms(dur('slow')); }, get easing() { return ease('emph'); } };
 
 // keyed pairs each item of a list with a key from key(item) that is unique in the list, for a keyed {#each} over
-// items that have no id of their own: a repeat gets a count after it.
+// items that have no id of their own: a repeat gets a count after it, the next count that no other item has.
 export function keyed(list, key) {
-  const seen = new Map();
+  const taken = new Set();
   return list.map((item) => {
     const k = key(item);
-    const n = seen.get(k) ?? 0;
-    seen.set(k, n + 1);
-    return { key: n ? `${k}#${n}` : k, item };
+    let out = k;
+    for (let n = 1; taken.has(out); n++) out = `${k}#${n}`;
+    taken.add(out);
+    return { key: out, item };
   });
 }
 

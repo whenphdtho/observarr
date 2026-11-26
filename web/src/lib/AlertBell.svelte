@@ -1,14 +1,14 @@
 <script>
-  import { onMount } from 'svelte';
   import Icon from './icons/Icon.svelte';
   import { arrive } from './motion.js';
-  import { firing, loadFiring, severityTone, scrollToAlerts } from './alerts.js';
+  import { firing, severityTone, scrollToAlerts } from './alerts.js';
 
-  // AlertBell sits in the shell's header: how many alerts fire now, in the colour of the worst, leading to the
-  // Alerts section of the System view. It asks every 30 s; the answer is a short list from memory.
+  // AlertBell sits in the shell's header: how many errors and warnings fire as alerts now, in the colour of the
+  // worst, leading to the Alerts section of the System view. The live stream keeps the list current.
   const HASH = '#/system/alerts';
-  const count = $derived($firing?.length ?? 0);
-  const tone = $derived(count ? severityTone($firing[0].severity) : '');
+  const counted = $derived(($firing ?? []).filter((a) => a.severity !== 'info'));
+  const count = $derived(counted.length);
+  const tone = $derived(count ? severityTone(counted[0].severity) : '');
   const label = $derived(count === 0 ? 'Alerts: nothing firing' : `Alerts: ${count} firing`);
 
   // Already there: the hash does not change, so scroll by hand.
@@ -17,12 +17,6 @@
     event.preventDefault();
     scrollToAlerts();
   }
-
-  onMount(() => {
-    loadFiring();
-    const id = setInterval(loadFiring, 30 * 1000);
-    return () => clearInterval(id);
-  });
 </script>
 
 <a class="bell {tone}" href={HASH} aria-label={label} title={label} onclick={open}>

@@ -214,7 +214,7 @@
       {#key addingApps ? 'add' : view}
       <div class="view" in:arrive>
       {#if view === 'overview'}
-        <Overview {services} onjump={jumpTo} />
+        <Overview {services} {query} onjump={jumpTo} />
       {:else if view === 'network'}
         <Network />
       {:else if view === 'apps' && addingApps}

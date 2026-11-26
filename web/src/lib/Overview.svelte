@@ -8,18 +8,15 @@
   import { flip } from 'svelte/animate';
   import { reveal, conceal, arrive, leave, smoothHeight, FLIP } from './motion.js';
   import { onMount, untrack } from 'svelte';
-  import { api } from './api.js';
   import { snapshot, hostLines, watchTrend } from './data.js';
-  import { synced } from './live.js';
-  import { downloading, attention } from './status.js';
-  import { mountAttention } from './storage.js';
-  import { formatLeft } from './security.js';
+  import { synced, attention } from './live.js';
+  import { downloading, tone, matches } from './status.js';
   import { formatBytes, formatPct, formatRate } from './format.js';
 
   // Overview is the landing view: what needs attention first (or one calm line when nothing does), what media
   // servers play (when one is added), then the host's throughput and four key figures.
-  // services is the (search-filtered) service list; onjump(id) shows a service's card.
-  let { services, onjump } = $props();
+  // services is the (search-filtered) service list and query the search; onjump(id) shows a service's card.
+  let { services, query = '', onjump } = $props();
 
   const host = $derived($snapshot?.host ?? null);
   const up = $derived(services.filter((s) => s.up).length);
@@ -30,29 +27,14 @@
   const speed = $derived(services.reduce((n, s) => n + (s.readings?.queue?.data?.speed ?? 0), 0));
   const memPct = $derived(host && host.memTotal > 0 ? Math.round((host.memUsed / host.memTotal) * 100) : 0);
   const memParts = $derived(host ? formatBytes(host.memUsed).split(' ') : ['—', '']);
-  // The server-wide sign-in limit is the one security state worth a line here; it is read every minute while the
-  // Overview is open (a small answer from memory), and a failed read just leaves it out.
-  let lockedSec = $state(0);
-  async function loadLock() {
-    try {
-      lockedSec = (await api('GET', '/api/security/lock')).serverLockedSec;
-    } catch {
-      lockedSec = 0;
-    }
-  }
   onMount(watchTrend);
-  onMount(() => {
-    loadLock();
-    const id = setInterval(loadLock, 60 * 1000);
-    return () => clearInterval(id);
-  });
-  const lockIssue = $derived(lockedSec > 0 ? [{
-    key: 'server-lock', tone: 'warn', title: 'Sign-ins limited', href: '#/security',
-    detail: `Many addresses failed to sign in; for ${formatLeft(lockedSec)} only addresses that signed in before may try`,
-  }] : []);
+  // Needs attention is the server's list, the one the alerts and the bell count from, worst first: its errors and
+  // warnings, narrowed by the search.
   const issues = $derived(
-    [...attention(services, $snapshot?.containers ?? []), ...mountAttention(services), ...lockIssue]
-      .sort((a, b) => (a.tone === 'fail' ? 0 : 1) - (b.tone === 'fail' ? 0 : 1)),
+    ($attention ?? [])
+      .filter((it) => tone(it.severity) && matches(query, it.title, it.message, it.name))
+      .map((it) => ({ key: it.key, tone: tone(it.severity), title: it.title, detail: it.message, href: it.view,
+        service: it.service })),
   );
   const fails = $derived(issues.filter((i) => i.tone === 'fail').length);
   const warns = $derived(issues.length - fails);
@@ -60,7 +42,8 @@
     fails ? `${fails} error${fails === 1 ? '' : 's'}` : '',
     warns ? `${warns} warning${warns === 1 ? '' : 's'}` : '',
   ].filter(Boolean).join(' · '));
-  const VIEW_NAMES = { '#/apps': 'Apps', '#/storage': 'Storage', '#/security': 'Security', '#/system': 'System' };
+  const VIEW_NAMES = { '#/apps': 'Apps', '#/storage': 'Storage', '#/security': 'Security', '#/system': 'System',
+    '#/network': 'Network' };
 
   // Rows that appear after the first reading are marked fresh for a moment, so a new problem is noticed; the
   // rows already there when the view opens are not.
@@ -93,7 +76,7 @@
 </script>
 
 <div class="overview">
-  {#if !$synced}
+  {#if !$synced || $attention === null}
     <div class="calm"><Skeleton count={1} label="Waiting for the first reading…" /></div>
   {:else if issues.length === 0}
     <section class="calm settle" aria-labelledby="attention-title">

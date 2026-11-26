@@ -10,6 +10,11 @@ const servicesById = writable({});
 // keeps it open for as long as someone is signed in.
 const systemSnapshot = writable(null);
 
+// attention holds what needs attention now, worst first, as the server works it out for the alerts: every rule's
+// conditions, each { key, rule, severity, service, name, title, message, view, firing, since }. null until the
+// first "attention" event.
+const attention = writable(null);
+
 // reconnecting is true once the stream has been without an open connection for a few seconds.
 const reconnecting = writable(false);
 
@@ -180,6 +185,10 @@ function open() {
     received();
     systemSnapshot.set(JSON.parse(e.data));
   });
+  source.addEventListener('attention', (e) => {
+    received();
+    attention.set(JSON.parse(e.data));
+  });
   source.addEventListener('ping', alive);
   source.addEventListener('error', handleError);
 }
@@ -202,6 +211,7 @@ function close() {
   synced.set(false);
   servicesById.set({});
   systemSnapshot.set(null);
+  attention.set(null);
 }
 
 // setOnSignedOut registers the callback run when a retry discovers the session is gone (a stream
@@ -216,6 +226,6 @@ export const serviceList = derived(servicesById, (byId) =>
   Object.values(byId).sort((a, b) => a.name.localeCompare(b.name)),
 );
 
-export { reconnecting, offline, lastEvent, synced, systemSnapshot };
+export { reconnecting, offline, lastEvent, synced, systemSnapshot, attention };
 
 export const live = { open, close, setOnSignedOut };

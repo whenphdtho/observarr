@@ -7,7 +7,7 @@
   import { formatBytes, formatPct, formatTotal, formatPart } from './format.js';
   import { mountServices, mountSummary } from './storage.js';
   import { securityServices, activeBans, formatCount } from './security.js';
-  import { synced } from './live.js';
+  import { synced, attention } from './live.js';
   import { flash } from './motion.js';
 
   // Rail is every service at a glance plus a short system summary and today's traffic. It sits in the right column on
@@ -42,8 +42,8 @@
   {:else}
     <ul class="apps settle">
       {#each services as svc (svc.id)}
-        {@const status = serviceStatus(svc)}
-        {@const line = serviceLine(svc)}
+        {@const status = serviceStatus(svc, $attention)}
+        {@const line = serviceLine(svc, $attention)}
         {@const lineText = [line.text, line.detail].filter(Boolean).join(' · ')}
         <li>
           <button type="button" class="app row-link {status === 'fail' || status === 'warn' ? status : ''}" onclick={() => onjump(svc.id)} aria-label={`${svc.name}: ${lineText}`} use:flash={status}>

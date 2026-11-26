@@ -1,5 +1,5 @@
-import { writable } from 'svelte/store';
-import { api } from './api.js';
+import { derived } from 'svelte/store';
+import { attention } from './live.js';
 
 // What the alert views share: the channel types and their fields, the rules, and the alerts firing now (which the
 // shell's bell and the System view's Alerts section both show).
@@ -9,12 +9,14 @@ import { api } from './api.js';
 // or ''.
 const url = (v) => (/^https?:\/\/[^\s/?#@]+/i.test(v) ? '' : 'An http:// or https:// address.');
 const required = (v) => (v.trim() ? '' : 'Required.');
+const atLeast = (n) => (v) => (!v || [...v].length >= n ? '' : `At least ${n} characters.`);
 export const TYPES = {
   ntfy: {
     label: 'ntfy', fields: [
       { key: 'server', label: 'Server', placeholder: 'https://ntfy.sh', optional: true, check: (v) => (v ? url(v) : '') },
-      { key: 'topic', label: 'Topic', check: (v) => (/^[-_A-Za-z0-9]{1,64}$/.test(v) ? '' : 'Letters, digits, - or _.') },
-      { key: 'token', label: 'Access token', secret: true, optional: true },
+      { key: 'topic', label: 'Topic', secret: true, hint: 'Anyone who knows it can read it: kept like a password.',
+        check: (v) => (/^[-_A-Za-z0-9]{1,64}$/.test(v) ? '' : 'Letters, digits, - or _.') },
+      { key: 'token', label: 'Access token', secret: true, optional: true, check: atLeast(8) },
     ],
   },
   discord: {
@@ -26,7 +28,7 @@ export const TYPES = {
   webhook: {
     label: 'Webhook', fields: [
       { key: 'url', label: 'Address', secret: true, placeholder: 'https://…', check: url },
-      { key: 'secret', label: 'Signing secret', secret: true, optional: true,
+      { key: 'secret', label: 'Signing secret', secret: true, optional: true, check: atLeast(16),
         hint: 'Signs each request: X-Observarr-Signature: sha256=…' },
     ],
   },
@@ -37,17 +39,19 @@ export const TYPES = {
       { key: 'port', label: 'Port', type: 'number', optional: true, placeholder: '587',
         check: (v) => (v === '' || (Number(v) >= 1 && Number(v) <= 65535) ? '' : '1 to 65535.') },
       { key: 'username', label: 'User name', optional: true },
-      { key: 'password', label: 'Password', secret: true, optional: true },
+      { key: 'password', label: 'Password', secret: true, optional: true, check: atLeast(8) },
       { key: 'from', label: 'From', placeholder: 'Observarr <observarr@example.com>',
         check: (v) => (v.includes('@') ? '' : 'An address.') },
       { key: 'to', label: 'To', placeholder: 'you@example.com', hint: 'Up to 10, separated by commas.',
         check: (v) => (v.includes('@') ? '' : 'At least one address.') },
+      { key: 'helo', label: 'Greeting name', optional: true, placeholder: 'the From domain',
+        hint: 'The host name Observarr gives the mail server.' },
     ],
   },
   gotify: {
     label: 'Gotify', fields: [
       { key: 'server', label: 'Server', placeholder: 'http://gotify.lan', check: url },
-      { key: 'token', label: 'App token', secret: true },
+      { key: 'token', label: 'App token', secret: true, check: atLeast(8) },
     ],
   },
   telegram: {
@@ -78,16 +82,9 @@ export function severityTone(severity) {
   return severity === 'critical' ? 'fail' : severity === 'warning' ? 'warn' : 'ok';
 }
 
-// firing holds the alerts firing now, worst first; null until first loaded.
-export const firing = writable(null);
-
-export async function loadFiring() {
-  try {
-    firing.set(await api('GET', '/api/alerts/firing'));
-  } catch {
-    // Keep what was shown: the next poll tries again.
-  }
-}
+// firing holds the alerts firing now, worst first, from the attention list the live stream carries; null until
+// it arrived.
+export const firing = derived(attention, (list) => list?.filter((it) => it.firing) ?? null);
 
 // scrollToAlerts brings the System view's Alerts section into view.
 export function scrollToAlerts() {

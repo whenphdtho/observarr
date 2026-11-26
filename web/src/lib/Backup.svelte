@@ -3,6 +3,8 @@
   import { api, download } from './api.js';
   import { adapters } from './data.js';
   import { arrive, smoothHeight } from './motion.js';
+  import Icon from './icons/Icon.svelte';
+  import { TYPES } from './alerts.js';
 
   // Backup exports the saved apps (and dismissed finds) as a settings file, with their keys encrypted under a
   // passphrase or left out, and restores such a file: preview first, then add alongside or replace, then a
@@ -259,6 +261,25 @@
               </li>
             {/each}
           </ul>
+        {/if}
+
+        {#if report.channels.length > 0}
+          <ul class="apps">
+            {#each report.channels as c (c.name)}
+              {@const skip = step === 'preview' && mode === 'add' && c.nameTaken}
+              <li class:skip>
+                <span class="icon"><Icon name="bell" size={16} /></span>
+                <span class="who">
+                  <span class="ellipsis name" title={c.name}>{c.name}</span>
+                  <span class="ellipsis muted url">Alert channel · {TYPES[c.type]?.label ?? c.type}</span>
+                </span>
+                <span class="key" class:warn-text={skip || c.secrets === 'missing'}>
+                  {skip ? 'name in use · skipped' : c.note}
+                </span>
+              </li>
+            {/each}
+          </ul>
+          <p class="muted small">Alert channels come back switched off: each sends again once a test from here gets through.</p>
         {/if}
 
         {#if report.skipped.length > 0}

@@ -6,6 +6,7 @@
   import { connectDocs } from './urls.js';
   import { formatBytes, formatRate, formatPercent, formatAge } from './format.js';
   import { serviceStatus } from './status.js';
+  import { attention } from './live.js';
   import { diskParts, diskTotals, mountServices, mountSummary, mountProblem, percentOf } from './storage.js';
 
   // Storage shows the host's disks and, for every service that reports mounts, each mount with its cache and
@@ -145,7 +146,7 @@
     <section class="section" aria-labelledby={`mounts-title-${svc.id}`}>
       <div class="card-head">
         <h2 id={`mounts-title-${svc.id}`}>
-          <span class="dot {serviceStatus(svc)}" aria-hidden="true"></span>
+          <span class="dot {serviceStatus(svc, $attention)}" aria-hidden="true"></span>
           <span class="ellipsis" title={`Mounts & caches · ${svc.name}`}>Mounts &amp; caches · {svc.name}</span>
         </h2>
         {#if reading}<span class="meta" title={reading.at}>{formatAge(reading.at, $now)}</span>{/if}

@@ -5,7 +5,7 @@
   import Icon from './icons/Icon.svelte';
   import Skeleton from './Skeleton.svelte';
   import { api } from './api.js';
-  import { TYPES, RULES, RULE_NAMES, firing, loadFiring, severityTone, scrollToAlerts } from './alerts.js';
+  import { TYPES, RULES, RULE_NAMES, firing, severityTone, scrollToAlerts } from './alerts.js';
   import { now } from './ticker.js';
   import { formatAge } from './format.js';
   import { arrive, leave, reveal, conceal, smoothHeight, FLIP } from './motion.js';
@@ -135,9 +135,8 @@
     loadChannels();
     loadRules();
     loadLog();
-    loadFiring();
     onHash();
-    const id = setInterval(() => { loadLog(); loadFiring(); }, 30 * 1000);
+    const id = setInterval(loadLog, 30 * 1000);
     window.addEventListener('hashchange', onHash);
     return () => {
       clearInterval(id);
