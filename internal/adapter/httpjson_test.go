@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -152,6 +153,35 @@ func TestBodyLimitAppliesAfterDecompression(t *testing.T) {
 	err := GetJSON(context.Background(), Target{BaseURL: base, HTTP: NewHTTPClient()}, "/", "", &out)
 	if !errors.Is(err, ErrTooLarge) {
 		t.Fatalf("GetJSON = %v, want ErrTooLarge", err)
+	}
+}
+
+// TestReadingStopsWhenTheDeadlinePasses ends the context once the answer is being read: reading stops there, even
+// though the rest of the answer is already in memory and would unpack without touching the network.
+func TestReadingStopsWhenTheDeadlinePasses(t *testing.T) {
+	var packed bytes.Buffer
+	zw := gzip.NewWriter(&packed)
+	zw.Write([]byte("[" + strings.Repeat(" ", 1<<20) + "1]"))
+	zw.Close()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Write(packed.Bytes())
+	}))
+	defer ts.Close()
+
+	base, _ := url.Parse(ts.URL)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	err := StreamJSON(ctx, Target{BaseURL: base, HTTP: NewHTTPClient()}, "/", "", func(d *json.Decoder) error {
+		if _, err := d.Token(); err != nil {
+			return err
+		}
+		cancel()
+		_, err := d.Token()
+		return err
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("StreamJSON = %v, want the cancellation", err)
 	}
 }
 
