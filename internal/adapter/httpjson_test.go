@@ -543,6 +543,11 @@ func TestDialRefusesLinkLocal(t *testing.T) {
 		"100.100.100.200:80":          true, // Alibaba Cloud metadata
 		"100.100.100.201:80":          false,
 		"[::ffff:100.100.100.200]:80": true,
+		"[64:ff9b::a9fe:a9fe]:80":     true, // NAT64 of 169.254.169.254
+		"[64:ff9b::6464:64c8]:80":     true, // NAT64 of 100.100.100.200
+		"[64:ff9b::c000:201]:80":      false,
+		"[2002:a9fe:a9fe::1]:80":      true, // 6to4 of 169.254.169.254
+		"[2002:c000:201::1]:80":       false,
 	} {
 		err := refuseLinkLocal("tcp", addr, nil)
 		if refused && !errors.Is(err, errRefusedAddress) {

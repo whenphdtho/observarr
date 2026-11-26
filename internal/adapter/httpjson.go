@@ -274,10 +274,35 @@ func refuseLinkLocal(_, address string, _ syscall.RawConn) error {
 	if err != nil {
 		return fmt.Errorf("adapter: unexpected dial address %q: %w", address, err)
 	}
-	if a := ap.Addr().Unmap().WithZone(""); a.IsLinkLocalUnicast() || slices.Contains(metadataAddrs, a) {
+	a := ap.Addr().Unmap().WithZone("")
+	if v4, ok := embeddedIPv4(a); ok {
+		a = v4
+	}
+	if a.IsLinkLocalUnicast() || slices.Contains(metadataAddrs, a) {
 		return errRefusedAddress
 	}
 	return nil
+}
+
+// Prefixes whose addresses carry an IPv4 address that the network delivers to: NAT64 (RFC 6052) holds it in its
+// last 32 bits, 6to4 (RFC 3056) in the 32 bits after 2002::/16.
+var (
+	nat64  = netip.MustParsePrefix("64:ff9b::/96")
+	sixTo4 = netip.MustParsePrefix("2002::/16")
+)
+
+// embeddedIPv4 returns the IPv4 address a NAT64 or 6to4 address leads to.
+func embeddedIPv4(a netip.Addr) (netip.Addr, bool) {
+	b := a.As16()
+	switch {
+	case !a.Is6():
+		return netip.Addr{}, false
+	case nat64.Contains(a):
+		return netip.AddrFrom4([4]byte(b[12:16])), true
+	case sixTo4.Contains(a):
+		return netip.AddrFrom4([4]byte(b[2:6])), true
+	}
+	return netip.Addr{}, false
 }
 
 // ErrCrossHostRedirect is what NewHTTPClient's client returns (wrapped in a *url.Error) when a
