@@ -20,15 +20,19 @@ anything.
 ## Compose example
 
 This also lives at [`deploy/docker-compose.yml`](../deploy/docker-compose.yml) — copy it and adjust the data
-disk(s) and (if you use it) the app config mounts. No image is published yet, so it builds Observarr from the
-repo root itself (`build: ..`, since `deploy/` is one level down); run `docker compose -f
-deploy/docker-compose.yml build` once, or let `up` build it on first use.
+disk(s) and (if you use it) the app config mounts. It runs the published image; to build from source instead,
+swap in the commented `build: ..` lines (`deploy/` is one level below the repo root). Which tag to use and how
+to upgrade: [Releases and versions](#releases-and-versions).
 
 ```yaml
 services:
   observarr:
-    build: ..
-    image: observarr:local
+    # :0 follows the newest 0.x release. To pin one exact build instead, use its digest from the release
+    # notes: ghcr.io/whenphdtho/observarr@sha256:<digest> (see "Releases and versions" in ../docs/deploy.md).
+    image: ghcr.io/whenphdtho/observarr:0
+    # To build from source instead, replace the line above with these two (`up -d --build` rebuilds):
+    # build: ..
+    # image: observarr:local
     restart: unless-stopped
     # Hardening that costs nothing here: Observarr never writes outside /data (a volume, unaffected
     # by read_only) and needs no Linux capability or privilege escalation.
@@ -99,6 +103,46 @@ services:
 networks:
   internal:
     internal: true   # Docker refuses this network any route to the outside world, published ports included
+```
+
+## Releases and versions
+
+Each release is a `vX.Y.Z` tag. It publishes a multi-arch image (linux/amd64 and linux/arm64) to
+`ghcr.io/whenphdtho/observarr`, signed with cosign and carrying SBOM and provenance attestations, plus a GitHub
+release with static binaries (linux/amd64, linux/arm64, darwin/arm64) and a `SHA256SUMS` file.
+
+| Tag pushed | Image tags |
+|---|---|
+| `v1.4.2` | `1.4.2`, `1.4`, `1`, `latest` |
+| `v1.5.0-rc.1` (prerelease) | `1.5.0-rc.1` only |
+
+`1.4` follows patch releases, `1` follows minor ones too, and `latest` follows everything that is not a
+prerelease. While the version is 0.x, a minor release may change behaviour, so `:0` moves faster than a later
+`:1` will; pin `0.Y` if you want only fixes.
+
+**Upgrading.** Pull and recreate the container:
+
+```sh
+docker compose -f deploy/docker-compose.yml pull
+docker compose -f deploy/docker-compose.yml up -d
+```
+
+When a new version changes the database schema, Observarr first copies the database to
+`<data>/backups/observarr-<time>-pre-migrate-<N>.db` (the newest 5 are kept) and only then migrates, each step
+in one transaction. Going back to an older version afterwards needs that copy: an older Observarr refuses a
+database newer than it knows. Stop the container, replace `observarr.db` with the backup (and remove
+`observarr.db-wal` and `observarr.db-shm`), then start the older image. Keep `secret.key` with any copy you
+take; see [Recovery](configuration.md#recovery).
+
+**Pinning by digest.** A tag can move; a digest cannot. Each release's notes list the image digest, and
+`docker buildx imagetools inspect ghcr.io/whenphdtho/observarr:1.4.2` shows it too. Use it as
+`image: ghcr.io/whenphdtho/observarr@sha256:<digest>` (you can keep the tag in a comment beside it for
+readability). Check that an image came from this repository's release workflow with:
+
+```sh
+cosign verify ghcr.io/whenphdtho/observarr:<tag> \
+  --certificate-identity-regexp 'https://github.com/whenphdtho/observarr/.github/workflows/release.yml@refs/tags/v.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
 ## cgroup v1
