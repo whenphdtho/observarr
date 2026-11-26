@@ -195,7 +195,12 @@ func newHTTPServer(base context.Context, h http.Handler) *http.Server {
 // The returned function releases the lock.
 func prepareDataDir(dir string) (func(), error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil, fmt.Errorf("data directory: %w", err)
+		var pe *fs.PathError
+		if errors.As(err, &pe) {
+			err = pe.Err // the path is named below
+		}
+		return nil, fmt.Errorf("data directory %s cannot be created (%w) — create it as a folder writable by uid %d, "+
+			"or set OBSERVARR_DATA", dir, err, os.Getuid())
 	}
 	narrowOwnDir(dir)
 	if err := checkWritable(dir); err != nil {
