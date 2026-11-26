@@ -1,5 +1,7 @@
 <script>
+  import { flip } from 'svelte/animate';
   import { now } from '../ticker.js';
+  import { arrive, leave, smoothHeight, FLIP, keyed } from '../motion.js';
   import { formatAge, formatBytes, formatPercent, formatRate } from '../format.js';
 
   // Queue renders one shape.Queue reading. It knows nothing about which app produced it — every
@@ -8,7 +10,7 @@
   let { reading } = $props();
 
   const data = $derived(reading?.data);
-  const items = $derived(data?.items ?? []);
+  const items = $derived(keyed(data?.items ?? [], (it) => it.title));
   const age = $derived(reading ? formatAge(reading.at, $now) : '');
   // An app's status word in sentence case: only its first letter raised.
   const sentence = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
@@ -32,9 +34,10 @@
     {:else if items.length === 0}
       <p class="waiting">Queue is empty.</p>
     {:else}
+      <div use:smoothHeight>
       <ul class="items">
-        {#each items as item}
-          <li>
+        {#each items as { key, item } (key)}
+          <li in:arrive out:leave animate:flip={FLIP}>
             <div class="head">
               <span class="title ellipsis" title={item.title}>{item.title}</span>
               <span class="pct num">{formatPercent(item.progress)}</span>
@@ -57,6 +60,7 @@
           </li>
         {/each}
       </ul>
+      </div>
     {/if}
   {/if}
 </div>

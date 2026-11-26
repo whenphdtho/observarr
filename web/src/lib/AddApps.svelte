@@ -210,7 +210,7 @@
   .fold-btn:hover:not(:disabled) { background: var(--surface2); border: 0; }
   .fold-btn:hover:not(:disabled) b { text-decoration: underline; text-underline-offset: 3px; }
   .fold-btn:focus-visible { outline-offset: 0; }
-  .fold-btn :global(.icon) { margin-top: 2px; color: var(--text2); transition: transform 160ms var(--ease); }
+  .fold-btn :global(.icon) { margin-top: 2px; color: var(--text2); transition: transform var(--dur-base) var(--ease-out); }
   .fold-btn[aria-expanded='true'] :global(.icon) { transform: rotate(90deg); }
   .fold-text { display: grid; gap: 1px; min-width: 0; font-weight: 400; }
   .fold-text b { font-weight: 600; font-size: var(--t-body); }
@@ -229,11 +229,6 @@
   .problems ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 2px; overflow-wrap: anywhere; }
   .problems b { color: var(--text2); font-weight: 500; }
   .ok-text { color: var(--ok); font-size: var(--t-body); margin-top: 10px; }
-  .spinner {
-    width: 14px; height: 14px; border-radius: 50%; flex: none;
-    border: 2px solid var(--field-border); border-top-color: var(--accent); animation: spin 0.8s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
   @container (max-width: 560px) {
     .fold-body { padding-left: 0; }
   }

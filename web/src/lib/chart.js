@@ -127,8 +127,9 @@ export function thin(times, lists, max) {
   return { times: outTimes.reverse(), lists: out.map((l) => l.reverse()) };
 }
 
-// tipSide places a tooltip beside a crosshair at x in a chart width wide: to the right in the left half,
-// to the left in the right half. It returns the CSS left/right pair.
-export function tipSide(x, width) {
-  return x < width / 2 ? { left: `${Math.round(x + 12)}px`, right: 'auto' } : { left: 'auto', right: `${Math.round(width - x + 12)}px` };
+// tipAt places a tooltip beside a crosshair at x in a chart width wide: to the right in the left half,
+// to the left in the right half. It returns a CSS transform for a tooltip that sits at the chart's left edge, so
+// that a move, even to the other side, can ease.
+export function tipAt(x, width) {
+  return x < width / 2 ? `translateX(${Math.round(x + 12)}px)` : `translateX(calc(${Math.round(x - 12)}px - 100%))`;
 }

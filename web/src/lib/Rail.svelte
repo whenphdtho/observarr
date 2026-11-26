@@ -8,6 +8,7 @@
   import { mountServices, mountSummary } from './storage.js';
   import { securityServices, activeBans, formatCount } from './security.js';
   import { synced } from './live.js';
+  import { flash } from './motion.js';
 
   // Rail is every service at a glance plus a short system summary and today's traffic. It sits in the right column on
   // wide screens and inside the Overview on narrower ones. onjump(id) shows a service's card.
@@ -39,13 +40,13 @@
   {:else if services.length === 0}
     <p class="muted none">No services to show.</p>
   {:else}
-    <ul class="apps">
+    <ul class="apps settle">
       {#each services as svc (svc.id)}
         {@const status = serviceStatus(svc)}
         {@const line = serviceLine(svc)}
         {@const lineText = [line.text, line.detail].filter(Boolean).join(' · ')}
         <li>
-          <button type="button" class="app row-link {status === 'fail' || status === 'warn' ? status : ''}" onclick={() => onjump(svc.id)} aria-label={`${svc.name}: ${lineText}`}>
+          <button type="button" class="app row-link {status === 'fail' || status === 'warn' ? status : ''}" onclick={() => onjump(svc.id)} aria-label={`${svc.name}: ${lineText}`} use:flash={status}>
             <span class="tile-icon" aria-hidden="true">
               <AppIcon adapter={adapterFor($adapters, svc.type)} size={18} />
               <span class="status-dot {status}"></span>

@@ -53,3 +53,8 @@ export function codecText(s) {
   const one = (from, to) => (to && to !== from ? `${from || '?'} → ${to}` : from);
   return [one(s.videoCodec, s.toVideoCodec), one(s.audioCodec, s.toAudioCodec)].filter(Boolean).join(' · ');
 }
+
+// streamKey tells a stream from the others of its reading, which carries no ids: who plays what where.
+export function streamKey(s) {
+  return `${s.user}|${s.client}|${s.device ?? ''}|${s.title}`;
+}

@@ -6,7 +6,7 @@
   import Icon from './icons/Icon.svelte';
   import Skeleton from './Skeleton.svelte';
   import { flip } from 'svelte/animate';
-  import { reveal, conceal, ms, EASE } from './motion.js';
+  import { reveal, conceal, arrive, leave, smoothHeight, FLIP } from './motion.js';
   import { onMount, untrack } from 'svelte';
   import { api } from './api.js';
   import { snapshot, hostLines, watchTrend } from './data.js';
@@ -88,6 +88,7 @@
     event.preventDefault();
     onjump(item.service);
   }
+  const whole = (v) => String(Math.round(v));
   const servicesTone = $derived(checked === 0 ? '' : up === services.length ? 'ok' : up === 0 ? 'fail' : 'warn');
 </script>
 
@@ -95,7 +96,7 @@
   {#if !$synced}
     <div class="calm"><Skeleton count={1} label="Waiting for the first reading…" /></div>
   {:else if issues.length === 0}
-    <section class="calm" aria-labelledby="attention-title">
+    <section class="calm settle" aria-labelledby="attention-title">
       <h2 id="attention-title" class="visually-hidden">Needs attention</h2>
       <p class="all-good">
         <span class="dot ok" aria-hidden="true"></span>
@@ -108,10 +109,11 @@
         <h2 id="attention-title">Needs attention</h2>
         <span class="tally num">{tally}</span>
       </div>
+      <div use:smoothHeight>
       <ul class="issues">
         {#each issues as item (item.key)}
-          <li class={item.tone} class:fresh={fresh[item.key]} in:reveal out:conceal
-            animate:flip={{ duration: ms(200), easing: EASE }}>
+          <li class={item.tone} class:fresh={fresh[item.key]} in:arrive out:leave
+            animate:flip={FLIP}>
             <a href={item.href} class="issue row-link" onclick={(e) => openIssue(e, item)}>
               <span class="dot {item.tone}" aria-hidden="true"></span>
               <span class="what">
@@ -127,6 +129,7 @@
           </li>
         {/each}
       </ul>
+      </div>
     </section>
   {/if}
 
@@ -136,9 +139,9 @@
 
   <div class="kpis">
     {#if $synced}
-      <Kpi href="#/apps" tone={servicesTone} label="Services" value={up} unit={`of ${services.length} up`}
+      <Kpi href="#/apps" tone={servicesTone} label="Services" value={up} num={up} format={whole} unit={`of ${services.length} up`}
         sub={services.length === 0 ? 'No services yet' : up === services.length ? 'All services up' : `${services.length - up} not up`} />
-      <Kpi href="#/apps" label="Downloads" value={active} unit="active"
+      <Kpi href="#/apps" label="Downloads" value={active} num={active} format={whole} unit="active"
         sub={`${queued} in queue${queued === 1 ? '' : 's'}${speed > 0 ? ` · ${formatRate(speed)}` : ''}`} />
     {:else}
       <!-- Until the first snapshot an empty list means "not known yet": no counts, no all-clear. -->
@@ -150,7 +153,7 @@
         sub={`${host.cpus} core${host.cpus === 1 ? '' : 's'} · load ${host.load[0].toFixed(2)}`}
         tone={host.cpuPercent >= 90 ? 'warn' : ''} spark={$hostLines.cpu} sparkColor="var(--cpu)"
         change={$hostLines.cpuChange !== null ? { ratio: $hostLines.cpuChange, good: 'down', against: 'the hour before' } : null} />
-      <Kpi href="#/system" label="Memory" value={memParts[0]} unit={memParts[1]}
+      <Kpi href="#/system" label="Memory" value={memParts[0]} num={host.memUsed} format={(v) => formatBytes(v).split(' ')[0]} unit={memParts[1]}
         sub={`of ${formatBytes(host.memTotal)} · ${memPct}%`} tone={memPct >= 90 ? 'warn' : ''}
         spark={$hostLines.mem} sparkColor="var(--mem)" sparkMin={null}
         change={$hostLines.memChange !== null ? { ratio: $hostLines.memChange, good: 'down', against: 'the hour before' } : null} />
@@ -184,11 +187,11 @@
   .issues { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
   .issue {
     display: flex; align-items: flex-start; gap: 11px; padding: 9px 10px; border-radius: var(--r);
-    min-width: 0; color: var(--text); text-decoration: none; transition: background 140ms var(--ease);
+    min-width: 0; color: var(--text); text-decoration: none; transition: background-color var(--dur-fast) var(--ease-out);
   }
   .fail .issue { background: var(--fail-wash); }
   /* A problem that just appeared: its row lights once and settles to its usual wash. */
-  .fresh .issue { animation: fresh 1.4s var(--ease); }
+  .fresh .issue { animation: fresh var(--dur-glow) var(--ease-out); }
   .fresh.fail .issue { animation-name: fresh-fail; }
   @keyframes fresh { from { background: var(--warn-flash); } }
   @keyframes fresh-fail { from { background: var(--fail-flash); } }

@@ -128,9 +128,4 @@
   .problems summary { cursor: pointer; width: fit-content; }
   .problems ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 2px; overflow-wrap: anywhere; }
   .problems b { color: var(--text2); font-weight: 500; }
-  .spinner {
-    width: 14px; height: 14px; border-radius: 50%; flex: none;
-    border: 2px solid var(--field-border); border-top-color: var(--accent); animation: spin 0.8s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
 </style>

@@ -215,11 +215,6 @@
   .state { flex: 1 1 200px; display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--t-body); }
   .form-foot button { margin-left: auto; }
   .row-error { margin: 8px 0 0 46px; font-size: var(--t-body); }
-  .spinner {
-    width: 14px; height: 14px; border-radius: 50%; flex: none;
-    border: 2px solid var(--field-border); border-top-color: var(--accent); animation: spin 0.8s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
 
   @container (max-width: 560px) {
     .row { flex-wrap: wrap; }

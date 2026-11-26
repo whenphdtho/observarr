@@ -2,6 +2,7 @@
   import AppIcon from './AppIcon.svelte';
   import { api, download } from './api.js';
   import { adapters } from './data.js';
+  import { arrive, smoothHeight } from './motion.js';
 
   // Backup exports the saved apps (and dismissed finds) as a settings file, with their keys encrypted under a
   // passphrase or left out, and restores such a file: preview first, then add alongside or replace, then a
@@ -148,6 +149,8 @@
     history and the audit log stay on this server.
   </p>
 
+  <!-- The panel eases to each new height: a step of the restore, the passphrase fields shown or hidden. -->
+  <div use:smoothHeight>
   <div class="cols">
     <form class="col" onsubmit={exportFile}>
       <h3>Export</h3>
@@ -163,6 +166,7 @@
         </label>
       </fieldset>
       {#if withKeys}
+        <div class="col" in:arrive>
         <label>
           Passphrase
           <input type="password" bind:value={pass} autocomplete="new-password" maxlength="1024"
@@ -183,6 +187,7 @@
             aria-describedby="backup-password-hint" />
           <span id="backup-password-hint" class="hint muted">The one you sign in with: the keys leave only with it.</span>
         </label>
+        </div>
       {/if}
       <div aria-live="polite" class="status">
         {#if exportError}<p class="error" role="alert">{exportError}</p>{/if}
@@ -195,6 +200,8 @@
 
     <div class="col">
       <h3>Restore</h3>
+      {#key step}
+      <div class="col" in:arrive>
       {#if step === 'pick'}
         <form class="col" onsubmit={preview}>
           <label>
@@ -304,7 +311,10 @@
           </div>
         {/if}
       {/if}
+      </div>
+      {/key}
     </div>
+  </div>
   </div>
 </section>
 

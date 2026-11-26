@@ -42,7 +42,7 @@
 
 <style>
   .kpi {
-    display: grid; grid-template-columns: minmax(0, 1fr) auto; align-content: start; column-gap: 12px; min-width: 0;
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto 1fr; column-gap: 12px; min-width: 0;
     padding: 14px 18px 16px; background: var(--surface); color: var(--text); text-decoration: none;
     container-type: inline-size;
   }
@@ -52,11 +52,11 @@
   .change { grid-row: 1; grid-column: 2; justify-self: end; align-self: center; }
   .graph .value { grid-column: 1; }
   .spark-slot { grid-row: 2; grid-column: 2; width: 76px; align-self: center; margin-top: 4px; }
-  .link { transition: background 140ms var(--ease); }
+  .link { transition: background-color var(--dur-fast) var(--ease-out); }
   .link:hover { background: var(--surface2); }
   .link:focus-visible { outline-offset: -2px; }
   /* A figure that is a link says so at rest: a small chevron after its label. */
-  .chev { display: grid; color: var(--muted); transition: color 140ms var(--ease), transform 140ms var(--ease); }
+  .chev { display: grid; color: var(--muted); transition: color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out); }
   .link:hover .label { color: var(--text2); }
   .link:hover .chev { color: var(--text); transform: translateX(2px); }
   .value {
@@ -64,14 +64,16 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .value small { font-size: var(--t-small); font-weight: 400; color: var(--muted); margin-left: 4px; letter-spacing: 0; }
-  .sub { font-size: var(--t-small); color: var(--muted); }
+  /* The caption keeps to the foot of the figure, so the captions of a strip line up with or without a line above. */
+  .sub { grid-row: 3; align-self: end; font-size: var(--t-small); color: var(--muted); }
   .bar { margin-top: 8px; }
-  .bar > i { transition: width 400ms var(--ease); }
   .bone { display: inline-block; width: 64px; height: 18px; margin: 4px 0; border-radius: 4px; background: var(--surface2); vertical-align: middle; }
   /* A narrow figure puts its line below the value, across the whole width. */
   @container (max-width: 200px) {
     .graph .value { grid-column: 1 / -1; }
+    .graph { grid-template-rows: auto auto auto 1fr; }
     .spark-slot { grid-row: 3; grid-column: 1 / -1; width: 100%; margin: 6px 0 2px; }
+    .graph .sub { grid-row: 4; }
   }
   @media (max-width: 720px) {
     .kpi { padding: 12px 14px 14px; }

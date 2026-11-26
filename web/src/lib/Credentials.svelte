@@ -77,7 +77,7 @@
   main { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 16px; }
   form {
     width: min(392px, 100%); display: grid; gap: 16px; padding: 30px 28px 28px; box-shadow: var(--lift);
-    animation: arrive 260ms var(--ease);
+    animation: arrive var(--dur-slow) var(--ease-out);
   }
   @keyframes arrive { from { opacity: 0; transform: translateY(8px); } }
   .brand { display: flex; align-items: center; gap: 14px; margin-bottom: 2px; }

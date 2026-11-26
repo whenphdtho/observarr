@@ -43,6 +43,7 @@
   {:else if !latest}
     <Skeleton kind="chart" label="Waiting for the first reading…" />
   {:else if showNet}
+    <div class="settle">
     <div class="nums">
       <div class="num-block">
         <span class="legend"><i class="ring" style:color="var(--down)"></i>Download</span>
@@ -72,7 +73,9 @@
       series={[{ label: 'Download', values: $history.map((h) => mbit(sum(h.net, 'rx'))), color: 'var(--down)' },
         { label: 'Upload', values: $history.map((h) => mbit(sum(h.net, 'tx'))), color: 'var(--up)' }]}
       label={`Network throughput over the last five minutes in Mbit/s: now ${formatMbit(rx)} down, ${formatMbit(tx)} up`} />
+    </div>
   {:else}
+    <div class="settle">
     <div class="nums">
       <div class="num-block">
         <span class="legend"><i class="ring" style:color="var(--cpu)"></i>CPU</span>
@@ -86,6 +89,7 @@
     <TimeChart {times} max={100} format={(v) => `${v}%`} value={formatPct} live legend={false}
       series={[{ label: 'CPU', values: $history.map((h) => h.cpuPercent), color: 'var(--cpu)' }]}
       label={`CPU usage over the last five minutes, now ${formatPct(latest.cpuPercent)}`} />
+    </div>
   {/if}
 </section>
 

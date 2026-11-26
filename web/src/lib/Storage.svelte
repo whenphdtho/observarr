@@ -272,7 +272,7 @@
   .figures { flex: 0 1 auto; min-width: 0; font-size: var(--t-small); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .free { color: var(--text2); }
   .stack { display: flex; gap: 2px; height: 8px; border-radius: 2px; overflow: hidden; background: var(--surface3); }
-  .stack > i { display: block; flex-basis: 0; min-width: 2px; transition: flex-grow 200ms var(--ease); }
+  .stack > i { display: block; flex-basis: 0; min-width: 2px; transition: flex-grow var(--dur-slow) var(--ease-out); }
   .used { background: var(--bar); }
   .used.warn { background: var(--warn); }
   .reserved { background: var(--dim); }

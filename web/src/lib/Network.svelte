@@ -205,6 +205,8 @@
       {:else if !view}
         <Skeleton kind="chart" height={280} label="Waiting for the first reading…" />
       {:else}
+        <!-- While another range loads, the chart keeps the one it has, dimmed; the new one fades in over it. -->
+        <div class="drawn settle" class:busy={view.range !== range} aria-busy={view.range !== range}>
         {#if rangeTotal > 0}
           <p class="span-total">
             <b class="num">{formatTotal(rangeTotal)}</b>
@@ -237,6 +239,7 @@
           traffic that no app explains. Apps also count traffic between each other, so a stack can briefly
           exceed the host's total.
         </p>
+        </div>
       {/if}
     </section>
 
@@ -345,6 +348,8 @@
   .pad { padding: 24px 0; }
 
   .flow { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 24px; align-items: start; }
+  .drawn { transition: opacity var(--dur-base) var(--ease-out); }
+  .busy { opacity: 0.45; }
   .legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; min-width: 0; }
   .legend li { display: flex; align-items: flex-start; gap: 10px; padding: 5px 0; min-width: 0; font-size: var(--t-body); }
   .legend .legend-head { font-size: var(--t-small); color: var(--muted); justify-content: space-between; padding-top: 0; }

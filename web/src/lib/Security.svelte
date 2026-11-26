@@ -133,7 +133,7 @@
     {:else if failed.groups.length === 0}
       <p class="waiting">No failed sign-ins in the last 24 hours.</p>
     {:else}
-      <div class="table-wrap">
+      <div class="table-wrap settle">
         <!-- svelte-ignore a11y_no_redundant_roles -->
         <table class="data attempts" role="table">
           <caption class="visually-hidden">Failed sign-ins by address, last 24 hours</caption>
@@ -339,7 +339,7 @@
       {#if !view}
         <Skeleton count={3} />
       {:else}
-        <ul class="list">
+        <ul class="list settle">
           {#each sessions as s, i (i)}
             <li>
               <span class="who">
@@ -373,7 +373,7 @@
       {:else if view.signIns.length === 0}
         <p class="waiting">No sign-ins recorded.</p>
       {:else}
-        <ul class="list">
+        <ul class="list settle">
           {#each view.signIns as s, i (i)}
             <li>
               <span class="who">
@@ -402,7 +402,7 @@
     {#if !view}
       <Skeleton count={4} />
     {:else}
-      <ul class="checks">
+      <ul class="checks settle">
         {#each view.settings as s (s.id)}
           <li class={s.state}>
             <span class="dot {s.state === 'warn' ? 'warn' : s.state === 'info' ? '' : 'ok'}" aria-hidden="true"></span>

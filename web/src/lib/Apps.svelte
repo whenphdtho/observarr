@@ -6,6 +6,8 @@
   import BrandMark from './BrandMark.svelte';
   import { adapters, adaptersError, adapterFor, snapshot } from './data.js';
   import { lastEvent } from './live.js';
+  import { moveAll } from './motion.js';
+  import { tick } from 'svelte';
 
   // Apps lists every service as a card and holds the Edit dialog. services is the
   // (search-filtered) list; filtered says whether a search is narrowing it. onadd opens the Add
@@ -24,6 +26,7 @@
   let expanded = $state(loadExpanded());
   let onboarding = $state(false);
   let addButtonEl;
+  let gridEl = $state();
 
   const allExpanded = $derived(services.length > 0 && services.every((s) => expanded[s.id]));
   const taken = $derived(services.map((s) => s.name));
@@ -54,14 +57,22 @@
     }
   }
 
+  // An opened card takes a whole row and a closed one gives it back: the cards travel to their new places.
+  function relayout(change) {
+    moveAll(gridEl?.children ?? [], () => {
+      change();
+      return tick();
+    });
+  }
+
   function toggle(id) {
-    expanded = { ...expanded, [id]: !expanded[id] };
+    relayout(() => { expanded = { ...expanded, [id]: !expanded[id] }; });
     saveExpanded();
   }
 
   function toggleAll() {
     const next = !allExpanded;
-    expanded = { ...expanded, ...Object.fromEntries(services.map((s) => [s.id, next])) };
+    relayout(() => { expanded = { ...expanded, ...Object.fromEntries(services.map((s) => [s.id, next])) }; });
     saveExpanded();
   }
 
@@ -129,7 +140,7 @@
       </div>
     {/if}
   {:else}
-    <div class="grid">
+    <div class="grid" bind:this={gridEl}>
       {#each services as service (service.id)}
         <ServiceCard {service} adapter={adapterFor($adapters, service.type)} expanded={!!expanded[service.id]}
           ontoggle={toggle} onedit={openEdit} onremoved={focusAddButton} />
