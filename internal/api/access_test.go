@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"observarr/internal/adapter"
 	"observarr/internal/auth"
@@ -246,6 +248,50 @@ func TestHealthReportsAFailingDatabase(t *testing.T) {
 	c.srv.healthAt = c.srv.healthAt.Add(-healthEvery) // the next request probes again
 	if code, data, _ := c.do("GET", "/api/health", "", nil); code != 503 || data["status"] != "degraded" || data["reason"] == "" {
 		t.Fatalf("health with a closed database = %d %v, want 503", code, data)
+	}
+}
+
+// TestLockedDatabaseKeepsServingReads holds the database's write lock from outside, as another process could: the
+// health check reports it degraded, changes fail, and everything that only reads keeps working.
+func TestLockedDatabaseKeepsServingReads(t *testing.T) {
+	t.Parallel() // each write waits out the busy timeout
+	e := newServicesEnv(t)
+	e.create("App")
+	other, err := sql.Open("sqlite", "file:"+filepath.Join(e.dir, "o.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	lock, err := other.Conn(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Close()
+	if _, err := lock.ExecContext(context.Background(), "BEGIN IMMEDIATE"); err != nil {
+		t.Fatal(err)
+	}
+	e.srv.healthAt = time.Time{} // the next health check probes again
+
+	if code, data, _ := e.do("GET", "/api/health", "", nil); code != 503 || data["status"] != "degraded" {
+		t.Fatalf("health while locked = %d %v, want 503 degraded", code, data)
+	}
+	if code, _, _ := e.do("GET", "/api/security", "", nil); code != 200 { // read from the database
+		t.Fatalf("security while locked = %d", code)
+	}
+	if code, _, _ := e.do("GET", "/api/session", "", nil); code != 200 {
+		t.Fatalf("session while locked = %d", code)
+	}
+	if code, _ := e.send("POST", "/api/services", fmt.Sprintf(`{"type":"fake","name":"B","url":%q,"apiKey":%q}`,
+		e.appURL, testKey)); code < 500 {
+		t.Fatalf("adding a service while locked = %d, want a server error", code)
+	}
+
+	if _, err := lock.ExecContext(context.Background(), "ROLLBACK"); err != nil {
+		t.Fatal(err)
+	}
+	e.srv.healthAt = time.Time{}
+	if code, _, _ := e.do("GET", "/api/health", "", nil); code != 200 {
+		t.Fatalf("health after the lock was released = %d", code)
 	}
 }
 

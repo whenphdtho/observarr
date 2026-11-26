@@ -12,7 +12,7 @@
   import BrandMark from './BrandMark.svelte';
   import ThemeSwitch from './ThemeSwitch.svelte';
   import { arrive } from './motion.js';
-  import { live, serviceList, reconnecting, lastEvent } from './live.js';
+  import { live, serviceList, reconnecting, offline, lastEvent } from './live.js';
   import { loadAdapters, loadSystem } from './data.js';
   import { matches } from './status.js';
   import { now } from './ticker.js';
@@ -47,6 +47,7 @@
   const current = $derived(VIEWS.find((v) => v.id === view));
   const services = $derived($serviceList.filter((s) => matches(query, s.name, s.type, s.url)));
   const age = $derived($lastEvent ? ($now - $lastEvent < 10000 ? 'just now' : formatAge($lastEvent, $now)) : '');
+  const down = $derived($offline || $reconnecting);
 
   function select(id) {
     const target = VIEWS.find((v) => v.id === id).hash;
@@ -174,11 +175,12 @@
     <div class="wrap">
       <header class="top">
         <h1 class="ellipsis">{addingApps ? 'Add apps' : current.label}</h1>
-        <p class="live" class:stale={$reconnecting} role="status">
+        <p class="live" class:stale={down} role="status">
           <!-- The dot beats once per update; it is rebuilt each time, so there is no running loop. -->
-          {#key $lastEvent}<i aria-hidden="true" class:beat={!$reconnecting && $lastEvent > 0}></i>{/key}
-          <span>{$reconnecting ? 'Reconnecting…' : 'Live'}</span>
-          {#if age && !$reconnecting}<span class="ago" aria-hidden="true">· {age}</span>{/if}
+          {#key $lastEvent}<i aria-hidden="true" class:beat={!down && $lastEvent > 0}></i>{/key}
+          <span>{$offline ? 'Offline' : $reconnecting ? 'Reconnecting…' : 'Live'}</span>
+          <!-- While the stream is down, what is shown is as old as its last update: say so. -->
+          {#if age}<span class="ago" class:keep={down} aria-hidden="true">· {#if down}<span class="word">{'updated '}</span>{/if}{age}</span>{/if}
         </p>
       </header>
 
@@ -317,7 +319,7 @@
     .top { margin: 10px 0 16px; }
   }
   @media (max-width: 400px) {
-    .live .ago { display: none; }
+    .live .ago:not(.keep), .live .word { display: none; }
   }
   /* Six labels no longer fit below 390px: the dock shows icons only, the label stays the link's name. */
   @media (max-width: 389px) {

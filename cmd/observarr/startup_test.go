@@ -62,6 +62,39 @@ func TestReadOnlyDataStopsStart(t *testing.T) {
 	}
 }
 
+func TestMissingDataDirIsCreatedOrExplained(t *testing.T) {
+	parent := t.TempDir()
+	dir := filepath.Join(parent, "a", "data")
+	unlock, err := prepareDataDir(dir)
+	if err != nil {
+		t.Fatalf("missing data directory: %v", err)
+	}
+	unlock()
+	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() || fi.Mode().Perm() != 0o700 {
+		t.Fatalf("created data directory: %v %v", fi, err)
+	}
+
+	file := filepath.Join(parent, "file")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := prepareDataDir(file); err == nil || !strings.Contains(err.Error(), "data directory "+file+" cannot be created") {
+		t.Fatalf("data directory that is a file = %v", err)
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores file permission bits")
+	}
+	locked := filepath.Join(parent, "locked")
+	if err := os.Mkdir(locked, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(locked, 0o700)
+	_, err = prepareDataDir(filepath.Join(locked, "data"))
+	if err == nil || !strings.Contains(err.Error(), "cannot be created") || !strings.Contains(err.Error(), "uid "+strconv.Itoa(os.Getuid())) {
+		t.Fatalf("data directory in a read-only folder = %v", err)
+	}
+}
+
 func TestDataDirIsLockedAndPrivate(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "data")
 	if err := os.MkdirAll(dir, 0o755); err != nil {

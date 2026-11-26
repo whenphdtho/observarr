@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -133,7 +134,7 @@ func doJSON(ctx context.Context, t Target, method, path string, body []byte, lim
 		return fmt.Errorf("adapter: %s: %w", reqURL.Path, StatusError(resp.StatusCode))
 	}
 
-	answer := &bodyReader{r: http.MaxBytesReader(nil, resp.Body, limit)}
+	answer := &bodyReader{ctx: ctx, r: http.MaxBytesReader(nil, resp.Body, limit)}
 	if err := read(json.NewDecoder(answer)); err != nil {
 		var tooLarge *http.MaxBytesError
 		switch {
@@ -150,13 +151,19 @@ func doJSON(ctx context.Context, t Target, method, path string, body []byte, lim
 }
 
 // bodyReader keeps the first error other than io.EOF that reading the body returned, so StreamJSON can tell a failed
-// read from malformed JSON.
+// read from malformed JSON. It stops at ctx's end even while what it reads comes from memory, such as a compressed
+// answer that arrived whole and only unpacks slowly.
 type bodyReader struct {
+	ctx context.Context
 	r   io.Reader
 	err error
 }
 
 func (b *bodyReader) Read(p []byte) (int, error) {
+	if err := b.ctx.Err(); err != nil {
+		b.err = cmp.Or(b.err, err)
+		return 0, err
+	}
 	n, err := b.r.Read(p)
 	if err != nil && err != io.EOF && b.err == nil {
 		b.err = err
