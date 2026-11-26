@@ -36,13 +36,19 @@ func (s *Store) CreateService(ctx context.Context, svc Service, seal func(id int
 }
 
 // ImportServices adds svcs, each sealed as CreateService does (seal gets the index in svcs and the new row id),
-// and records dismissed as Dismiss does, all in one transaction: on any error nothing changes. With replace,
-// every saved service is removed first. It returns the added services, in the order of svcs, or ErrExists
-// if a name is taken.
+// records dismissed as Dismiss does and, when alerts is not nil, imports its channels and rules, all in one
+// transaction: on any error nothing changes. With replace, every saved service is removed first, and every saved
+// alert channel when alerts is not nil. It returns the added services, in the order of svcs, or ErrExists if a
+// name is taken.
 func (s *Store) ImportServices(ctx context.Context, replace bool, svcs []Service, dismissed []string,
-	seal func(i int, id int64) ([]byte, error)) ([]Service, error) {
+	seal func(i int, id int64) ([]byte, error), alerts *AlertImport) ([]Service, error) {
 	var created []Service
 	err := s.inTx(ctx, func(tx *sql.Tx) error {
+		if alerts != nil {
+			if _, err := importAlerts(ctx, tx, replace, *alerts); err != nil {
+				return err
+			}
+		}
 		if replace {
 			if _, err := tx.ExecContext(ctx, "DELETE FROM services"); err != nil {
 				return err

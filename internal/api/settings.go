@@ -34,8 +34,8 @@ type exportInput struct {
 	WithoutKeys bool   `json:"withoutKeys"`
 }
 
-// exportSettings answers with the settings file as a download: every service and dismissed find, and, under a
-// passphrase, the services' keys.
+// exportSettings answers with the settings file as a download: every service, dismissed find, alert rule and alert
+// channel, and, under a passphrase, the services' keys and the channels' secrets.
 func (s *Server) exportSettings(w http.ResponseWriter, r *http.Request, sess store.Session) {
 	var in exportInput
 	if !readJSON(w, r, &in) {
@@ -86,8 +86,15 @@ func (s *Server) exportSettings(w http.ResponseWriter, r *http.Request, sess sto
 		f.Dismissed = append(f.Dismissed, key)
 	}
 	slices.Sort(f.Dismissed)
+	alerts, channelSecrets, err := s.exportAlerts(ctx, !in.WithoutKeys)
+	if err != nil {
+		s.internal(w, r, err)
+		return
+	}
+	f.Alerts = alerts
 	if !in.WithoutKeys {
-		if !s.withFileKeySlot(ctx, func() { err = backup.Seal(&f, keys, in.Passphrase) }) {
+		sealed := backup.Keys{Services: keys, Channels: channelSecrets}
+		if !s.withFileKeySlot(ctx, func() { err = backup.Seal(&f, sealed, in.Passphrase) }) {
 			return
 		}
 		if err != nil {
@@ -104,6 +111,9 @@ func (s *Server) exportSettings(w http.ResponseWriter, r *http.Request, sess sto
 	detail := fmt.Sprintf("services: %d, keys encrypted: %d", len(f.Services), len(keys))
 	if in.WithoutKeys {
 		detail = fmt.Sprintf("services: %d, without keys", len(f.Services))
+	}
+	if n := len(alerts.Channels); n > 0 {
+		detail += fmt.Sprintf(", alert channels: %d", n)
 	}
 	s.audit(r, sess.UserName, "exported settings", detail)
 	h := w.Header()
@@ -168,6 +178,7 @@ type importReport struct {
 	CreatedAt        string            `json:"createdAt"`
 	ObservarrVersion string            `json:"observarrVersion"`
 	Services         []importedService `json:"services"`
+	Channels         []importedChannel `json:"channels"` // alert channels
 	Skipped          []skippedService  `json:"skipped"`
 	Dismissed        int               `json:"dismissed"` // dismissed finds of known app types
 	Saved            int               `json:"saved"`     // services saved here before the import
@@ -235,11 +246,17 @@ func (s *Server) importSettings(w http.ResponseWriter, r *http.Request, sess sto
 		return
 	}
 	items, rep, dismissed, err := s.planImport(f, keys, saved)
+	var alerts alertPlan
+	if err == nil {
+		alerts, err = s.planAlerts(ctx, f, keys)
+	}
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	rep.Saved = len(saved)
+	rep.Channels = append(rep.Channels, alerts.report...)
+	rep.Skipped = append(rep.Skipped, alerts.skipped...)
 	if in.Mode == "preview" {
 		writeJSON(w, http.StatusOK, rep)
 		return
@@ -264,10 +281,12 @@ func (s *Server) importSettings(w http.ResponseWriter, r *http.Request, sess sto
 		rows[i] = store.Service{Type: it.typ, Name: it.sp.name, BaseURL: it.sp.target.BaseURL.String(),
 			Container: it.sp.container}
 	}
+	alerts.skipped = nil
+	imported := alerts.apply(s, replace)
 	created, err := s.Store.ImportServices(ctx, replace, rows, dismissed,
-		func(i int, id int64) ([]byte, error) { return s.sealKey(id, items[i].sp.target.APIKey) })
+		func(i int, id int64) ([]byte, error) { return s.sealKey(id, items[i].sp.target.APIKey) }, imported)
 	if errors.Is(err, store.ErrExists) {
-		writeError(w, http.StatusConflict, "a service with one of these names exists already")
+		writeError(w, http.StatusConflict, "a service or alert channel with one of these names exists already")
 		return
 	}
 	if err != nil {
@@ -293,58 +312,68 @@ func (s *Server) importSettings(w http.ResponseWriter, r *http.Request, sess sto
 		rep.Services[i] = items[i].out
 		rep.Services[i].NameTaken = false
 	}
+	rep.Channels = alerts.report
+	rep.Skipped = append(rep.Skipped, alerts.skipped...)
+	if imported != nil && s.Alerts != nil {
+		if err := s.Alerts.Reload(bg); err != nil {
+			s.Log.Error("reloading the alert channels failed", "err", err)
+		}
+	}
 	rep.Applied = true
 
 	detail := fmt.Sprintf("added: %d, skipped: %d", len(created), len(rep.Skipped))
 	if replace {
 		detail += fmt.Sprintf(", removed: %d", rep.Removed)
 	}
-	if keys != nil {
+	if imported != nil && len(imported.Channels) > 0 {
+		detail += fmt.Sprintf(", alert channels: %d", len(imported.Channels))
+	}
+	if f.Secrets != nil && !in.WithoutKeys {
 		detail += ", keys decrypted"
 	}
 	s.audit(r, sess.UserName, "imported settings", detail)
 	writeJSON(w, http.StatusOK, rep)
 }
 
-// importKeys returns the keys in f, decrypted with the request's passphrase; none when f holds none or the user
-// imports without them. A wrong passphrase counts against the user's import attempts. It answers the request
-// itself when it fails.
+// importKeys returns the keys and secrets in f, decrypted with the request's passphrase; none when f holds none or
+// the user imports without them. A wrong passphrase counts against the user's import attempts. It answers the
+// request itself when it fails.
 func (s *Server) importKeys(w http.ResponseWriter, r *http.Request, sess store.Session, f backup.File,
-	in importInput) (map[int64]string, bool) {
+	in importInput) (backup.Keys, bool) {
 	switch {
 	case in.WithoutKeys && in.Passphrase != "":
 		writeError(w, http.StatusBadRequest, "passphrase: not with withoutKeys")
-		return nil, false
+		return backup.Keys{}, false
 	case f.Secrets == nil || in.WithoutKeys:
-		return nil, true
+		return backup.Keys{}, true
 	case in.Passphrase == "":
 		writeError(w, http.StatusBadRequest, "this file holds encrypted keys: enter its passphrase, or import without keys")
-		return nil, false
+		return backup.Keys{}, false
 	case len(in.Passphrase) > backup.MaxPassphrase:
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("passphrase: at most %d bytes", backup.MaxPassphrase))
-		return nil, false
+		return backup.Keys{}, false
 	}
 	who := strings.ToLower(sess.UserName)
 	if ok, wait := s.importLimiter.Attempt(who); !ok {
 		tooMany(w, wait, "too many wrong passphrases")
-		return nil, false
+		return backup.Keys{}, false
 	}
-	var keys map[int64]string
+	var keys backup.Keys
 	var err error
 	if !s.withFileKeySlot(r.Context(), func() { keys, err = backup.Open(f, in.Passphrase) }) {
 		s.importLimiter.Release(who) // the client went away before the passphrase was tried
-		return nil, false
+		return backup.Keys{}, false
 	}
 	if errors.Is(err, backup.ErrPassphrase) {
 		s.auditFailure(r, sess.UserName, "settings import failed", "wrong passphrase",
 			auth.ClientIP(r, s.Config.TrustedProxies).String())
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
-		return nil, false
+		return backup.Keys{}, false
 	}
 	if err != nil { // only a wrong passphrase costs an attempt
 		s.importLimiter.Release(who)
 		writeError(w, http.StatusBadRequest, err.Error())
-		return nil, false
+		return backup.Keys{}, false
 	}
 	s.importLimiter.Reset(r.Context(), who) // in memory only: it cannot fail
 	return keys, true
@@ -353,14 +382,14 @@ func (s *Server) importKeys(w http.ResponseWriter, r *http.Request, sess store.S
 // planImport checks every service in f as adding it by hand would, without contacting it: services of an
 // unknown app type are skipped, any other fault fails the whole file. It returns the services to add, the report
 // of a preview (NameTaken set against saved), and the dismissed finds of known app types.
-func (s *Server) planImport(f backup.File, keys map[int64]string, saved []store.Service) ([]importItem, importReport,
+func (s *Server) planImport(f backup.File, keys backup.Keys, saved []store.Service) ([]importItem, importReport,
 	[]string, error) {
 	taken := make(map[string]bool, len(saved))
 	for _, svc := range saved {
 		taken[strings.ToLower(svc.Name)] = true
 	}
 	rep := importReport{CreatedAt: f.CreatedAt, ObservarrVersion: f.ObservarrVersion,
-		Services: []importedService{}, Skipped: []skippedService{}}
+		Services: []importedService{}, Channels: []importedChannel{}, Skipped: []skippedService{}}
 	var items []importItem
 	inFile := map[string]bool{}
 	for _, svc := range f.Services {
@@ -369,7 +398,7 @@ func (s *Server) planImport(f backup.File, keys map[int64]string, saved []store.
 				Reason: "unknown app type"})
 			continue
 		}
-		key := keys[svc.ID]
+		key := keys.Services[svc.ID]
 		sp, err := s.parseTarget(targetInput{Type: svc.Type, URL: svc.URL, APIKey: key})
 		if err == nil {
 			sp, err = sp.named(svc.Name, svc.Container)
