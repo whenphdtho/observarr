@@ -16,6 +16,16 @@ func FuzzParse(f *testing.F) {
 		`"data":"AAAAAAAAAAAAAAAAAAAAAA=="}}`))
 	f.Add([]byte(`{"format":"observarr-settings","version":1,"secrets":{"kdf":{"time":4294967295,"memoryKiB":4294967295}}}`))
 	f.Add([]byte(`{"format":"observarr-settings","version":1}{}`))
+	f.Add([]byte(`{"format":"observarr-settings","version":1,"alerts":{"rules":{},"channels":[]}}`))
+	f.Add([]byte(`{"format":"observarr-settings","version":2}`))
+	f.Add([]byte(`{"format":"observarr-settings","version":2,"services":[{"id":1,"type":"t","name":"n","url":"http://192.0.2.1",` +
+		`"hasKey":true}],"alerts":{"rules":{"enabled":{"down":true},"repeatHours":6},"channels":[{"id":1,"type":"ntfy",` +
+		`"name":"phone","settings":{"topic":"t"},"rules":["down"],"enabled":true,"secrets":["token"]}]}}`))
+	f.Add([]byte(`{"format":"observarr-settings","version":2,"alerts":{"rules":null,"channels":[{"id":7},{"id":7}]}}`))
+	f.Add([]byte(`{"format":"observarr-settings","version":2,"alerts":{"channels":[{"settings":[1,2],"rules":null}]},` +
+		`"secrets":{"kdf":{"name":"argon2id","salt":"AAAAAAAAAAAAAAAAAAAAAA==","time":3,"memoryKiB":65536,"threads":4},` +
+		`"cipher":"AES-256-GCM","nonce":"AAAAAAAAAAAAAAAA","data":"AAAAAAAAAAAAAAAAAAAAAA=="}}`))
+	f.Add([]byte(`{"format":"observarr-settings","version":3}`))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		file, err := Parse(data)
 		if err != nil {
@@ -28,8 +38,23 @@ func FuzzParse(f *testing.F) {
 			}
 			ids[s.ID] = true
 		}
+		if file.Version != 1 && file.Version != Version {
+			t.Fatalf("accepted version %d", file.Version)
+		}
+		if a := file.Alerts; a != nil {
+			if file.Version == 1 {
+				t.Fatal("accepted alerts in a version 1 file")
+			}
+			chans := map[int64]bool{}
+			for _, ch := range a.Channels {
+				if chans[ch.ID] {
+					t.Fatalf("alert channel id %d accepted twice", ch.ID)
+				}
+				chans[ch.ID] = true
+			}
+		}
 		if s := file.Secrets; s != nil {
-			// Opening the block costs exactly version 1's key derivation, never what the file asks for.
+			// Opening the block costs exactly the one key derivation, never what the file asks for.
 			if s.KDF.Time != kdfTime || s.KDF.MemoryKiB != kdfMemoryKiB || s.KDF.Threads != kdfThreads {
 				t.Fatalf("accepted key derivation %+v", s.KDF)
 			}

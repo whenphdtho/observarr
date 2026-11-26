@@ -13,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // receiver records the requests a fake destination gets and answers each with its status.
@@ -275,5 +276,55 @@ func TestCheckChannel(t *testing.T) {
 		if _, err := CheckChannel(c.typ, c.s, c.sec); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
+	}
+}
+
+// TestHostileReceiverEndsInTime sends to destinations that answer slowly or without end: each send is over
+// within its deadline, whatever the answer.
+func TestHostileReceiverEndsInTime(t *testing.T) {
+	const deadline = time.Second
+	cases := map[string]http.HandlerFunc{
+		"slow drip": func(w http.ResponseWriter, r *http.Request) {
+			io.Copy(io.Discard, r.Body)
+			w.WriteHeader(http.StatusOK)
+			for r.Context().Err() == nil {
+				if _, err := w.Write([]byte(" ")); err != nil {
+					return
+				}
+				w.(http.Flusher).Flush()
+				time.Sleep(50 * time.Millisecond)
+			}
+		},
+		"slow headers": func(w http.ResponseWriter, r *http.Request) {
+			io.Copy(io.Discard, r.Body)
+			<-r.Context().Done()
+		},
+		"huge answer": func(w http.ResponseWriter, r *http.Request) {
+			io.Copy(io.Discard, r.Body)
+			w.WriteHeader(http.StatusBadGateway)
+			chunk := []byte(strings.Repeat("noise ", 10_000))
+			for n := 0; n < 1<<30 && r.Context().Err() == nil; n += len(chunk) {
+				if _, err := w.Write(chunk); err != nil {
+					return
+				}
+			}
+		},
+	}
+	for name, h := range cases {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewServer(h)
+			t.Cleanup(srv.Close)
+			s := sender(t, "webhook", Settings{}, Secrets{"url": srv.URL})
+			ctx, cancel := context.WithTimeout(context.Background(), deadline)
+			defer cancel()
+			start := time.Now()
+			err := s.Send(ctx, sample)
+			if took := time.Since(start); took > deadline+time.Second {
+				t.Fatalf("Send took %v (%v)", took, err)
+			}
+			if note := describe(err, nil); len([]rune(note)) > maxNote {
+				t.Fatalf("note = %q", note)
+			}
+		})
 	}
 }
