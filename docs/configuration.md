@@ -65,7 +65,7 @@ directory read-only under one parent folder, one subfolder per app, and point `O
 ```yaml
 services:
   observarr:
-    image: observarr   # docker build -t observarr . — see Quick start
+    image: ghcr.io/whenphdtho/observarr:latest
     environment:
       - OBSERVARR_APP_CONFIGS=/appconfig
     volumes:

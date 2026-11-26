@@ -58,9 +58,9 @@ More screenshots: [Add apps](docs/images/add-apps.png) · [first start](docs/ima
 ## Quick start
 
 ```sh
-docker build -t observarr .
 mkdir -p data && sudo chown 65532 data
-docker run -d --name observarr -p 9898:9898 -v "$PWD/data:/data" -e OBSERVARR_INSECURE_COOKIES=1 observarr
+docker run -d --name observarr -p 9898:9898 -v "$PWD/data:/data" -e OBSERVARR_INSECURE_COOKIES=1 \
+  ghcr.io/whenphdtho/observarr:latest
 docker logs observarr   # shows: setup token: <token> (also in data/setup-token)
 ```
 
@@ -73,12 +73,22 @@ have access to the host, and it is deleted once setup succeeds.
 > [Reverse proxy](docs/configuration.md#reverse-proxy).
 
 For the host and container figures and for listing your app containers, use
-[`deploy/docker-compose.yml`](deploy/docker-compose.yml) (Observarr plus a read-only Docker socket proxy). No
-image is published yet, so it builds from the repo:
+[`deploy/docker-compose.yml`](deploy/docker-compose.yml) (Observarr plus a read-only Docker socket proxy):
 
 ```sh
 mkdir -p deploy/data && sudo chown 65532 deploy/data
-docker compose -f deploy/docker-compose.yml up -d --build
+docker compose -f deploy/docker-compose.yml up -d
+```
+
+Images are multi-arch (amd64, arm64). Tags, upgrades and pinning by digest:
+[Releases and versions](docs/deploy.md#releases-and-versions). To build from source, `docker build -t observarr .`.
+
+**Verify the image** was built by this repository's release workflow:
+
+```sh
+cosign verify ghcr.io/whenphdtho/observarr:<tag> \
+  --certificate-identity-regexp 'https://github.com/whenphdtho/observarr/.github/workflows/release.yml@refs/tags/v.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
 ## Adding your apps
@@ -95,7 +105,7 @@ app's LAN address and port. `localhost` is Observarr's own container. Details, D
 ## Docs
 
 - [Configuration and operation](docs/configuration.md): every setting, adding apps in detail, data folder, reverse proxy, security and recovery.
-- [Deploy](docs/deploy.md): host and container figures, Storage and rclone, CrowdSec, memory and security notes.
+- [Deploy](docs/deploy.md): releases and upgrades, host and container figures, Storage and rclone, CrowdSec, memory and security notes.
 - [Adapters](docs/adapters.md): how app support works and how to add an app.
 
 Development: `make ui` builds the web app, `make check` runs gofmt, vet and tests, `make build` builds the binary.
