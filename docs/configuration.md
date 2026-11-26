@@ -221,3 +221,48 @@ like the others (e.g. `/srv/sabnzbd/config:/appconfig/sabnzbd:ro`) and Observarr
 key, port and URL base) or `nzbget.conf` (`ControlUsername`, `ControlPassword` and `ControlPort`). As with every
 found key, it is used only when you tick "Use the API key found in …" when adding the app. Connecting them is in
 [deploy.md](deploy.md#connect-sabnzbd-and-nzbget).
+
+## Alerts
+
+**System → Alerts** (or the bell in the header, which shows how many alerts fire now) sends a message when
+something needs attention, even while nobody has Observarr open.
+
+- **Channels:** ntfy (server, `https://ntfy.sh` by default, topic and an optional access token), Discord (webhook
+  address), a generic webhook (address and an optional signing secret), email over SMTP (STARTTLS or TLS; mail is
+  never sent unencrypted and the password only ever goes over TLS), Gotify (server and app token) and Telegram
+  (bot token and chat). A channel is saved off: **Send test**, and once a test gets through, switch it on.
+  Changing where it sends switches it off until it passes a test again. Each channel picks the rules it receives.
+- **Secrets** (tokens, webhook addresses, the SMTP password, the signing secret) are encrypted with `secret.key`
+  like API keys, never shown again and never logged; the API only says whether one is saved. Changing a channel's
+  server needs its token again.
+- **Rules**, each on or off: a service down for N minutes (3 by default) or a container dead, restarting or
+  unhealthy; health warnings and errors an app reports (including the downloads a downloader says failed in the
+  last day); a disk or cache at N % (90 by default) or a mount that is not mounted, out of space or failing to
+  upload; the traffic budget at 80 % and 100 %; sign-in lockouts and N failed sign-ins in 15 minutes; downloads
+  stuck or failed; and, off by default, requests waiting for approval. They are the Overview's "Needs attention",
+  worked out on the server.
+- **When:** the rules are checked on every change and every 30 s. A problem is sent once it has lasted its time
+  (a minute for health warnings, five for storage and downloads), and again when it is over (after a minute
+  without it). Optionally, alerts still firing are sent again after a few hours. Each channel takes at most
+  30 messages an hour (configurable); beyond, one message says how many were held back. In optional quiet hours
+  only critical alerts go out; the rest follow in one summary. A failed delivery is tried three times, with
+  growing waits. Firing alerts are kept in the database, so a restart sends nothing again.
+- **Log:** the latest alerts and what each channel made of them (sent, failed with a short reason, held,
+  suppressed); the newest 1000 are kept.
+
+Every message leaves through a client that refuses link-local and cloud metadata addresses (169.254.0.0/16,
+`fd00:ec2::254`, …) and follows no redirects; addresses on your LAN are fine. Set **Observarr's address** in the
+rules to get links back to it.
+
+A webhook gets a JSON POST:
+
+```json
+{"event": "firing", "severity": "critical", "service": "Sonarr", "title": "Sonarr is down",
+ "message": "cannot reach 192.0.2.10:8989: connection refused", "time": "2026-11-26T20:45:19Z",
+ "url": "https://observarr.example/#/apps"}
+```
+
+`event` is `firing`, `repeat`, `resolved`, `summary` or `test`; `severity` is `critical`, `warning` or `info`;
+`service` and `url` may be empty. With a signing secret, `X-Observarr-Signature: sha256=<hex>` carries the
+HMAC-SHA256 of the raw body under that secret. Settings export and import include the channels and rules, with
+their secrets in the encrypted part of the file (left out, to be entered again, when exported without keys).
