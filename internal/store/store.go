@@ -70,8 +70,13 @@ func Open(ctx context.Context, path string, log *slog.Logger) (*Store, error) {
 // Close closes the database.
 func (s *Store) Close() error { return s.db.Close() }
 
+// journalSizeLimit is what the write-ahead log is cut back to once checkpointed; without it, the log keeps the
+// size of the largest transaction ever written (a migration, a big prune).
+const journalSizeLimit = 4 << 20
+
 func openDB(ctx context.Context, path string) (*sql.DB, error) {
-	pragmas := "_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
+	pragmas := "_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)" +
+		"&_pragma=journal_size_limit(" + strconv.Itoa(journalSizeLimit) + ")"
 	dsn := (&url.URL{Scheme: "file", OmitHost: true, Path: path, RawQuery: pragmas}).String()
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
