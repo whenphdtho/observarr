@@ -144,7 +144,8 @@
     <h2 id="backup-title">Backup and restore</h2>
   </div>
   <p class="lede">
-    One file with every app (address, container link, key) and the finds you dismissed. Accounts, sessions,
+    One file with every app (address, container link, key), the alert channels and rules, and the finds you
+    dismissed. Accounts, sessions,
     history and the audit log stay on this server.
   </p>
 

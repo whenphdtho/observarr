@@ -11,6 +11,7 @@
   import Icon from './icons/Icon.svelte';
   import BrandMark from './BrandMark.svelte';
   import ThemeSwitch from './ThemeSwitch.svelte';
+  import AlertBell from './AlertBell.svelte';
   import { arrive } from './motion.js';
   import { live, serviceList, reconnecting, lastEvent } from './live.js';
   import { loadAdapters, loadSystem } from './data.js';
@@ -180,6 +181,7 @@
           <span>{$reconnecting ? 'Reconnecting…' : 'Live'}</span>
           {#if age && !$reconnecting}<span class="ago" aria-hidden="true">· {age}</span>{/if}
         </p>
+        <AlertBell />
       </header>
 
       {#key addingApps ? 'add' : view}
