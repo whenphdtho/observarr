@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -221,11 +222,20 @@ func mapQueueItem(r queueRecord) shape.QueueItem {
 		Title:     shape.Clip(r.Title),
 		Status:    shape.Clip(strings.ToLower(r.Status)),
 		Progress:  progress,
-		SizeBytes: int64(r.Size),
-		LeftBytes: int64(r.SizeLeft),
+		SizeBytes: byteCount(r.Size),
+		LeftBytes: byteCount(r.SizeLeft),
 		ETA:       shape.Clip(r.TimeLeft),
 		Problem:   shape.Clip(problem),
 	}
+}
+
+// byteCount is a size an app reported, as bytes: a negative one is 0, and one beyond int64 is its largest value
+// (converting it as it is would be undefined).
+func byteCount(f float64) int64 {
+	if f >= math.MaxInt64 {
+		return math.MaxInt64
+	}
+	return int64(max(f, 0))
 }
 
 // clampUnit confines p to [0, 1]: an app can report sizeleft outside [0, size] (a negative

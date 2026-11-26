@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -368,7 +369,8 @@ func TestProbeQueueEmptyRecordsIsNonNilSlice(t *testing.T) {
 func TestProbeQueueClampsProgressToUnitRange(t *testing.T) {
 	body := `{"totalRecords":2,"records":[
 		{"title":"Negative sizeleft","status":"downloading","size":100,"sizeleft":-50,"timeleft":"","trackedDownloadStatus":"ok","statusMessages":[],"errorMessage":""},
-		{"title":"Sizeleft over size","status":"downloading","size":100,"sizeleft":150,"timeleft":"","trackedDownloadStatus":"ok","statusMessages":[],"errorMessage":""}
+		{"title":"Sizeleft over size","status":"downloading","size":100,"sizeleft":150,"timeleft":"","trackedDownloadStatus":"ok","statusMessages":[],"errorMessage":""},
+		{"title":"Out of range","status":"downloading","size":-1,"sizeleft":1e300}
 	]}`
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v3/queue", func(w http.ResponseWriter, r *http.Request) {
@@ -383,8 +385,12 @@ func TestProbeQueueClampsProgressToUnitRange(t *testing.T) {
 		t.Fatalf("Probe: %v", err)
 	}
 	items := result.(shape.Queue).Items
-	if len(items) != 2 {
-		t.Fatalf("len(Items) = %d, want 2", len(items))
+	if len(items) != 3 {
+		t.Fatalf("len(Items) = %d, want 3", len(items))
+	}
+	if items[0].LeftBytes != 0 || items[2].SizeBytes != 0 || items[2].LeftBytes != math.MaxInt64 {
+		t.Errorf("sizes %d/%d and %d/%d, want negative ones 0 and huge ones capped", items[0].SizeBytes,
+			items[0].LeftBytes, items[2].SizeBytes, items[2].LeftBytes)
 	}
 	if items[0].Progress != 1 {
 		t.Errorf("Items[0].Progress (sizeleft < 0, raw > 1) = %v, want 1 (clamped)", items[0].Progress)
