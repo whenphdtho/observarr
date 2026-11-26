@@ -19,6 +19,7 @@ import (
 
 	"observarr/internal/adapter"
 	"observarr/internal/adapters/catalog"
+	"observarr/internal/alert"
 	"observarr/internal/api"
 	"observarr/internal/auth"
 	"observarr/internal/collect/docker"
@@ -122,6 +123,13 @@ func run(cfg config.Config, log *slog.Logger) error {
 		}
 	}()
 
+	alerts := alert.New(alert.Config{Store: st, Box: box, Hub: hub, System: sampler.Snapshot,
+		Security: func() alert.SecurityState { return securityState(limiter) }, Deps: alert.DefaultDeps(), Log: log})
+	if err := alerts.Start(ctx); err != nil {
+		return fmt.Errorf("start alerts: %w", err)
+	}
+	defer func() { stop(); alerts.Wait() }() // runs before st.Close: no delivery outlives the store
+
 	server := &api.Server{
 		Log:            log,
 		Store:          st,
@@ -135,6 +143,7 @@ func run(cfg config.Config, log *slog.Logger) error {
 		Hub:            hub,
 		Poller:         pl,
 		System:         sampler,
+		Alerts:         alerts,
 		HTTP:           httpc,
 		Context:        ctx,
 		SetupToken:     setupToken,
@@ -288,8 +297,8 @@ func openBox(ctx context.Context, cfg config.Config, st *store.Store, log *slog.
 		if err != nil {
 			return nil, err
 		}
-		log.Warn("credential key missing: dropped the saved API keys; enter them again, then remove OBSERVARR_RESET_KEYS",
-			"services", n)
+		log.Warn("credential key missing: dropped the saved API keys and alert channel secrets; enter them again, "+
+			"then remove OBSERVARR_RESET_KEYS", "dropped", n)
 	case cfg.ResetKeys:
 		log.Warn("OBSERVARR_RESET_KEYS=1 is set, but no saved API key needed dropping; remove the setting")
 	}
@@ -342,7 +351,7 @@ func collector(cfg config.Config, log *slog.Logger) (*local.Local, error) {
 }
 
 // upkeep removes expired sessions, old audit rows, login addresses older than auth.KnownFor, old daily
-// traffic totals and old history buckets, now and then hourly, until ctx ends.
+// traffic totals, old history buckets and old alert log entries, now and then hourly, until ctx ends.
 func upkeep(ctx context.Context, st *store.Store, log *slog.Logger) {
 	tick := time.NewTicker(time.Hour)
 	defer tick.Stop()
@@ -362,12 +371,29 @@ func upkeep(ctx context.Context, st *store.Store, log *slog.Logger) {
 		if err := st.PruneHistory(ctx, now); err != nil && ctx.Err() == nil {
 			log.Warn("removing old history failed", "err", err)
 		}
+		if err := st.PruneAlertLog(ctx); err != nil && ctx.Err() == nil {
+			log.Warn("removing old alert log entries failed", "err", err)
+		}
 		select {
 		case <-ctx.Done():
 			return
 		case now = <-tick.C:
 		}
 	}
+}
+
+// securityState is what alerts read of the sign-in limiter: the addresses locked out, the failed attempts in the
+// lockout window and how long the server-wide limit still holds.
+func securityState(l *auth.Limiter) alert.SecurityState {
+	addrs, serverLocked := l.Status()
+	st := alert.SecurityState{ServerLocked: serverLocked}
+	for _, a := range addrs {
+		st.Failed += a.Attempts
+		if a.Locked > 0 {
+			st.LockedOut++
+		}
+	}
+	return st
 }
 
 // checkHealth asks the running server for /api/health and returns the process exit code.

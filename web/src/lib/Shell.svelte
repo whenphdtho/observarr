@@ -11,6 +11,7 @@
   import Icon from './icons/Icon.svelte';
   import BrandMark from './BrandMark.svelte';
   import ThemeSwitch from './ThemeSwitch.svelte';
+  import AlertBell from './AlertBell.svelte';
   import { arrive } from './motion.js';
   import { live, serviceList, reconnecting, offline, lastEvent } from './live.js';
   import { loadAdapters, loadSystem } from './data.js';
@@ -207,6 +208,7 @@
           <!-- While the stream is down, what is shown is as old as its last update: say so. -->
           {#if age}<span class="ago" class:keep={down} aria-hidden="true">· {#if down}<span class="word">{'updated '}</span>{/if}{age}</span>{/if}
         </p>
+        <AlertBell />
       </header>
 
       {#key addingApps ? 'add' : view}

@@ -66,6 +66,9 @@ type Hub struct {
 	svcs map[int64]*entry
 	subs map[int]*subscriber
 	next int // next subscriber id
+	// changed holds a signal after any event, for the one consumer of Changed. It is not a subscriber: it neither
+	// counts in Watchers nor can it be dropped.
+	changed chan struct{}
 }
 
 // entry is a service's state plus the bookkeeping Record needs for change detection.
@@ -81,10 +84,15 @@ type subscriber struct {
 // NewHub returns an empty Hub.
 func NewHub() *Hub {
 	return &Hub{
-		svcs: make(map[int64]*entry),
-		subs: make(map[int]*subscriber),
+		svcs:    make(map[int64]*entry),
+		subs:    make(map[int]*subscriber),
+		changed: make(chan struct{}, 1),
 	}
 }
+
+// Changed returns a channel that holds a signal when anything changed since it was last received. Changes in a row
+// are coalesced into one signal; the receiver reads the state with Snapshot. It is meant for one receiver.
+func (h *Hub) Changed() <-chan struct{} { return h.changed }
 
 // Put adds a service or replaces its metadata (Type, Name, URL, HasKey, Kinds, Container). Existing readings and
 // Up are kept. It always emits a "service" event, since metadata changes (e.g. a rename) are
@@ -219,6 +227,10 @@ func (h *Hub) Watchers() int {
 // is full is dropped and its channel closed, under the same lock used by cancel and Subscribe,
 // so no send ever races a close.
 func (h *Hub) emitLocked(ev Event) {
+	select {
+	case h.changed <- struct{}{}:
+	default:
+	}
 	for id, sub := range h.subs {
 		select {
 		case sub.ch <- ev:

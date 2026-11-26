@@ -393,7 +393,7 @@ func TestMigration0009KeepsServiceIDsAndNeverReusesThem(t *testing.T) {
 		t.Fatalf("CreateService after removing 7 = %+v, %v; want ID 8", created, err)
 	}
 	restored, err := s.ImportServices(ctx, true, []Service{{Type: "sonarr", Name: "Sonarr", BaseURL: "http://sonarr:8989"}},
-		nil, func(int, int64) ([]byte, error) { return nil, nil })
+		nil, func(int, int64) ([]byte, error) { return nil, nil }, nil)
 	if err != nil || len(restored) != 1 || restored[0].ID != 9 {
 		t.Fatalf("replacing import = %+v, %v; want ID 9", restored, err)
 	}

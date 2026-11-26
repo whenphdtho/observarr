@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"time"
 
@@ -38,21 +39,35 @@ func Degraded(err error) string {
 	return ""
 }
 
-// HasSealedKeys reports whether any service has a saved (sealed) API key.
+// HasSealedKeys reports whether any service has a saved (sealed) API key, or any alert channel sealed secrets.
 func (s *Store) HasSealedKeys(ctx context.Context) (bool, error) {
 	var exists bool
-	err := s.db.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM services WHERE api_key IS NOT NULL)").Scan(&exists)
+	err := s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM services WHERE api_key IS NOT NULL)
+		OR EXISTS (SELECT 1 FROM alert_channels WHERE secrets IS NOT NULL)`).Scan(&exists)
 	return exists, err
 }
 
-// ClearSealedKeys removes every saved API key, for when the key that sealed them is lost, and returns how many
-// services had one.
+// ClearSealedKeys removes every saved API key and alert channel secret, for when the key that sealed them is
+// lost, and returns how many services and channels had one. A channel that lost its secrets is disabled until it
+// is tested again.
 func (s *Store) ClearSealedKeys(ctx context.Context) (int64, error) {
-	res, err := s.db.ExecContext(ctx, "UPDATE services SET api_key = NULL WHERE api_key IS NOT NULL")
-	if err != nil {
-		return 0, err
-	}
-	return res.RowsAffected()
+	var n int64
+	err := s.inTx(ctx, func(tx *sql.Tx) error {
+		for _, q := range []string{"UPDATE services SET api_key = NULL WHERE api_key IS NOT NULL",
+			"UPDATE alert_channels SET secrets = NULL, enabled = 0, tested = 0 WHERE secrets IS NOT NULL"} {
+			res, err := tx.ExecContext(ctx, q)
+			if err != nil {
+				return err
+			}
+			rows, err := res.RowsAffected()
+			if err != nil {
+				return err
+			}
+			n += rows
+		}
+		return nil
+	})
+	return n, err
 }
 
 // PruneAudit removes audit rows older than auditMaxAge and, beyond maxAuditRows, the oldest ones.

@@ -1,5 +1,5 @@
-// Package backup reads and writes the settings file: Observarr's services and dismissed finds in readable JSON,
-// with the services' keys in one block encrypted under a passphrase.
+// Package backup reads and writes the settings file: Observarr's services, dismissed finds and alert settings in
+// readable JSON, with the services' keys and the alert channels' secrets in one block encrypted under a passphrase.
 //
 // The key is derived from the passphrase with argon2id and a random salt; the block is sealed with AES-256-GCM
 // under a random nonce. Everything else in the file is the block's associated data, so a file whose readable
@@ -22,8 +22,8 @@ import (
 const (
 	// Format names an Observarr settings file.
 	Format = "observarr-settings"
-	// Version is the one version of the file this Observarr reads and writes.
-	Version = 1
+	// Version is the version of the file this Observarr writes. It reads version 1 too, which has no alerts.
+	Version = 2
 	// MaxFile bounds a settings file.
 	MaxFile = 1 << 20
 	// MinPassphrase is the shortest passphrase accepted, in characters.
@@ -55,8 +55,35 @@ type File struct {
 	CreatedAt        string    `json:"createdAt"`
 	ObservarrVersion string    `json:"observarrVersion"`
 	Services         []Service `json:"services"`
-	Dismissed        []string  `json:"dismissed"` // dismissed discovery finds, "<type> <normalised url>[ <where>]"
-	Secrets          *Secrets  `json:"secrets"`   // nil when exported without keys
+	Dismissed        []string  `json:"dismissed"`        // dismissed discovery finds, "<type> <normalised url>[ <where>]"
+	Alerts           *Alerts   `json:"alerts,omitempty"` // from version 2
+	Secrets          *Secrets  `json:"secrets"`          // nil when exported without keys
+}
+
+// Alerts are the alert rules and channels. Rules and each channel's Settings are kept as the server saves them;
+// the importer checks them.
+type Alerts struct {
+	Rules    json.RawMessage `json:"rules"`
+	Channels []Channel       `json:"channels"`
+}
+
+// Channel is one alert channel as exported. ID refers to its secrets in the secrets block; it is not kept on
+// import. Secrets names the secret fields it had: without them in the secrets block, they must be entered again.
+type Channel struct {
+	ID       int64           `json:"id"`
+	Type     string          `json:"type"`
+	Name     string          `json:"name"`
+	Settings json.RawMessage `json:"settings"`
+	Rules    []string        `json:"rules"`
+	Enabled  bool            `json:"enabled"`
+	Secrets  []string        `json:"secrets"`
+}
+
+// Keys are what the secrets block holds: the services' keys by service ID and, from version 2, the alert
+// channels' secret fields by channel ID.
+type Keys struct {
+	Services map[int64]string            `json:"services"`
+	Channels map[int64]map[string]string `json:"channels"`
 }
 
 // Service is one service as exported. ID refers to its key in the secrets block; it is not kept on import.
@@ -69,7 +96,7 @@ type Service struct {
 	HasKey    bool   `json:"hasKey"` // the service had a key; without it in the secrets, it must be entered again
 }
 
-// Secrets is the encrypted block: the keys by service ID, as JSON.
+// Secrets is the encrypted block: Keys as JSON (in version 1, only the services' keys by service ID).
 type Secrets struct {
 	KDF    KDF    `json:"kdf"`
 	Cipher string `json:"cipher"`
@@ -97,9 +124,9 @@ func CheckPassphrase(p string) error {
 	return nil
 }
 
-// Seal encrypts keys (by service ID) into f.Secrets under passphrase. Call it once f is otherwise complete:
-// later changes to f make the block fail to open.
-func Seal(f *File, keys map[int64]string, passphrase string) error {
+// Seal encrypts keys into f.Secrets under passphrase. Call it once f is otherwise complete: later changes to f
+// make the block fail to open.
+func Seal(f *File, keys Keys, passphrase string) error {
 	plain, err := json.Marshal(keys)
 	if err != nil {
 		return err
@@ -128,22 +155,27 @@ func Seal(f *File, keys map[int64]string, passphrase string) error {
 
 // Open decrypts f's keys with passphrase. It returns ErrPassphrase when they do not decrypt. f must come from
 // Parse and hold secrets.
-func Open(f File, passphrase string) (map[int64]string, error) {
+func Open(f File, passphrase string) (Keys, error) {
 	aead, err := newAEAD(f.Secrets.KDF, passphrase)
 	if err != nil {
-		return nil, err
+		return Keys{}, err
 	}
 	ad, err := associated(f)
 	if err != nil {
-		return nil, err
+		return Keys{}, err
 	}
 	plain, err := aead.Open(nil, f.Secrets.Nonce, f.Secrets.Data, ad)
 	if err != nil {
-		return nil, ErrPassphrase
+		return Keys{}, ErrPassphrase
 	}
-	var keys map[int64]string
-	if err := json.Unmarshal(plain, &keys); err != nil {
-		return nil, errors.New("the file's keys are malformed")
+	var keys Keys
+	if f.Version == 1 {
+		err = json.Unmarshal(plain, &keys.Services)
+	} else {
+		err = json.Unmarshal(plain, &keys)
+	}
+	if err != nil {
+		return Keys{}, errors.New("the file's keys are malformed")
 	}
 	return keys, nil
 }
@@ -182,8 +214,8 @@ func Parse(data []byte) (File, error) {
 	if head.Format != Format {
 		return File{}, errors.New("not an Observarr settings file")
 	}
-	if head.Version != Version {
-		return File{}, fmt.Errorf("settings file version %d is not supported; this Observarr reads version %d",
+	if head.Version != 1 && head.Version != Version {
+		return File{}, fmt.Errorf("settings file version %d is not supported; this Observarr reads versions 1 to %d",
 			head.Version, Version)
 	}
 
@@ -199,6 +231,18 @@ func Parse(data []byte) (File, error) {
 			return File{}, fmt.Errorf("malformed settings file: service id %d appears twice", svc.ID)
 		}
 		ids[svc.ID] = true
+	}
+	if f.Alerts != nil {
+		if f.Version == 1 {
+			return File{}, errors.New("malformed settings file: alerts in a version 1 file")
+		}
+		chans := make(map[int64]bool, len(f.Alerts.Channels))
+		for _, ch := range f.Alerts.Channels {
+			if chans[ch.ID] {
+				return File{}, fmt.Errorf("malformed settings file: alert channel id %d appears twice", ch.ID)
+			}
+			chans[ch.ID] = true
+		}
 	}
 	if s := f.Secrets; s != nil {
 		k := s.KDF
