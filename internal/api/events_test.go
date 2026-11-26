@@ -39,14 +39,12 @@ func (c *client) openEvents(ctx context.Context) *stream {
 	return &stream{t: c.t, resp: resp, sc: sc, seen: c.seen}
 }
 
-// next returns the next event's name and data, or "ping" for a ping comment. ok is false once the stream ended.
+// next returns the next event's name and data. ok is false once the stream ended.
 func (s *stream) next() (name, data string, ok bool) {
 	for s.sc.Scan() {
 		line := s.sc.Text()
 		s.seen.Write([]byte(line + "\n"))
 		switch {
-		case line == ": ping":
-			name = "ping"
 		case strings.HasPrefix(line, "event: "):
 			name = strings.TrimPrefix(line, "event: ")
 		case strings.HasPrefix(line, "data: "):
@@ -87,6 +85,13 @@ func TestEventsSnapshotThenChanges(t *testing.T) {
 		t.Fatalf("headers %v", h)
 	}
 
+	// The browser is told to wait a random 2 to 4 s before reconnecting.
+	if !s.sc.Scan() {
+		t.Fatal("stream ended at once")
+	}
+	if ms, err := strconv.Atoi(strings.TrimPrefix(s.sc.Text(), "retry: ")); err != nil || ms < 2000 || ms >= 4000 {
+		t.Fatalf("first line %q, want the reconnection delay", s.sc.Text())
+	}
 	name, data, ok := s.next()
 	var snap []state.ServiceState
 	if !ok || name != "snapshot" || json.Unmarshal([]byte(data), &snap) != nil || len(snap) != 1 || snap[0].ID != id {

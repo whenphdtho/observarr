@@ -5,7 +5,9 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"time"
 
@@ -21,12 +23,17 @@ const (
 	maxSessionStreams = 4
 	// streamWriteTimeout ends a stream whose client stops reading, instead of blocking on it forever.
 	streamWriteTimeout = 10 * time.Second
+	// retryBase is the least delay the browser waits before reconnecting a stream that broke; each stream asks for
+	// up to twice that.
+	retryBase = 2 * time.Second
 )
 
 // events streams live state as Server-Sent Events: first a "snapshot" of every service and a "system" event with the
 // host and container figures, then a "service" or "removed" event per change, a "system" event per new sample (at
-// most one per systemEvery; a newer sample replaces one not sent yet), and a ping comment now and then so proxies
-// keep the connection open. The stream ends when the client leaves, when the server shuts down (the request context
+// most one per systemEvery; a newer sample replaces one not sent yet), and a "ping" event now and then, so proxies
+// keep the connection open and the browser can tell a stalled stream from a quiet one. The first message also sets
+// the browser's reconnection delay, spread at random so that tabs do not all return at once after a restart. The
+// stream ends when the client leaves, when the server shuts down (the request context
 // ends), when its session is ended by another one's "sign out others", when the session is found gone at a ping
 // (logged out or expired), or when the hub drops the subscription because the client fell behind; the browser then
 // reconnects and gets a fresh snapshot.
@@ -93,7 +100,9 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, sess store.Sessi
 		defer stop()
 	}
 	var buf bytes.Buffer // holds one encoded event at a time, reused so that events cost no new buffer
-	if !send(s.event(&buf, "snapshot", s.Hub.Snapshot())) || !send(s.event(&buf, "system", s.systemSnapshot())) {
+	retry := fmt.Appendf(nil, "retry: %d\n\n", retryBase.Milliseconds()+rand.Int64N(retryBase.Milliseconds()))
+	if !send(retry) || !send(s.event(&buf, "snapshot", s.Hub.Snapshot())) ||
+		!send(s.event(&buf, "system", s.systemSnapshot())) {
 		return
 	}
 	lastSample = time.Now()
@@ -126,7 +135,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, sess store.Sessi
 			if _, err := s.Sessions.Lookup(r); err != nil {
 				return
 			}
-			msg = []byte(": ping\n\n")
+			msg = []byte("event: ping\ndata: {}\n\n") // a comment would never reach the page
 		}
 		if !send(msg) {
 			return
