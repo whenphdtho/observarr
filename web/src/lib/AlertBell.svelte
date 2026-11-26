@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import Icon from './icons/Icon.svelte';
+  import { arrive } from './motion.js';
   import { firing, loadFiring, severityTone, scrollToAlerts } from './alerts.js';
 
   // AlertBell sits in the shell's header: how many alerts fire now, in the colour of the worst, leading to the
@@ -26,14 +27,18 @@
 
 <a class="bell {tone}" href={HASH} aria-label={label} title={label} onclick={open}>
   <Icon name="bell" size={17} />
-  {#if count}<span class="count num" aria-hidden="true">{count > 99 ? '99+' : count}</span>{/if}
+  <!-- A new count rises into place, so a change is noticed without reading. -->
+  {#key count}
+    {#if count}<span class="count num" aria-hidden="true" in:arrive|global={{ y: 4 }}>{count > 99 ? '99+' : count}</span>{/if}
+  {/key}
 </a>
 
 <style>
   .bell {
     position: relative; display: inline-grid; place-items: center; width: 32px; height: 32px; flex: none;
     border-radius: var(--r); color: var(--muted); border: 1px solid transparent;
-    transition: background 140ms var(--ease), color 140ms var(--ease), border-color 140ms var(--ease);
+    transition-property: background-color, color, border-color;
+    transition-duration: var(--dur-fast); transition-timing-function: var(--ease-out);
   }
   .bell:hover { color: var(--text); background: var(--surface2); border-color: var(--border2); }
   .bell.warn { color: var(--warn); }

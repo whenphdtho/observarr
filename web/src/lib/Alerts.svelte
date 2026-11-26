@@ -1,5 +1,6 @@
 <script>
   import { onMount, tick } from 'svelte';
+  import { flip } from 'svelte/animate';
   import AlertChannelForm from './AlertChannelForm.svelte';
   import Icon from './icons/Icon.svelte';
   import Skeleton from './Skeleton.svelte';
@@ -7,6 +8,7 @@
   import { TYPES, RULES, RULE_NAMES, firing, loadFiring, severityTone, scrollToAlerts } from './alerts.js';
   import { now } from './ticker.js';
   import { formatAge } from './format.js';
+  import { arrive, leave, reveal, conceal, smoothHeight, FLIP } from './motion.js';
 
   // Alerts is the System view's section for what Observarr sends while nobody has it open: the alerts firing now,
   // the channels (each tested before it is switched on), the rules and what was sent lately. #/system/alerts
@@ -123,7 +125,7 @@
     return list.length === 0 ? 'Nothing firing' : `${list.length} firing`;
   }
 
-  async function arrive() {
+  async function onHash() {
     if (window.location.hash !== ALERTS_HASH) return;
     await tick();
     scrollToAlerts();
@@ -134,12 +136,12 @@
     loadRules();
     loadLog();
     loadFiring();
-    arrive();
+    onHash();
     const id = setInterval(() => { loadLog(); loadFiring(); }, 30 * 1000);
-    window.addEventListener('hashchange', arrive);
+    window.addEventListener('hashchange', onHash);
     return () => {
       clearInterval(id);
-      window.removeEventListener('hashchange', arrive);
+      window.removeEventListener('hashchange', onHash);
     };
   });
 </script>
@@ -154,7 +156,7 @@
   {#if $firing?.length}
     <ul class="firing" aria-label="Firing now">
       {#each $firing as a (a.key)}
-        <li class={severityTone(a.severity)}>
+        <li class={severityTone(a.severity)} in:arrive out:leave animate:flip={FLIP}>
           <span class="dot {severityTone(a.severity)}" aria-hidden="true"></span>
           <span class="what">
             <span class="visually-hidden">{a.severity}: </span>
@@ -178,8 +180,10 @@
         {/if}
       </div>
       {#if adding}
-        <AlertChannelForm oncancel={() => (adding = false)}
-          onsaved={(view) => { channels = [...channels, view].sort((a, b) => a.name.localeCompare(b.name)); adding = false; }} />
+        <div in:reveal out:conceal>
+          <AlertChannelForm oncancel={() => (adding = false)}
+            onsaved={(view) => { channels = [...channels, view].sort((a, b) => a.name.localeCompare(b.name)); adding = false; }} />
+        </div>
       {/if}
       {#if loadError}
         <p class="error" role="alert">{loadError}</p>
@@ -226,9 +230,11 @@
                 {#if toggleError[ch.id]}<p class="error" role="alert">{toggleError[ch.id]}</p>{/if}
               </div>
               {#if editing === ch.id}
-                <AlertChannelForm channel={ch} oncancel={() => (editing = null)}
-                  onsaved={(view) => { replace(view); editing = null; results = { ...results, [ch.id]: undefined }; }}
-                  onremoved={(id) => { channels = channels.filter((c) => c.id !== id); editing = null; }} />
+                <div in:reveal out:conceal>
+                  <AlertChannelForm channel={ch} oncancel={() => (editing = null)}
+                    onsaved={(view) => { replace(view); editing = null; results = { ...results, [ch.id]: undefined }; }}
+                    onremoved={(id) => { channels = channels.filter((c) => c.id !== id); editing = null; }} />
+                </div>
               {/if}
             </li>
           {/each}
@@ -312,9 +318,10 @@
     {:else if log.length === 0}
       <p class="none">Nothing sent yet. Alerts and tests show here with what each channel made of them.</p>
     {:else}
+      <div use:smoothHeight>
       <ul class="log">
         {#each log as e (e.id)}
-          <li>
+          <li in:arrive animate:flip={FLIP}>
             <span class="dot {e.event === 'resolved' || e.event === 'test' ? 'ok' : severityTone(e.severity)}" aria-hidden="true"></span>
             <span class="what">
               <span class="line">
@@ -337,6 +344,7 @@
           </li>
         {/each}
       </ul>
+      </div>
     {/if}
   </div>
 </section>
@@ -355,7 +363,7 @@
   p.error { font-size: var(--t-body); }
 
   /* Firing now: the rows the bell leads to, washed in their state colour. */
-  .firing { list-style: none; margin: 0 0 20px; padding: 0; display: grid; gap: 4px; }
+  .firing { position: relative; list-style: none; margin: 0 0 20px; padding: 0; display: grid; gap: 4px; }
   .firing li {
     display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r); min-width: 0;
     background: var(--warn-wash);
