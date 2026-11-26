@@ -1,6 +1,6 @@
 <script>
   import AppIcon from './AppIcon.svelte';
-  import { reveal, conceal } from './motion.js';
+  import { reveal, conceal, flash } from './motion.js';
   import { api } from './api.js';
   import { widgets } from './shapes/index.js';
   import { formatPct, formatBytes, formatPercent, containerStatusClass } from './format.js';
@@ -80,7 +80,7 @@
 </script>
 
 <article class="card service {status === 'fail' || status === 'warn' ? status : ''}" class:open={expanded} id={`service-${service.id}`} tabindex="-1"
-  aria-labelledby={`service-name-${service.id}`}>
+  aria-labelledby={`service-name-${service.id}`} use:flash={status}>
   <header>
     <span class="tile-icon" aria-hidden="true"><AppIcon {adapter} size={20} /></span>
     <div class="ident">
@@ -182,6 +182,7 @@
 <style>
   .service {
     display: grid; grid-template-rows: auto auto 1fr auto; gap: 10px; scroll-margin-top: 16px; padding: 14px 16px 12px;
+    transition: border-color var(--dur-base) var(--ease-out);
   }
   .service.open { grid-column: 1 / -1; grid-template-rows: none; }
   .service:focus { outline: none; }
@@ -234,7 +235,7 @@
     padding-top: 10px; border-top: 1px solid var(--border);
   }
   .toggle { padding: 5px 11px 5px 7px; gap: 4px; }
-  .toggle :global(.icon) { color: var(--text2); transition: transform 160ms var(--ease); }
+  .toggle :global(.icon) { color: var(--text2); transition: transform var(--dur-base) var(--ease-out); }
   .toggle[aria-expanded='true'] :global(.icon) { transform: rotate(90deg); }
   .manage { display: flex; gap: 8px; margin-left: auto; }
   .manage button { padding: 5px 11px; }

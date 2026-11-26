@@ -24,7 +24,17 @@
 
 /* Tokens that do not change with the theme: shape, type, motion and the brand. */
 :root {
-  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Motion: three durations and three curves, shared with lib/motion.js, which reads them from here. Fast is
+     feedback (hover, press, focus, a tooltip following the pointer); base is a change of state (a fold, a fade, a
+     colour, a bar); slow is something travelling (rows moving, the current-view pill, a chart changing range).
+     Glow is the one long fade: a highlight that settles back once. */
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 360ms;
+  --dur-glow: 1400ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1); /* standard: arrivals and state changes */
+  --ease-emph: cubic-bezier(0.2, 0, 0, 1); /* emphasised: things that travel, picking up then settling */
+  --ease-exit: cubic-bezier(0.32, 0, 0.67, 0); /* leaving: quick, gathering speed */
   /* Radii: panels, controls, small marks, and pills (segmented options, the current view). */
   --r-lg: 16px;
   --r: 8px;
@@ -131,13 +141,15 @@
   --ok: #4ad295;
   --warn: #f2b45e;
   --fail: #f7768a;
-  /* Problem rows: a faint wash of the state colour behind the row, the dot and words carry the state. */
+  /* Problem rows: a faint wash of the state colour behind the row, the dot and words carry the state. A flash is
+     the brief light of a state that just changed (lib/motion.js flash). */
   --fail-wash: rgba(247, 118, 138, 0.09);
   --fail-wash-hi: rgba(247, 118, 138, 0.16);
   --fail-flash: rgba(247, 118, 138, 0.28);
   --warn-wash: rgba(242, 180, 94, 0.06);
   --warn-wash-hi: rgba(242, 180, 94, 0.13);
   --warn-flash: rgba(242, 180, 94, 0.22);
+  --ok-flash: rgba(74, 210, 149, 0.16);
   --fail-edge: rgba(247, 118, 138, 0.42);
   --warn-edge: rgba(242, 180, 94, 0.36);
   --warn-line: rgba(242, 180, 94, 0.38);
@@ -201,6 +213,7 @@
   --warn-wash: rgba(214, 132, 20, 0.07);
   --warn-wash-hi: rgba(214, 132, 20, 0.12);
   --warn-flash: rgba(214, 132, 20, 0.2);
+  --ok-flash: rgba(17, 120, 75, 0.12);
   --fail-edge: rgba(192, 40, 63, 0.38);
   --warn-edge: rgba(176, 102, 0, 0.36);
   --warn-line: rgba(176, 102, 0, 0.42);
@@ -234,12 +247,14 @@ button {
   font: inherit; font-size: var(--t-body); font-weight: 500; display: inline-flex; align-items: center; justify-content: center;
   gap: 7px; padding: 6px 12px; border-radius: var(--r); cursor: pointer; white-space: nowrap;
   color: var(--accent-ink); background: var(--accent-fill); border: 1px solid var(--accent-fill);
-  transition: background 140ms var(--ease), border-color 140ms var(--ease), color 140ms var(--ease),
-    filter 100ms var(--ease), box-shadow 140ms var(--ease);
+  transition-property: background-color, border-color, color, filter, box-shadow, transform;
+  transition-duration: var(--dur-fast); transition-timing-function: var(--ease-out);
 }
 button:hover:not(:disabled) { background: var(--accent-fill-hi); border-color: var(--accent-fill-hi); }
-/* Pressed: a short dip in brightness, on every button whatever its fill. */
-button:active:not(:disabled) { filter: brightness(0.88); }
+/* Pressed: a short dip in brightness and a slight give, on every button whatever its fill. A whole row that is a
+   button only dims: shrinking a wide row would look like it moved. */
+button:active:not(:disabled) { filter: brightness(0.88); transform: scale(0.97); }
+button.row-link:active:not(:disabled) { transform: none; }
 button:disabled { opacity: 0.55; cursor: default; }
 /* Secondary buttons keep a fill and an edge of their own, so they read as buttons, not as text. */
 button.quiet { color: var(--text); background: var(--surface2); border-color: var(--btn-edge); }
@@ -255,9 +270,14 @@ input, select, textarea {
   border-radius: var(--r); padding: 7px 10px; width: 100%;
 }
 input[type='checkbox'] { width: 16px; height: 16px; accent-color: var(--accent); }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; animation: ring-in var(--dur-fast) var(--ease-out); }
+/* The focus ring draws in: from a soft, wider ring to the crisp one. */
+@keyframes ring-in { from { outline-color: transparent; outline-width: 5px; } }
 /* Links, inputs and summaries change state as quickly as buttons do. */
-a, summary, input, select, textarea { transition: color 140ms var(--ease), background-color 140ms var(--ease), border-color 140ms var(--ease); }
+a, summary, input, select, textarea {
+  transition-property: color, background-color, border-color, box-shadow;
+  transition-duration: var(--dur-fast); transition-timing-function: var(--ease-out);
+}
 input:hover:not(:focus):not(:disabled), select:hover:not(:focus):not(:disabled), textarea:hover:not(:focus):not(:disabled) { border-color: var(--field-border-hi); }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 a { color: var(--accent-text); text-underline-offset: 3px; text-decoration-thickness: 1px; }
@@ -268,12 +288,12 @@ a:hover { color: var(--accent-text-hi); }
   text-decoration: none; white-space: nowrap; border-radius: 4px;
 }
 .go:hover { color: var(--accent-text-hi); text-decoration: underline; }
-.go .icon { transition: transform 140ms var(--ease); }
+.go .icon { transition: transform var(--dur-fast) var(--ease-out); }
 .go:hover .icon { transform: translateX(2px); }
 /* A whole row that is a link or button: a wash on hover, a chevron that brightens. */
-.row-link { cursor: pointer; transition: background 140ms var(--ease); }
+.row-link { cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out); }
 .row-link:hover { background: var(--surface2); }
-.row-link .chev { color: var(--muted); flex: none; display: grid; transition: color 140ms var(--ease), transform 140ms var(--ease); }
+.row-link .chev { color: var(--muted); flex: none; display: grid; transition: color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out); }
 .row-link:hover .chev, .row-link:focus-visible .chev { color: var(--text); transform: translateX(2px); }
 
 dialog {
@@ -281,10 +301,9 @@ dialog {
   padding: 22px; width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto;
   box-shadow: var(--float);
 }
-dialog[open] { animation: dialog-in 180ms var(--ease); }
-dialog[open]::backdrop { animation: backdrop-in 180ms var(--ease); }
+dialog[open] { animation: dialog-in var(--dur-base) var(--ease-out); }
+dialog[open]::backdrop { animation: settle var(--dur-base) var(--ease-out); }
 @keyframes dialog-in { from { opacity: 0; transform: translateY(6px) scale(0.985); } }
-@keyframes backdrop-in { from { opacity: 0; } }
 dialog::backdrop { background: var(--scrim); }
 dialog h2 { font-size: var(--t-h2); }
 dialog label { display: grid; gap: 6px; font-size: var(--t-body); color: var(--text2); }
@@ -327,8 +346,9 @@ dialog .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap:
   display: grid; gap: 1px; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: hidden;
   background: var(--border); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--lift);
 }
-/* A section that arrives once its data does fades in rather than popping. */
-.empty { animation: settle 220ms var(--ease); }
+/* Content that arrives once its data does (in place of a skeleton, or an empty state) fades in rather than
+   popping. */
+.empty, .settle { animation: settle var(--dur-base) var(--ease-out); }
 @keyframes settle { from { opacity: 0; } }
 @container (max-width: 820px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 359px) { .kpis { grid-template-columns: minmax(0, 1fr); } }
@@ -425,7 +445,7 @@ table.data { width: 100%; border-collapse: collapse; font-size: var(--t-body); }
 
 /* Thin progress bar. What it shows is always also given as text next to it. */
 .bar { height: 4px; border-radius: 2px; background: var(--surface3); overflow: hidden; }
-.bar > i { display: block; height: 100%; border-radius: 2px; background: var(--bar); transition: width 200ms var(--ease); }
+.bar > i { display: block; height: 100%; border-radius: 2px; background: var(--bar); transition: width var(--dur-slow) var(--ease-out); }
 .bar.warn > i { background: var(--warn); }
 .bar.fail > i { background: var(--fail); }
 
@@ -446,6 +466,16 @@ table.data { width: 100%; border-collapse: collapse; font-size: var(--t-body); }
 .empty button { margin-top: 10px; }
 .empty > span { max-width: 60ch; font-size: var(--t-body); overflow-wrap: anywhere; }
 .empty .links { display: flex; gap: 6px 16px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
+
+/* Busy: a small ring that turns while a task the user started runs (a scan, a check); it stops with the task. */
+.spinner {
+  width: 14px; height: 14px; border-radius: 50%; flex: none; display: inline-block;
+  border: 2px solid var(--field-border); border-top-color: var(--accent); animation: spin 800ms linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* The theme switch crossfades the whole page once (lib/theme.js), instead of every colour snapping on its own. */
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: var(--dur-base); animation-timing-function: var(--ease-out); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }

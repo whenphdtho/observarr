@@ -1,6 +1,6 @@
 <script>
   import { monotonePath, monotoneBack } from './curve.js';
-  import { niceCeil, timeTicks, tickLabel, stampLabel, nearest, runs, tipSide, thin } from './chart.js';
+  import { niceCeil, timeTicks, tickLabel, stampLabel, nearest, runs, tipAt, thin } from './chart.js';
   import { chartShift } from './motion.js';
   import { step as stepOf } from './history.js';
   import { formatMbit } from './format.js';
@@ -101,7 +101,6 @@
     const sum = (key) => layers.reduce((n, l) => n + (Number.isFinite(l.series?.[key]?.[i]) ? l.series[key][i] : 0), 0);
     return { x: x(i), when: stampLabel(times[i], sampleStep, span), gap, rows, rx: sum('rx'), tx: sum('tx') };
   });
-  const side = $derived(tip ? tipSide(tip.x, width) : null);
   // The moment the keys stand on (the latest before any), and its words for a screen reader.
   const now = $derived(hover >= 0 ? hover : Math.max(0, times.length - 1));
   const spoken = $derived.by(() => {
@@ -169,7 +168,7 @@
         <text class="label" x={PAD.left - 8} y={y(v)} text-anchor="end" dominant-baseline="middle">{axis(v)}</text>
       {/each}
       <g clip-path={`url(#${uid}-plot)`}>
-        <g use:chartShift={live ? { t0, span, width: plotW } : null}>
+        <g use:chartShift={{ t0, span, width: plotW, live }}>
           {#each bands as b, k (k)}
             <path class="band" d={b.rx} fill={`url(#${uid}-in-${k})`} />
             <path class="band" d={b.tx} fill={`url(#${uid}-out-${k})`} />
@@ -189,11 +188,11 @@
         {/if}
       {/each}
       {#if tip}
-        <line class="cross" x1={tip.x} x2={tip.x} y1={PAD.top} y2={PAD.top + plotH} />
+        <line class="cross" x1="0" x2="0" y1={PAD.top} y2={PAD.top + plotH} style:transform={`translateX(${tip.x}px)`} />
       {/if}
     </svg>
     {#if tip}
-      <div class="tip" style:left={side.left} style:right={side.right} aria-hidden="true">
+      <div class="tip" style:transform={tipAt(tip.x, width)} aria-hidden="true">
         <span class="when">{tip.when}</span>
         {#if tip.gap}
           <span class="muted">No reading</span>
@@ -224,10 +223,12 @@
   .side { fill: var(--text2); font-size: var(--t-micro); font-weight: 500; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
   .edge { fill: none; stroke-width: 1.25; stroke-linejoin: round; }
   .cross { stroke: var(--text2); stroke-width: 1; stroke-dasharray: 3 3; }
+  /* The crosshair and the tooltip follow the pointer from sample to sample. */
+  .cross, .tip { transition: transform var(--dur-fast) var(--ease-out); }
   .waiting { display: grid; place-items: center; height: 100%; }
 
   .tip {
-    position: absolute; top: 4px; z-index: 2; pointer-events: none; display: grid; gap: 4px; width: max-content;
+    position: absolute; top: 4px; left: 0; z-index: 2; pointer-events: none; display: grid; gap: 4px; width: max-content;
     max-width: min(280px, 78%); padding: 9px 12px; border-radius: var(--r); background: var(--tip);
     border: 1px solid var(--tip-edge); box-shadow: var(--float); font-size: var(--t-small); color: var(--text2);
   }

@@ -63,7 +63,7 @@
   .ring-wrap { position: relative; flex: none; }
   svg { display: block; }
   .track { fill: none; stroke: var(--surface2); }
-  .seg { fill: none; transition: opacity 140ms var(--ease); }
+  .seg { fill: none; transition: opacity var(--dur-fast) var(--ease-out); }
   .seg.dim { opacity: 0.35; }
   .centre {
     position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; text-align: center;

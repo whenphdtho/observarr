@@ -1,5 +1,5 @@
 <script>
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import Overview from './Overview.svelte';
   import Network from './Network.svelte';
   import Apps from './Apps.svelte';
@@ -43,6 +43,7 @@
   let query = $state('');
   let searchEl;
   let mainEl;
+  let navEl;
 
   const current = $derived(VIEWS.find((v) => v.id === view));
   const services = $derived($serviceList.filter((s) => matches(query, s.name, s.type, s.url)));
@@ -98,6 +99,21 @@
     if (event.key === 'Escape' && query) query = '';
   }
 
+  // The current view's pill is one element under the links that slides to the current one, in the side column and
+  // in the phone dock alike. Until it is placed (and without script) the current link fills itself.
+  let pill = $state(null);
+  let pillReady = $state(false);
+  function placePill() {
+    const a = navEl?.querySelector('[aria-current="page"]');
+    pill = a ? { x: a.offsetLeft, y: a.offsetTop, w: a.offsetWidth, h: a.offsetHeight } : null;
+    // The first place is taken at once; only later moves slide.
+    if (a) requestAnimationFrame(() => { pillReady = true; });
+  }
+  $effect(() => {
+    void view;
+    untrack(placePill);
+  });
+
   // Once a reconnect finishes, the adapters and the system figures may be stale (the server may
   // have restarted with other adapters, or Docker only became reachable since): load both again.
   let wasReconnecting = false;
@@ -120,7 +136,12 @@
       hash = window.location.hash;
     };
     window.addEventListener('hashchange', onHashChange);
-    return () => window.removeEventListener('hashchange', onHashChange);
+    const ro = new ResizeObserver(placePill);
+    ro.observe(navEl);
+    return () => {
+      window.removeEventListener('hashchange', onHashChange);
+      ro.disconnect();
+    };
   });
 </script>
 
@@ -141,8 +162,12 @@
       <kbd aria-hidden="true">/</kbd>
     </div>
 
-    <nav aria-label="Views">
+    <nav aria-label="Views" bind:this={navEl} class:placed={pill !== null}>
       <p class="cap" aria-hidden="true">Views</p>
+      {#if pill}
+        <span class="pill" class:ready={pillReady} aria-hidden="true" style:width={`${pill.w}px`} style:height={`${pill.h}px`}
+          style:transform={`translate(${pill.x}px, ${pill.y}px)`}></span>
+      {/if}
       {#each VIEWS as v (v.id)}
         <a class="vbtn" href={v.hash || '#/'} aria-current={view === v.id ? 'page' : undefined} title={v.label}
           onclick={(e) => { e.preventDefault(); select(v.id); }}>
@@ -243,7 +268,7 @@
   .vbtn {
     display: flex; align-items: center; gap: 10px; padding: 8px 12px; margin-bottom: 2px; border-radius: var(--r);
     color: var(--text2); font-weight: 500; font-size: var(--t-body); text-decoration: none; white-space: nowrap;
-    transition: background 140ms var(--ease), color 140ms var(--ease);
+    transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
   }
   .vbtn :global(.icon) { color: var(--muted); }
   .vbtn:hover { background: var(--surface2); color: var(--text); }
@@ -251,6 +276,13 @@
   /* The current view: a filled blue pill. */
   .vbtn[aria-current='page'], .vbtn[aria-current='page']:hover { background: var(--accent-fill); color: var(--accent-ink); font-weight: 600; }
   .vbtn[aria-current='page'] :global(.icon) { color: var(--accent-ink); }
+  nav { position: relative; }
+  .vbtn { position: relative; }
+  .pill { position: absolute; left: 0; top: 0; border-radius: var(--r); background: var(--accent-fill); pointer-events: none; }
+  .pill.ready {
+    transition-property: transform, width, height; transition-duration: var(--dur-slow); transition-timing-function: var(--ease-emph);
+  }
+  .placed .vbtn[aria-current='page'], .placed .vbtn[aria-current='page']:hover { background: transparent; }
 
   /* The foot of the side column: the theme, then the account. */
   .foot { margin-top: auto; display: grid; gap: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
@@ -271,7 +303,7 @@
   /* One soft ring leaves the dot when a reading arrives. */
   .live i.beat::after {
     content: ''; position: absolute; inset: 0; border-radius: 50%; border: 1px solid var(--ok);
-    animation: beat 900ms var(--ease) both;
+    animation: beat var(--dur-glow) var(--ease-out) both;
   }
   @keyframes beat {
     from { transform: scale(1); opacity: 0.8; }
@@ -314,6 +346,7 @@
     }
     .vlabel { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
     .vbtn[aria-current='page'], .vbtn[aria-current='page']:hover { background: var(--accent-fill); color: var(--accent-ink); }
+    .placed .vbtn[aria-current='page'], .placed .vbtn[aria-current='page']:hover { background: transparent; }
     .top { margin: 10px 0 16px; }
   }
   @media (max-width: 400px) {

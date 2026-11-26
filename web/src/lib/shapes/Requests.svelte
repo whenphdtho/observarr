@@ -1,5 +1,7 @@
 <script>
+  import { flip } from 'svelte/animate';
   import { now } from '../ticker.js';
+  import { arrive, leave, smoothHeight, FLIP, keyed } from '../motion.js';
   import { formatAge } from '../format.js';
 
   // Requests renders one shape.Requests reading: the requests by state and the newest ones. It knows nothing about
@@ -8,7 +10,7 @@
 
   const data = $derived(reading?.data);
   const counts = $derived(data?.counts);
-  const latest = $derived(data?.latest ?? []);
+  const latest = $derived(keyed(data?.latest ?? [], (r) => `${r.type}:${r.title}:${r.at}`));
   const age = $derived(reading ? formatAge(reading.at, $now) : '');
 
   // The tone of each state's chip; a state not listed here is neutral.
@@ -53,10 +55,11 @@
       {#if latest.length === 0}
         <p class="waiting">No requests yet. They show here as soon as someone asks for a movie or a series.</p>
       {:else}
+        <div use:smoothHeight>
         <ul class="items" aria-label="Newest requests">
-          {#each latest as r}
+          {#each latest as { key, item: r } (key)}
             {@const meta = [sentence(r.type), r.requestedBy && `by ${r.requestedBy}`, formatAge(r.at, $now)].filter(Boolean).join(' · ')}
-            <li>
+            <li in:arrive out:leave animate:flip={FLIP}>
               <div class="head">
                 <span class="title ellipsis" title={r.title}>{r.title}</span>
                 <span class="chip {tones[r.state] ?? ''}">{sentence(r.state)}</span>
@@ -65,6 +68,7 @@
             </li>
           {/each}
         </ul>
+        </div>
       {/if}
     {/if}
   {/if}

@@ -1,5 +1,5 @@
 <script>
-  import { niceCeil, tipSide } from './chart.js';
+  import { niceCeil, tipAt } from './chart.js';
   import { formatTotal } from './format.js';
 
   // DailyBars shows traffic per day as bars, what came in below what went out, with the budget per day as a
@@ -72,7 +72,6 @@
     if (f.none) return `${f.when}: no readings`;
     return `${f.when}: ${f.rx} in, ${f.tx} out, ${f.total} in all${f.limit ? `, ${f.limit}` : ''}${f.over ? ', over budget' : ''}`;
   });
-  const side = $derived(tip ? tipSide(tip.x, width) : null);
 
   // column is a bar from y0 (top) down to y1, its top corners rounded when it is the top of the stack.
   function column(x0, y0, y1, round) {
@@ -130,7 +129,7 @@
           <text class="label" x={PAD.left - 10} y={y(v)} text-anchor="end" dominant-baseline="middle">{axis(v)}</text>
         {/each}
         {#if hover >= 0}
-          <rect class="col" x={cx(hover) - slot / 2} y={PAD.top} width={slot} height={plotH} rx="4" />
+          <rect class="col" y={PAD.top} width={slot} height={plotH} rx="4" style:transform={`translateX(${cx(hover) - slot / 2}px)`} />
         {/if}
         {#each days as d, i (d.day)}
           {@const x0 = cx(i) - barW / 2}
@@ -148,7 +147,7 @@
         {#if linePath}<path class="limit" d={linePath} />{/if}
       </svg>
       {#if tip}
-        <div class="tip" style:left={side.left} style:right={side.right} aria-hidden="true">
+        <div class="tip" style:transform={tipAt(tip.x, width)} aria-hidden="true">
           <span class="when">{tip.when}</span>
           {#if tip.none}<span class="note">No readings</span>{:else}
           <span class="row"><i class="ring" style:color="var(--down)"></i><span>In</span><b class="num">{tip.rx}</b></span>
@@ -176,6 +175,8 @@
   .grid { stroke: var(--grid); }
   .label { fill: var(--muted); font-size: var(--t-micro); }
   .col { fill: var(--surface2); }
+  /* The day's column and the tooltip follow the pointer from day to day. */
+  .col, .tip { transition: transform var(--dur-fast) var(--ease-out); }
   .bar { fill-opacity: 0.9; }
   .cap { fill: var(--fail); }
   .limit { fill: none; stroke: var(--series-1); stroke-width: 2; stroke-linejoin: round; }
@@ -185,7 +186,7 @@
   @media (max-width: 720px) { .keys { padding-left: 0; } }
 
   .tip {
-    position: absolute; top: 4px; z-index: 2; pointer-events: none; display: grid; gap: 4px; min-width: 160px;
+    position: absolute; top: 4px; left: 0; z-index: 2; pointer-events: none; display: grid; gap: 4px; min-width: 160px;
     padding: 9px 12px; border-radius: var(--r); background: var(--tip); border: 1px solid var(--tip-edge);
     box-shadow: var(--float); font-size: var(--t-small); color: var(--text2);
   }

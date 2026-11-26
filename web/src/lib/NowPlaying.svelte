@@ -1,7 +1,9 @@
 <script>
   import StreamRow from './StreamRow.svelte';
   import Icon from './icons/Icon.svelte';
-  import { streamServices, streamsOf, streamSummary, streamText, formatBitrate } from './streams.js';
+  import { flip } from 'svelte/animate';
+  import { streamServices, streamsOf, streamSummary, streamText, formatBitrate, streamKey } from './streams.js';
+  import { arrive, leave, smoothHeight, FLIP, keyed } from './motion.js';
 
   // NowPlaying is the Overview's line on what media servers play: a summary and the first streams of every service
   // that fills the "streams" shape. The service cards show them all. onjump(id) shows a service's card.
@@ -13,7 +15,7 @@
   const players = $derived(streamServices(services));
   const sum = $derived(streamSummary(players));
   const rows = $derived(players.flatMap((svc) => (streamsOf(svc)?.streams ?? []).map((stream) => ({ svc, stream }))));
-  const shown = $derived(rows.slice(0, MAX_ROWS));
+  const shown = $derived(keyed(rows.slice(0, MAX_ROWS), ({ svc, stream }) => `${svc.id}:${streamKey(stream)}`));
   const meta = $derived([streamText(sum), formatBitrate(sum.bitrate)].filter(Boolean).join(' · '));
   const named = $derived(players.length > 1);
   // The rest of the streams: those beyond MAX_ROWS, and those a reading counts but does not list.
@@ -31,11 +33,13 @@
     {:else if rows.length === 0}
       <p class="waiting">Nothing is playing.</p>
     {:else}
-      <ul class="rows">
-        {#each shown as { svc, stream }, i (i)}
-          <li><StreamRow {stream} where={named ? svc.name : ''} /></li>
+      <div use:smoothHeight>
+      <ul class="rows settle">
+        {#each shown as { key, item: { svc, stream } } (key)}
+          <li in:arrive out:leave animate:flip={FLIP}><StreamRow {stream} where={named ? svc.name : ''} /></li>
         {/each}
       </ul>
+      </div>
       {#if more > 0}
         <a class="go more" href="#/apps" onclick={players.length === 1 ? (e) => { e.preventDefault(); onjump(players[0].id); } : undefined}>
           {more} more in Apps<Icon name="chevron-right" size={14} />
