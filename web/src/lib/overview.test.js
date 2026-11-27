@@ -2,11 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { situation, tally, since, issues, mutedText, actions, downloads, playing } from './overview.js';
 import { serviceLine, cardSummary } from './status.js';
-import { bucket } from './chart.js';
+import { bucket, shownOff } from './chart.js';
 import { byPurpose } from './traffic.js';
 
 const item = (severity, extra = {}) => ({ key: `${severity}/${extra.title ?? ''}`, rule: 'health', severity, name: 'Sintel',
-  title: 'Sintel reports a problem', message: 'IndexerSearchCheck: No indexers available', view: '#/apps', ...extra });
+  title: 'Sintel reports a problem', message: 'IndexerSearchCheck: No indexers available', detail: 'No indexers available',
+  view: '#/apps', ...extra });
 
 test('the title states the situation', () => {
   assert.deepEqual(situation(null, 3, true), { title: 'Overview', count: 0, tone: '' });
@@ -27,15 +28,15 @@ test('no all-clear before everything was checked, or without apps', () => {
 test('one row per app, the worst thing first', () => {
   const now = Date.parse('2026-11-27T12:00:00Z');
   const { rows, notes } = issues([
-    item('warning', { key: 'w1', service: 2, name: 'Mounts', title: 'Mounts: 1 file not uploaded', message: 'media: 1 cached file could not be uploaded' }),
+    item('warning', { key: 'w1', service: 2, name: 'Mounts', title: 'Mounts: 1 file not uploaded', message: 'media: 1 cached file could not be uploaded', detail: '' }),
     item('info', { rule: 'requests', name: 'Requests', message: '3 requests wait for approval' }),
-    item('critical', { key: 'd4', rule: 'down', service: 4, title: 'Sintel is not reachable', message: 'connection refused',
+    item('critical', { key: 'd4', rule: 'down', service: 4, title: 'Sintel is not reachable', message: 'connection refused', detail: '',
       since: '2026-11-27T11:48:10Z' }),
-    item('critical', { key: 'c2', service: 2, name: 'Mounts', title: 'Mounts: cache is full', message: 'cloud:archive: the cache disk is out of space' }),
-    item('warning', { key: 'disk', rule: 'storage', title: 'Disk / nearly full', name: '/', message: '92% used', value: '92%', view: '#/storage' }),
+    item('critical', { key: 'c2', service: 2, name: 'Mounts', title: 'Mounts: cache is full', message: 'cloud:archive: the cache disk is out of space', detail: '' }),
+    item('warning', { key: 'disk', rule: 'storage', title: 'Disk / nearly full', name: '/', message: '92% used', detail: '', value: '92%', view: '#/storage' }),
     item('warning', { key: 'h3', service: 3, name: 'Getter', title: 'Getter: automatic search is off', message: 'IndexerSearchCheck: No indexers available' }),
     item('warning', { key: 'q3', service: 3, name: 'Getter', title: 'Getter: a download is stuck', rule: 'downloads',
-      message: 'Big.Buck.Bunny.2008.2160p.WEB: no files found' }),
+      message: 'Big.Buck.Bunny.2008.2160p.WEB: no files found on 01.05.2025 in backup.2024.tar', detail: '' }),
   ], now);
   assert.deepEqual(rows.map((r) => [r.title, r.tone, r.value, r.more]), [
     ['Mounts: cache is full', 'fail', '', 1],
@@ -50,8 +51,11 @@ test('one row per app, the worst thing first', () => {
   assert.deepEqual(rows[0].items.map((i) => [i.tone, i.title]), [['fail', 'Cache is full'], ['warn', '1 file not uploaded']]);
   assert.deepEqual(rows[3].items.map((i) => i.text), [
     'IndexerSearchCheck: No indexers available. The app reports this about itself. Open it to see what it suggests.',
-    'Big.Buck.Bunny.2008.2160p.WEB: no files found. It will not finish on its own. Open the app to retry it or remove it.',
+    'Big.Buck.Bunny.2008.2160p.WEB: no files found on 01.05.2025 in backup.2024.tar. It will not finish on its own. Open the app to retry it or remove it.',
   ]);
+  // Only the release name is made readable: a date and a file name in the same line stay as they are.
+  assert.equal(issues([item('warning', { rule: 'downloads', detail: '', message: 'Big.Buck.Bunny.2008.2160p.WEB: no files found on 01.05.2025 in backup.2024.tar' })], now).rows[0].detail,
+    'Big Buck Bunny (2008) · 2160p: no files found on 01.05.2025 in backup.2024.tar');
   assert.equal(rows[1].items[0].text, 'Connection refused. Observarr gets no answer from it. It may have stopped or be restarting. Since ' +
     `${new Date('2026-11-27T11:48:10Z').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`);
   assert.equal(rows[0].key, 'app/2');
@@ -70,25 +74,32 @@ test('what is muted stays listed, last, and counts for nothing', () => {
     item('critical', { key: 'd4', rule: 'down', service: 4, name: 'Sintel', title: 'Sintel is not reachable', message: 'connection refused', mutedUntil: later }),
     item('critical', { key: 'c2', service: 2, name: 'Mounts', title: 'Mounts: cache is full', mutedUntil: later }),
     item('warning', { key: 'w2', service: 2, name: 'Mounts', title: 'Mounts: 1 file not uploaded' }),
+    // The server decides what is muted, by sending a time at all. This one's time is past on this browser's
+    // clock (a clock that runs ahead): it is muted all the same, until the server stops saying so.
     item('warning', { key: 'h3', service: 3, name: 'Getter', title: 'Getter: automatic search is off', mutedUntil: '2026-11-27T11:00:00Z' }),
+    item('warning', { key: 'm5', service: 5, name: 'Player', title: 'Player: restart pending', mutedUntil: later }),
+    item('warning', { key: 'n5', service: 5, name: 'Player', title: 'Player: an update failed', mutedUntil: '2026-11-27T20:00:00Z' }),
   ];
   const { rows } = issues(list, now);
   assert.deepEqual(rows.map((r) => [r.title, r.tone, r.muted]), [
     // The muted error no longer leads its app's row: what still needs someone does.
     ['Mounts: 1 file not uploaded', 'warn', false],
-    ['Getter: automatic search is off', 'warn', false], // its mute has ended
     ['Sintel is not reachable', 'idle', true],
+    ['Getter: automatic search is off', 'idle', true],
+    ['Player: restart pending', 'idle', true],
   ]);
-  assert.equal(rows[2].detail, mutedText(Date.parse(later)));
-  assert.match(rows[2].detail, /^Muted until \d/);
+  assert.equal(rows[1].detail, mutedText(Date.parse(later)));
+  assert.match(rows[1].detail, /^Muted until \d/);
+  // A row whose items end at different times says the last one.
+  assert.equal(rows[3].detail, mutedText(Date.parse('2026-11-27T20:00:00Z')));
   assert.deepEqual(rows[0].items.map((i) => [i.key, i.mutedUntil > 0]), [['w2', false], ['c2', true]]);
   // The title, the tab and the bell do not count what is muted; the title says that something is.
-  assert.deepEqual(tally(list.slice(0, 3), now), { fails: 0, warns: 1, muted: 2 });
-  assert.deepEqual(situation(list.slice(0, 3), 10, true, now), { title: '1 warning to look at · 2 muted', count: 1, tone: 'warn' });
-  assert.deepEqual(situation(list.slice(0, 1), 10, true, now), { title: 'All 10 apps are fine · 1 muted', count: 0, tone: 'ok' });
-  assert.equal(situation([...list, item('critical', { key: 'x', title: 'Disk / nearly full' })], 10, true, now).title, '1 problem needs you · 2 muted');
-  // A mute that has ended counts again.
-  assert.deepEqual(tally(list.slice(0, 1), Date.parse(later) + 1), { fails: 1, warns: 0, muted: 0 });
+  assert.deepEqual(tally(list.slice(0, 3)), { fails: 0, warns: 1, muted: 2 });
+  assert.deepEqual(situation(list.slice(0, 3), 10, true), { title: '1 warning to look at · 2 muted', count: 1, tone: 'warn' });
+  assert.equal(situation([...list, item('critical', { key: 'x', title: 'Disk / nearly full' })], 10, true).title, '1 problem needs you · 5 muted');
+  // With nothing else left it is no all-clear: something is wrong, and someone chose not to hear of it.
+  assert.deepEqual(situation(list.slice(0, 1), 10, true), { title: 'Nothing new needs you · 1 muted', count: 0, tone: '' });
+  assert.deepEqual(situation(list.slice(3, 4), 1, true), { title: 'Nothing new needs you · 1 muted', count: 0, tone: '' });
 });
 
 test('since is coarse', () => {
@@ -174,6 +185,19 @@ test('streams are listed with who plays them', () => {
     ['Caminandes S01E02 · robin', 'Paused', '', true],
   ]);
   assert.equal(playing([]).total, 0);
+  // Two alike streams are two rows with keys of their own.
+  const twin = svc.readings.streams.data.streams[0];
+  const twins = playing([{ ...svc, readings: { streams: { data: { ...svc.readings.streams.data, streams: [twin, { ...twin }, { ...twin }] } } } }]);
+  assert.equal(new Set(twins.rows.map((r) => r.key)).size, 3);
+});
+
+test('a series stays switchable: one left alone is shown, one that left takes its switch', () => {
+  assert.deepEqual(shownOff(['Downloads', 'Streams', 'Other'], { Streams: true }), { Streams: true });
+  // "In" was hidden, then the chart came to have that one line only: it is shown.
+  assert.deepEqual(shownOff(['In'], { In: true }), {});
+  // "Cloud" was hidden and is gone: when it comes back it is shown, not still hidden without anyone remembering.
+  assert.deepEqual(shownOff(['Downloads', 'Streams'], { Cloud: true, Streams: true }), { Streams: true });
+  assert.deepEqual(shownOff([], { Cloud: true }), {});
 });
 
 test('bucket gives every range the same number of points', () => {

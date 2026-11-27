@@ -7,7 +7,7 @@
   import { api } from './api.js';
   import { TYPES, RULES, RULE_NAMES, firing, severityTone, scrollToAlerts } from './alerts.js';
   import { now } from './ticker.js';
-  import { formatAge } from './format.js';
+  import { formatAge, formatTime } from './format.js';
   import { arrive, leave, reveal, conceal, smoothHeight, FLIP } from './motion.js';
 
   // Alerts is the System view's section for what Observarr sends while nobody has it open: the alerts firing now,
@@ -162,7 +162,7 @@
             <span class="title ellipsis" title={a.title}>{a.title}</span>
             {#if a.message}<span class="detail">{a.message}</span>{/if}
           </span>
-          <span class="since muted" title={new Date(a.since).toLocaleString()}>since {formatAge(a.since, $now)}</span>
+          <span class="since muted" title={formatTime(a.since)}>since {formatAge(a.since, $now)}</span>
         </li>
       {/each}
     </ul>
@@ -339,7 +339,7 @@
                 {/each}
               </span>
             </span>
-            <time class="muted" datetime={e.at} title={new Date(e.at).toLocaleString()}>{formatAge(e.at, $now)}</time>
+            <time class="muted" datetime={e.at} title={formatTime(e.at)}>{formatAge(e.at, $now)}</time>
           </li>
         {/each}
       </ul>

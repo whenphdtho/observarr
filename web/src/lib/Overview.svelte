@@ -1,6 +1,6 @@
 <script>
   import { flip } from 'svelte/animate';
-  import { untrack } from 'svelte';
+  import { onDestroy, tick, untrack } from 'svelte';
   import AppIcon from './AppIcon.svelte';
   import Fold from './Fold.svelte';
   import Rail from './Rail.svelte';
@@ -20,6 +20,7 @@
   // downloads now. services is the (search-filtered) list, total how many apps there are in all, query the
   // search; onjump(id) shows an app's card, onadd opens the Add apps page.
   let { services, total, query = '', onjump, onadd } = $props();
+  const uid = $props.id();
 
   // A few rows are enough here; the rest are a click away.
   const MAX_ROWS = 5;
@@ -47,6 +48,8 @@
   let menuItem = $state(null);
   let menuFrom = null;
 
+  // each sends one request per item of list, then puts the keyboard on the row's own button: the control that
+  // was pressed may be gone (a menu, a button that changed its words), and the row may have moved.
   async function each(row, list, call) {
     busy = row.key;
     failed = null;
@@ -57,19 +60,32 @@
     } finally {
       busy = null;
     }
+    await tick();
+    document.getElementById(`${uid}-toggle-${rows.findIndex((r) => r.key === row.key)}`)?.focus();
   }
 
-  // mute silences list, some of row's items (all that are not muted yet, by default), for minutes.
-  function mute(row, minutes, list = row.items) {
+  // mute silences row for minutes: one item of it, or all of them. Muting the whole row also moves the end of
+  // the mutes it has already, so the row has one end.
+  function mute(row, minutes, item = null) {
     menuEl?.hidePopover();
-    return each(row, list.filter((i) => !i.mutedUntil), (it) => api('POST', '/api/alerts/mutes', { key: it.key, minutes }));
+    return each(row, item ? [item] : row.items, (it) => api('POST', '/api/alerts/mutes', { key: it.key, minutes }));
   }
 
+  // A key is free text (a path, a "#1"): it goes as a query value.
   function unmute(row, list) {
-    return each(row, list.filter((i) => i.mutedUntil), (it) => api('DELETE', `/api/alerts/mutes/${encodeURIComponent(it.key)}`));
+    return each(row, list.filter((i) => i.mutedUntil), (it) => api('DELETE', `/api/alerts/mutes?key=${encodeURIComponent(it.key)}`));
   }
 
   // The menu is one element in the top layer, so no panel clips it: it is put under the button that opened it.
+  // It is a plain group of buttons (Tab moves through them, Escape shuts it), not a menu with keys of its own.
+  // It shuts when the page scrolls under it, and when its row is gone.
+  $effect(() => {
+    if (menuRow && !rows.some((r) => r.key === menuRow.key)) menuEl?.hidePopover();
+  });
+  function onScroll() {
+    if (menuEl?.matches(':popover-open')) menuEl.hidePopover();
+  }
+
   function openMenu(event, row, item = null) {
     menuRow = row;
     menuItem = item;
@@ -77,14 +93,17 @@
     const box = menuFrom.getBoundingClientRect();
     menuEl.style.top = `${box.bottom + 6}px`;
     menuEl.style.left = `${Math.max(8, Math.min(box.left, window.innerWidth - 200))}px`;
+    // The button that opens it has the keyboard first, so that is where it returns when the menu shuts.
+    menuFrom.focus();
     menuEl.showPopover();
     menuEl.querySelector('button').focus();
   }
 
   function menuToggled(event) {
     if (event.newState !== 'closed') return;
-    if (menuEl.contains(document.activeElement) || document.activeElement === document.body) menuFrom?.focus();
+    if (menuFrom?.isConnected && (menuEl.contains(document.activeElement) || document.activeElement === document.body)) menuFrom.focus();
     menuFrom = null;
+    menuRow = null;
   }
 
   // Rows that appear after the first reading are lit for a moment, so a new problem is noticed; the rows already
@@ -102,10 +121,15 @@
     known = new Set(keys);
     if (added.length === 0) return;
     fresh = { ...untrack(() => fresh), ...Object.fromEntries(added.map((k) => [k, true])) };
-    setTimeout(() => {
+    const id = setTimeout(() => {
+      timers.delete(id);
       fresh = Object.fromEntries(Object.entries(fresh).filter(([k]) => !added.includes(k)));
     }, 1600);
+    timers.add(id);
   });
+  // A light still on when the view is left is not put out later.
+  const timers = new Set();
+  onDestroy(() => { for (const id of timers) clearTimeout(id); });
 
   // How long a mute may last, in minutes.
   const MUTES = [[60, '1 hour'], [480, '8 hours'], [1440, '1 day']];
@@ -132,6 +156,8 @@
   {#if more > 0}<a class="go more" href="#/apps">{more} more in Apps<Icon name="chevron-right" size={14} /></a>{/if}
 {/snippet}
 
+<svelte:window onscrollcapture={onScroll} />
+
 <div class="overview">
   {#if !$synced || $attention === null}
     <Skeleton count={2} label="Waiting for the first reading…" />
@@ -150,12 +176,12 @@
         <h2 id="attention-title" class="visually-hidden">Needs attention</h2>
         <div use:smoothHeight>
           <ul class="issues">
-            {#each rows as row (row.key)}
+            {#each rows as row, n (row.key)}
               {@const svc = row.service === null ? null : byId.get(row.service) ?? null}
               {@const isOpen = open === row.key}
               {@const live = row.items.filter((i) => !i.mutedUntil)}
               <li class:open={isOpen} class:fresh={fresh[row.key]} class:muted={row.muted} class={row.tone} in:arrive out:leave animate:flip={FLIP}>
-                <button type="button" class="issue" aria-expanded={isOpen} aria-controls={`more-${row.key}`}
+                <button type="button" class="issue" id={`${uid}-toggle-${n}`} aria-expanded={isOpen} aria-controls={`${uid}-more-${n}`}
                   onclick={() => { open = isOpen ? null : row.key; }}>
                   <span class="marker {row.tone}" aria-hidden="true"></span>
                   <span class="tile-icon" aria-hidden="true">
@@ -172,7 +198,7 @@
                   {#if row.value}<span class="value num {row.tone}">{row.value}</span>{/if}
                   <span class="turn" class:up={isOpen} aria-hidden="true"><Icon name="chevron-down" size={16} /></span>
                 </button>
-                <div class="fold" class:open={isOpen} id={`more-${row.key}`} inert={!isOpen}>
+                <div class="fold" class:open={isOpen} id={`${uid}-more-${n}`} inert={!isOpen}>
                   <div>
                     <div class="more-body">
                       <ul class="items">
@@ -185,7 +211,7 @@
                               <span class="text">{it.text}</span>
                               {#if !it.mutedUntil && row.items.length > 1}
                                 <span class="quiet-note">
-                                  <button type="button" class="link" aria-haspopup="menu" disabled={busy === row.key}
+                                  <button type="button" class="link" aria-haspopup="true" disabled={busy === row.key}
                                     onclick={(e) => openMenu(e, row, it)}>
                                     Mute<span class="visually-hidden"> {it.title}</span>
                                   </button>
@@ -216,9 +242,9 @@
                         {#if live.length > 0}
                           <span class="split">
                             <button type="button" class="quiet" disabled={busy === row.key} onclick={() => mute(row, 60)}>
-                              {live.length > 1 ? 'Mute all for 1 hour' : 'Mute for 1 hour'}
+                              {row.items.length > 1 ? 'Mute all for 1 hour' : 'Mute for 1 hour'}
                             </button>
-                            <button type="button" class="quiet caret" aria-label={live.length > 1 ? 'Mute all for longer' : 'Mute for longer'} aria-haspopup="menu"
+                            <button type="button" class="quiet caret" aria-label={live.length > 1 ? 'Mute all for longer' : 'Mute for longer'} aria-haspopup="true"
                               disabled={busy === row.key} onclick={(e) => openMenu(e, row)}>
                               <Icon name="chevron-down" size={15} />
                             </button>
@@ -237,10 +263,10 @@
         </div>
       </section>
       <!-- The longer mutes: one small menu for the whole list, placed under the button that opened it. -->
-      <div class="mute-menu" popover role="menu" aria-label={menuItem ? `Mute ${menuItem.title}` : 'Mute for longer'}
+      <div class="mute-menu" popover role="group" aria-label={menuItem ? `Mute ${menuItem.title}` : 'Mute for longer'}
         bind:this={menuEl} ontoggle={menuToggled}>
         {#each menuItem ? MUTES : MUTES.slice(1) as [minutes, label] (minutes)}
-          <button type="button" role="menuitem" onclick={() => mute(menuRow, minutes, menuItem ? [menuItem] : undefined)}>Mute for {label}</button>
+          <button type="button" onclick={() => mute(menuRow, minutes, menuItem)}>Mute for {label}</button>
         {/each}
       </div>
     {/if}

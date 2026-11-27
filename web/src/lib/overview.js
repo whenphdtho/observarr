@@ -1,6 +1,6 @@
 import { tone, queuePaused } from './status.js';
 import { streamsOf } from './streams.js';
-import { formatSpan, formatLeft, formatPercent, formatRate, plural, prettyRelease, sentence, stripSource } from './format.js';
+import { formatClock, formatSpan, formatLeft, formatPercent, formatRate, plural, prettyRelease, sentence } from './format.js';
 
 // What the Overview says, worked out apart from how it is drawn: the page's title, the rows that need attention
 // and what each explains when opened, and the lines of the downloads and streams. It reads only the server's
@@ -8,9 +8,9 @@ import { formatSpan, formatLeft, formatPercent, formatRate, plural, prettyReleas
 
 // tally counts the rows that need someone, as the title, the tab, the views list and the bell all say it:
 // { fails, warns, muted }, the apps (and things about no app) with a problem, those with only warnings, and,
-// apart from both, how many things are muted at nowMs.
-export function tally(items, nowMs = Date.now()) {
-  const all = issues(items, nowMs).rows;
+// apart from both, how many things are muted.
+export function tally(items) {
+  const all = issues(items, 0).rows;
   const rows = all.filter((r) => !r.muted);
   const fails = rows.filter((r) => r.tone === 'fail').length;
   return { fails, warns: rows.length - fails, muted: all.reduce((n, r) => n + r.items.filter((i) => i.mutedUntil).length, 0) };
@@ -20,16 +20,17 @@ export function tally(items, nowMs = Date.now()) {
 // carry: { title, count, tone }. items is the attention list (null before it arrived), apps how many apps are
 // watched, checked whether each of them has been checked once. Errors come before warnings; an all-clear is only
 // given once everything was looked at, and never for an empty list. What is muted is not counted, but the title
-// says that something is: "All 10 apps are fine · 1 muted".
-export function situation(items, apps, checked, nowMs = Date.now()) {
+// says that something is; with nothing else left it is no all-clear: "Nothing new needs you · 1 muted".
+export function situation(items, apps, checked) {
   if (!items) return { title: 'Overview', count: 0, tone: '' };
-  const { fails, warns, muted } = tally(items, nowMs);
+  const { fails, warns, muted } = tally(items);
   const also = muted ? ` · ${muted} muted` : '';
   if (fails) return { title: `${plural(fails, 'problem')} need${fails === 1 ? 's' : ''} you${also}`, count: fails, tone: 'fail' };
   if (warns) return { title: `${plural(warns, 'warning')} to look at${also}`, count: warns, tone: 'warn' };
   if (apps === 0) return { title: 'Overview', count: 0, tone: '' };
   if (!checked) return { title: apps === 1 ? 'Checking your app…' : `Checking ${apps} apps…`, count: 0, tone: '' };
-  return { title: `${apps === 1 ? 'Your app is fine' : `All ${apps} apps are fine`}${also}`, count: 0, tone: 'ok' };
+  if (muted) return { title: `Nothing new needs you${also}`, count: 0, tone: '' };
+  return { title: apps === 1 ? 'Your app is fine' : `All ${apps} apps are fine`, count: 0, tone: 'ok' };
 }
 
 // since says how long ago a condition began, coarsely, as a row's figure: "40 s", "12 min", "3 h 5 min".
@@ -40,18 +41,17 @@ export function since(at, nowMs) {
   return formatSpan(s < 60 ? s : Math.floor(s / 60) * 60);
 }
 
-// detail is an attention item's message as one plain line: an app's check name is dropped from its front, and
-// a release it names (a word with dots in it) is made readable.
-function detail(message) {
-  const plain = stripSource(message).split(' ').map((w) => {
+// detail is an attention item's line as plain reading: a release it names is made readable (prettyRelease
+// leaves every other word, a date or a file name too, as it is). The server already left out the name of the
+// app's check.
+function detail(line) {
+  return sentence(line.split(' ').map((w) => {
     const stop = /[:,;]$/.exec(w)?.[0] ?? '';
-    const name = stop ? w.slice(0, -1) : w;
-    return /[._].*[._]/.test(name) ? prettyRelease(name) + stop : w;
-  }).join(' ');
-  return sentence(plain);
+    return prettyRelease(stop ? w.slice(0, -1) : w) + stop;
+  }).join(' '));
 }
 
-const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const clock = formatClock;
 
 // What an item says when its row is opened, after the app's own words: what it means and what helps. Told by the
 // rule that raised it, so it holds for any app.
@@ -70,10 +70,12 @@ const WHY = {
 // line says that one in full, and more counts the others. A row is
 // { key, tone, service, name, view, title, detail, more, value, muted, mutedUntil, items }.
 //   - items are what it stands for, worst first, each { key, tone, title, text, mutedUntil }: title its short
-//     name, text the app's message in full, what it means and since when, mutedUntil a time in ms or 0.
+//     name, text the app's message in full, what it means and since when, mutedUntil a time in ms, or 0 when it
+//     is not muted. The server says what is muted, by sending the time at all: this browser's clock only words
+//     it, and never decides it.
 //   - value is the figure of its first item: the server's, or for a thing that is down how long it has been.
-//   - muted says every item is muted (mutedUntil then is when the first mute ends): such a row is listed last,
-//     counts for nothing, and its tone is "idle".
+//   - muted says every item is muted (mutedUntil then is when the last of the mutes ends): such a row is
+//     listed last, counts for nothing, and its tone is "idle".
 // Errors come before warnings, what is muted last.
 export function issues(items, nowMs) {
   const rows = [];
@@ -85,11 +87,11 @@ export function issues(items, nowMs) {
       notes.push({ key: it.key, text: `${it.name ? `${it.name}: ` : ''}${it.message}`, view: it.view, service: it.service });
       continue;
     }
-    const until = new Date(it.mutedUntil ?? 0).getTime();
+    const until = it.mutedUntil ? new Date(it.mutedUntil).getTime() || 1 : 0;
     const began = new Date(it.since ?? 0).getTime();
     const full = sentence(it.message ?? '');
     const one = {
-      key: it.key, tone: t, mutedUntil: until > nowMs ? until : 0, line: detail(it.message ?? ''), view: it.view,
+      key: it.key, tone: t, mutedUntil: until, line: detail(it.detail || it.message || ''), view: it.view,
       heading: it.title,
       // The name of the app leads the row already: an item is named by the rest of its title.
       title: sentence(it.name && it.title.startsWith(`${it.name}: `) ? it.title.slice(it.name.length + 2) : it.title),
@@ -111,7 +113,7 @@ export function issues(items, nowMs) {
     const [lead] = row.items;
     const live = row.items.filter((i) => !i.mutedUntil);
     row.muted = live.length === 0;
-    row.mutedUntil = row.muted ? Math.min(...row.items.map((i) => i.mutedUntil)) : 0;
+    row.mutedUntil = row.muted ? Math.max(...row.items.map((i) => i.mutedUntil)) : 0;
     row.tone = row.muted ? 'idle' : lead.tone;
     row.more = row.items.length - 1;
     row.title = lead.heading;
@@ -199,8 +201,11 @@ export function playing(services) {
     bitrate += data.bitrate;
     total += data.total;
     for (const s of data.streams) {
+      // Two alike streams (one user, one client, one title) are two rows: the later one counts its place.
+      const base = `${svc.id}|${s.user}|${s.client}|${s.device ?? ''}|${s.title}`;
+      const nth = rows.filter((r) => r.base === base).length;
       rows.push({
-        key: `${svc.id}|${s.user}|${s.client}|${s.device ?? ''}|${s.title}`,
+        base, key: nth ? `${base}#${nth}` : base,
         title: [s.title, s.user].filter(Boolean).join(' · '), raw: s.title, pct: formatPercent(s.progress), idle: s.paused,
         hint: s.reasons?.join(', ') ?? '',
         note: s.paused ? 'Paused' : s.method === 'transcode' ? 'Transcode' : 'Direct',

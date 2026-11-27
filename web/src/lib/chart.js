@@ -1,3 +1,5 @@
+import { formatClock as clock } from './format.js';
+
 // Axis and hover helpers shared by the charts.
 
 // niceCeil rounds v up to 1, 2, 2.5 or 5 times a power of ten, so axis labels read cleanly.
@@ -44,9 +46,6 @@ export function timeTicks(from, to) {
   return out;
 }
 
-export function clock(t) {
-  return new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
 
 // tickLabel names an axis tick for a chart spanning span ms: a time of day up to two days, a day and
 // month up to ten weeks, a month beyond.
@@ -151,6 +150,14 @@ export function bucket(times, lists, n) {
     times: Array.from({ length: n }, (_, j) => t0 + (span * j) / (n - 1)),
     lists: sums.map((s, k) => s.map((v, j) => (counts[k][j] ? v / counts[k][j] : null))),
   };
+}
+
+// shownOff is which series of a chart are switched off, given their labels and what was switched off before
+// ({ label: true }): only labels that are still there count, and a chart left with one series shows it, as it
+// then has no key to switch it back on with.
+export function shownOff(labels, off) {
+  if (labels.length < 2) return {};
+  return Object.fromEntries(labels.filter((l) => off[l]).map((l) => [l, true]));
 }
 
 // tipAt places a tooltip beside a crosshair at x in a chart width wide: to the right in the left half,

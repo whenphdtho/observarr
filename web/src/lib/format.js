@@ -2,6 +2,9 @@
 // sizes in GB and TB, spans of time in two units ("2 min 21 s"), ages in one ("3 days ago"), percentages without
 // a space. Nothing here knows an app.
 //
+// Times of day and dates follow the browser's locale (formatClock, formatTime, the charts' labels); numbers are
+// written one way everywhere, with a point for decimals and commas for thousands.
+//
 // The one exception to Mbit/s: what a disk reads and writes is in MB/s (formatDisk), as every disk tool says it.
 // Mbit/s is for what travels over a network: traffic, a download, a stream, a transfer to a remote.
 
@@ -79,8 +82,10 @@ export function formatPct(pct) {
   return `${Math.round(Math.max(0, pct))}%`;
 }
 
-// formatChange renders a relative change (0.12 = 12% more) as "+12%" or "−4%"; under half a percent is "0%".
+// formatChange renders a relative change (0.12 = 12% more) as "+12%" or "−4%"; under half a percent is "0%", and
+// one that is not known "—".
 export function formatChange(ratio) {
+  if (!Number.isFinite(ratio)) return '—';
   const pct = Math.abs(ratio) * 100;
   if (pct < 0.5) return '0%';
   return `${ratio > 0 ? '+' : '−'}${pct > 999 ? '>999' : Math.round(pct)}%`;
@@ -106,9 +111,10 @@ export function formatSpan(seconds) {
   return pair(days(Math.floor(s / 86400)), s % 86400 >= 3600 ? `${Math.floor((s % 86400) / 3600)} h` : '');
 }
 
-// formatUptime renders a duration in nanoseconds (as Go's time.Duration marshals to JSON), e.g. "12 days 4 h".
+// formatUptime renders a duration in nanoseconds (as Go's time.Duration marshals to JSON), e.g. "12 days 4 h";
+// a missing one renders as "—".
 export function formatUptime(ns) {
-  return formatSpan(ns / 1e9);
+  return typeof ns === 'number' ? formatSpan(ns / 1e9) : '—';
 }
 
 // clockSeconds reads a time left as apps give it, "2:21", "00:02:21" or "1.02:03:04" (days first), into seconds;
@@ -128,20 +134,19 @@ export function formatLeft(text) {
 }
 
 // formatAge renders how long ago `at` (an ISO timestamp, or anything Date understands) was, relative to nowMs
-// (ms since epoch), in one unit: "just now", "12 s ago", "4 min ago", "3 h ago", "3 days ago". Used with the
-// shared ticker, so every widget updates together.
+// (ms since epoch), in one unit: "just now", "12 s ago", "4 min ago", "3 h ago", "3 days ago". The unit is counted
+// in whole ones that have passed, never rounded up: 36 hours ago is "1 day ago", 119 seconds "1 min ago". Used
+// with the shared ticker, so every widget updates together.
 export function formatAge(at, nowMs) {
   if (!at) return '';
   const then = new Date(at).getTime();
   if (!Number.isFinite(then)) return '';
-  const sec = Math.max(0, Math.round((nowMs - then) / 1000));
+  const sec = Math.max(0, Math.floor((nowMs - then) / 1000));
   if (sec < 1) return 'just now';
   if (sec < 60) return `${sec} s ago`;
-  const min = Math.round(sec / 60);
-  if (min < 60) return `${min} min ago`;
-  const hours = Math.round(min / 60);
-  if (hours < 24) return `${hours} h ago`;
-  return `${days(Math.round(hours / 24))} ago`;
+  if (sec < 3600) return `${Math.floor(sec / 60)} min ago`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)} h ago`;
+  return `${days(Math.floor(sec / 86400))} ago`;
 }
 
 // formatUntil renders the time left until at (an ISO time) as "in 12 min", or "" if at is unset; a past time
@@ -152,6 +157,12 @@ export function formatUntil(at, nowMs) {
   if (!Number.isFinite(t)) return '';
   const left = (t - nowMs) / 1000;
   return left > 0 ? `in ${formatSpan(left)}` : 'ended';
+}
+
+// formatClock renders a time (ms since epoch, or anything Date understands) as the time of day, "14:30" or
+// "2:30 PM" as the browser's locale has it.
+export function formatClock(at) {
+  return new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 // formatTime renders an ISO time as a short local date and time, for a title.
@@ -174,32 +185,27 @@ export function plural(n, one, many = `${one}s`) {
 const YEAR = /^(19|20)\d{2}$/;
 const EPISODE = /^S\d{1,2}E\d{1,3}$/i;
 const RESOLUTION = /^(\d{3,4}p|4k|uhd)$/i;
+const SOURCE = /^(web|web-?dl|webrip|bluray|bdrip|brrip|hdtv|dvdrip|remux|hdrip)$/i;
 
 // prettyRelease turns a release name into a title for reading: "Big.Buck.Bunny.2008.2160p.WEB" becomes
 // "Big Buck Bunny (2008) · 2160p", "Caminandes.S01E03.Llamigos.1080p.WEB" becomes "Caminandes S01E03 · 1080p".
-// A name without a year, an episode or a resolution after its title is not a release name and is returned as it
-// is; the caller keeps the original in the title attribute.
+// Only a release name is touched: words joined by dots or underscores, without a space, that carry a resolution,
+// an episode or a source after the title. A title with a year in it ("Blade Runner 2049"), a date ("01.05.2025")
+// or a file name ("backup.2024.tar") is returned as it is; the caller keeps the original in the title attribute.
 export function prettyRelease(name) {
-  const tokens = (name ?? '').split(/[._\s]+/).filter(Boolean);
-  const cut = tokens.findIndex((t, i) => i > 0 && (EPISODE.test(t) || RESOLUTION.test(t)));
-  // The year is the last one before the episode or resolution: a title may hold a year of its own.
-  const head = cut < 0 ? tokens : tokens.slice(0, cut);
+  if (!name || /\s/.test(name) || !/[._]/.test(name)) return name ?? '';
+  const tokens = name.split(/[._]+/).filter(Boolean);
+  // The title ends at the first episode, resolution or source; without any, it is no release name.
+  const cut = tokens.findIndex((t, i) => i > 0 && (EPISODE.test(t) || RESOLUTION.test(t) || SOURCE.test(t)));
+  if (cut < 0) return name;
+  // The year is the last one before that: a title may hold a year of its own.
   let year = -1;
-  for (let i = head.length - 1; i > 0 && year < 0; i--) if (YEAR.test(head[i])) year = i;
-  const end = year >= 0 ? year : cut;
-  if (end <= 0) return name ?? '';
-  let out = tokens.slice(0, end).join(' ');
+  for (let i = cut - 1; i > 0 && year < 0; i--) if (YEAR.test(tokens[i])) year = i;
+  let out = tokens.slice(0, year >= 0 ? year : cut).join(' ');
   if (year >= 0) out += ` (${tokens[year]})`;
-  if (cut >= 0 && EPISODE.test(tokens[cut])) out += ` ${tokens[cut].toUpperCase()}`;
-  const res = tokens.slice(Math.max(cut, 0)).find((t) => RESOLUTION.test(t));
+  if (EPISODE.test(tokens[cut])) out += ` ${tokens[cut].toUpperCase()}`;
+  const res = tokens.slice(cut).find((t) => RESOLUTION.test(t));
   return res ? `${out} · ${res}` : out;
-}
-
-// stripSource drops an app's check name from the front of its message for display, "IndexerSearchCheck: No
-// indexers…" becoming "No indexers…": the name of a check means nothing to a reader. Only a single word in
-// CamelCase counts as one; the full text stays available to whoever opens the details.
-export function stripSource(message) {
-  return (message ?? '').replace(/^[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+:\s+/, '');
 }
 
 // containerStatusClass maps a container's Docker state and health to one of the shared status dot classes

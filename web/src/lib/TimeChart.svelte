@@ -1,7 +1,7 @@
 <script>
   import { untrack } from 'svelte';
   import { monotonePath } from './curve.js';
-  import { niceCeil, timeTicks, tickLabel, stampLabel, nearest, runs, tipAt, thin, bucket } from './chart.js';
+  import { niceCeil, timeTicks, tickLabel, stampLabel, nearest, runs, tipAt, thin, bucket, shownOff } from './chart.js';
   import { chartShift, dur, ease, curve, ms } from './motion.js';
   import { step as stepOf } from './history.js';
 
@@ -34,7 +34,10 @@
   const lists = $derived(allSeries.map((s) => s.values));
   const thinned = $derived(points > 0 ? bucket(allTimes, lists, points) : thin(allTimes, lists, Math.max(60, Math.floor(plotW))));
   const times = $derived(thinned.times);
-  const series = $derived(allSeries.map((s, k) => ({ ...s, values: thinned.lists[k], off: !!off[s.label] })));
+  // What is off among the series there are now: a series that left takes its switch with it, and one left alone
+  // is shown (see shownOff).
+  const hidden = $derived(shownOff(allSeries.map((s) => s.label), off));
+  const series = $derived(allSeries.map((s, k) => ({ ...s, values: thinned.lists[k], off: !!hidden[s.label] })));
   const t0 = $derived(times[0] ?? 0);
   const span = $derived(Math.max(1, (times[times.length - 1] ?? 0) - t0));
   const sampleStep = $derived(stepOf(times));
@@ -158,7 +161,7 @@
       <div class="toggles" role="group" aria-label="Lines shown">
         {#each series as s (s.label)}
           <button type="button" class="key" aria-pressed={!s.off} title={s.off ? `Show ${s.label}` : `Hide ${s.label}`}
-            onclick={() => { off = { ...off, [s.label]: !s.off }; }}>
+            onclick={() => { off = { ...hidden, [s.label]: !s.off }; }}>
             <i class="ring" style:color={s.color}></i>{s.label}
           </button>
         {/each}
