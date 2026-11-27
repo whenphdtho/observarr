@@ -3,7 +3,7 @@
   import { reveal, conceal, flash } from './motion.js';
   import { api } from './api.js';
   import { widgets } from './shapes/index.js';
-  import { formatPct, formatBytes, formatPercent, containerStatusClass } from './format.js';
+  import { formatPct, formatSize, formatPercent, containerStatusClass, prettyRelease, plural } from './format.js';
   import { serviceStatus, cardSummary } from './status.js';
   import { attention } from './live.js';
   import { hostOf } from './urls.js';
@@ -37,11 +37,8 @@
       container.state === '' ? `${container.name}: container not found` :
       `${container.name}: ${container.state}${container.health ? ` (${container.health})` : ''}`,
   );
-  const pill = $derived(!health ? { text: 'Checking', tone: '' } : service.up ? { text: 'Up', tone: 'ok' } : { text: 'Down', tone: 'fail' });
-
-  function warningText(w) {
-    return w.source ? `${w.source}: ${w.message}` : w.message;
-  }
+  const pill = $derived(!health ? { text: 'Checking…', tone: '' } : service.up ? { text: 'Running', tone: 'ok' } : { text: 'Not reachable', tone: 'fail' });
+  const paused = $derived(!!service.readings?.queue?.data?.paused);
 
   function openRemove() {
     removeError = '';
@@ -80,7 +77,7 @@
   }
 </script>
 
-<article class="card service {status === 'fail' || status === 'warn' ? status : ''}" class:open={expanded} id={`service-${service.id}`} tabindex="-1"
+<article class="card service" class:open={expanded} id={`service-${service.id}`} tabindex="-1"
   aria-labelledby={`service-name-${service.id}`} use:flash={status}>
   <header>
     <span class="tile-icon" aria-hidden="true"><AppIcon {adapter} size={20} /></span>
@@ -102,19 +99,20 @@
     <div class="lead">
       {#if lead.kind === 'item'}
         <div class="lead-head">
-          <span class="ellipsis lead-title" title={lead.item.title}>{lead.item.title}</span>
+          <span class="ellipsis lead-title" title={lead.item.title}>{prettyRelease(lead.item.title)}</span>
           <span class="num pct">{formatPercent(lead.item.progress)}</span>
         </div>
-        <div class="bar" class:warn={!!lead.item.problem} role="progressbar" aria-valuemin="0" aria-valuemax="100"
+        <div class="bar" class:warn={!!lead.item.problem} class:idle={paused || lead.item.paused} role="progressbar" aria-valuemin="0" aria-valuemax="100"
           aria-valuenow={Math.round(lead.item.progress * 100)}
           aria-label={`${lead.item.title}: ${formatPercent(lead.item.progress)} done`}>
           <i style:width={formatPercent(lead.item.progress)}></i>
         </div>
       {:else if lead.kind === 'warning'}
-        <p class="lead-warning level-{lead.warning.level}" title={warningText(lead.warning)}>
+        <p class="lead-warning level-{lead.warning.level}"
+          title={lead.warning.source ? `${lead.warning.source}: ${lead.warning.message}` : lead.warning.message}>
           <Icon name="triangle-alert" size={14} />
           <span class="visually-hidden">{lead.warning.level === 'error' ? 'Error' : 'Warning'}: </span>
-          <span class="ellipsis">{warningText(lead.warning)}</span>
+          <span class="ellipsis">{lead.warning.message}</span>
         </p>
       {:else}
         <p class="lead-note" class:ellipsis={lead.tone !== 'fail'} class:fail={lead.tone === 'fail'} title={lead.text}>{lead.text}</p>
@@ -133,8 +131,8 @@
             <span class="dot {containerDot}" aria-hidden="true"></span>
             <span class="ellipsis state">{container.name} · {container.state}{container.health ? ` (${container.health})` : ''}</span>
             <span class="num">{container.state === 'running' ? formatPct(container.cpuPercent) : '—'}</span>
-            <span class="num">{container.state === 'running' ? formatBytes(container.memBytes) : '—'}</span>
-            <span class="num">{container.restarts} restart{container.restarts === 1 ? '' : 's'}</span>
+            <span class="num">{container.state === 'running' ? formatSize(container.memBytes) : '—'}</span>
+            <span class="num">{plural(container.restarts, 'restart')}</span>
           {/if}
         </p>
       {/if}
@@ -188,9 +186,6 @@
   .service.open { grid-column: 1 / -1; grid-template-rows: none; }
   .service:focus { outline: none; }
   .service:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  /* A card with a problem is edged in its state's colour; a healthy one keeps the quiet edge. */
-  .service.fail { border-color: var(--fail-edge); }
-  .service.warn { border-color: var(--warn-edge); }
   header { display: flex; align-items: center; gap: 12px; min-width: 0; }
   .ident { display: grid; min-width: 0; flex: 1; line-height: 1.35; }
   h2 { font-size: var(--t-h3); letter-spacing: 0; }
@@ -201,12 +196,12 @@
     padding-top: 2px; font-size: var(--t-small);
   }
   .badges .state-word { flex: none; color: var(--text2); }
-  .badges .state-word.fail-text { color: var(--fail); }
+  .badges .state-word.fail-text { color: var(--fail-ink); }
   .badges .version { flex: 0 1 auto; max-width: 110px; }
 
   .summary { font-size: var(--t-body); color: var(--text2); }
-  .summary.warn { color: var(--warn); }
-  .summary.fail { color: var(--fail); }
+  .summary.warn { color: var(--warn-ink); }
+  .summary.fail { color: var(--fail-ink); }
 
   /* The lead row has one fixed height, whatever it holds, so collapsed cards line up. */
   .lead { height: 40px; display: grid; align-content: center; gap: 7px; min-width: 0; }

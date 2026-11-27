@@ -4,7 +4,7 @@
   // colours the value when it needs attention; anything else leaves it plain. href makes the
   // figure a link. The value and caption keep one line; their full text is in the title.
   // spark (a list of numbers, null for a gap) draws the figure's recent course beside the value, in
-  // sparkColor from sparkMin (null: its lowest value) up to sparkMax; change ({ ratio, good, against }, see Delta) adds its change against
+  // sparkColor from sparkMin (null: its lowest value) up to sparkMax; change ({ ratio, against }, see Delta) adds its change against
   // an earlier period. Either is left out while its data is missing.
   import Icon from './icons/Icon.svelte';
   import Num from './Num.svelte';
@@ -15,7 +15,7 @@
   // its full text for the title. A value of '—' with a caption of 'Loading…' shows a quiet placeholder.
   let {
     label, value, unit = '', sub = '', tone = '', bar = null, barTone = '', href = null, num = null, format = null,
-    spark = null, sparkColor = 'var(--series-2)', sparkMin = 0, sparkMax = null, change = null,
+    spark = null, sparkColor = 'var(--series-1)', sparkMin = 0, sparkMax = null, change = null,
   } = $props();
   const loading = $derived(value === '—' && sub === 'Loading…');
   const hasSpark = $derived(!loading && (spark?.filter(Number.isFinite).length ?? 0) > 1);
@@ -53,7 +53,7 @@
   .graph .value { grid-column: 1; }
   .spark-slot { grid-row: 2; grid-column: 2; width: 76px; align-self: center; margin-top: 4px; }
   .link { transition: background-color var(--dur-fast) var(--ease-out); }
-  .link:hover { background: var(--surface2); }
+  .link:hover { background: var(--hover); }
   .link:focus-visible { outline-offset: -2px; }
   /* A figure that is a link says so at rest: a small chevron after its label. */
   .chev { display: grid; color: var(--muted); transition: color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out); }

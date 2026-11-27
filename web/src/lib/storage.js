@@ -35,9 +35,9 @@ export function diskTotals(disks) {
 
 // mountProblem is what is wrong with a mount, worst first, or '' when nothing is: { text, tone }.
 export function mountProblem(m) {
-  if (m.state === 'unmounted') return { text: 'not mounted', tone: 'fail' };
-  if (m.outOfSpace) return { text: 'cache out of space', tone: 'fail' };
-  if (m.erroredFiles > 0) return { text: `${m.erroredFiles} errored`, tone: 'fail' };
+  if (m.state === 'unmounted') return { text: 'Not mounted', tone: 'fail' };
+  if (m.outOfSpace) return { text: 'Cache out of space', tone: 'fail' };
+  if (m.erroredFiles > 0) return { text: `${m.erroredFiles} not uploaded`, tone: 'fail' };
   return null;
 }
 

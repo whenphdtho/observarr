@@ -127,6 +127,32 @@ export function thin(times, lists, max) {
   return { times: outTimes.reverse(), lists: out.map((l) => l.reverse()) };
 }
 
+// bucket merges samples into exactly n points evenly spaced over their span, each the mean of the samples nearest
+// to it (null when it has none, so a gap stays a gap). Two ranges drawn with the same n have a point for a point,
+// so one can move into the other. Fewer than about n samples are returned as they are.
+export function bucket(times, lists, n) {
+  const len = times.length;
+  if (n < 2 || len < n * 1.2) return { times, lists };
+  const t0 = times[0];
+  const span = times[len - 1] - t0;
+  const sums = lists.map(() => new Array(n).fill(0));
+  const counts = lists.map(() => new Array(n).fill(0));
+  for (let i = 0; i < len; i++) {
+    const j = Math.round(((times[i] - t0) / span) * (n - 1));
+    lists.forEach((l, k) => {
+      const v = l?.[i];
+      if (Number.isFinite(v)) {
+        sums[k][j] += v;
+        counts[k][j]++;
+      }
+    });
+  }
+  return {
+    times: Array.from({ length: n }, (_, j) => t0 + (span * j) / (n - 1)),
+    lists: sums.map((s, k) => s.map((v, j) => (counts[k][j] ? v / counts[k][j] : null))),
+  };
+}
+
 // tipAt places a tooltip beside a crosshair at x in a chart width wide: to the right in the left half,
 // to the left in the right half. It returns a CSS transform for a tooltip that sits at the chart's left edge, so
 // that a move, even to the other side, can ease.

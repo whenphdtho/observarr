@@ -55,8 +55,8 @@
     flex: none; padding: 1px 8px; border-radius: var(--r-pill); border: 1px solid var(--border2);
     font-size: var(--t-micro); font-weight: 500; line-height: 1.6; color: var(--text2); white-space: nowrap;
   }
-  /* A transcode is what costs the server: its chip carries the accent, the direct methods stay quiet. */
-  .chip.transcode { color: var(--accent-text); border-color: var(--accent); background: var(--accent-wash); }
+  /* A transcode is what costs the server: its word is marked, the direct methods stay quiet. */
+  .chip.transcode { color: var(--warn-ink); }
   .facts > .keep { flex: none; }
   .lines { display: flex; gap: 2px 6px; min-width: 0; }
   .lines > .facts { flex: 0 1 auto; }
@@ -67,6 +67,6 @@
   }
   .why { font-size: var(--t-small); color: var(--muted); overflow-wrap: anywhere; }
   /* A paused stream: its bar fades, its state is said in words. */
-  .paused .bar > i { opacity: 0.45; }
+  .paused .bar > i { background: var(--bar-idle); }
   .paused .state { color: var(--text2); }
 </style>

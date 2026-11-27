@@ -2,7 +2,7 @@
   import { flip } from 'svelte/animate';
   import { now } from '../ticker.js';
   import { arrive, leave, smoothHeight, FLIP, keyed } from '../motion.js';
-  import { formatAge } from '../format.js';
+  import { formatAge, sentence } from '../format.js';
 
   // Requests renders one shape.Requests reading: the requests by state and the newest ones. It knows nothing about
   // which app produced it; data.app names it when the adapter serves several apps.
@@ -16,15 +16,13 @@
   // The tone of each state's chip; a state not listed here is neutral.
   const tones = {
     pending: 'warn', failed: 'fail', declined: 'quiet',
-    approved: 'accent', processing: 'accent', 'partially available': 'ok', available: 'ok', completed: 'ok',
   };
-  const sentence = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
   // facts are the summary's parts: the states worth a look first, then the open issues.
   const facts = $derived.by(() => {
     if (!counts) return [];
     const out = [];
-    if (counts.pending > 0) out.push({ text: `${counts.pending} waiting`, tone: 'warn-text' });
+    if (counts.pending > 0) out.push({ text: `${counts.pending} waiting`, tone: '' });
     if (counts.failed > 0) out.push({ text: `${counts.failed} failed`, tone: 'fail-text' });
     if (counts.processing > 0) out.push({ text: `${counts.processing} processing`, tone: '' });
     out.push({ text: `${counts.available} available`, tone: '' });
@@ -94,9 +92,8 @@
     flex: none; padding: 1px 8px; border-radius: var(--r-pill); border: 1px solid var(--border2);
     font-size: var(--t-small); line-height: 18px; white-space: nowrap; color: var(--text2);
   }
-  .chip.warn { color: var(--warn); border-color: var(--warn-edge); background: var(--warn-wash); }
-  .chip.fail { color: var(--fail); border-color: var(--fail-edge); background: var(--fail-wash); }
-  .chip.ok { color: var(--ok); }
-  .chip.accent { color: var(--accent-text); }
+  /* The state is a word; colour marks only the two that wait for someone. */
+  .chip.warn { color: var(--warn-ink); }
+  .chip.fail { color: var(--fail-ink); }
   .chip.quiet { color: var(--muted); border-color: var(--border); }
 </style>

@@ -1,4 +1,4 @@
-import { formatMbit } from './format.js';
+import { formatRate } from './format.js';
 
 // Summaries of what media servers play, shared by the streams widget, the Overview, the cards and the Network view.
 // They read only the generic "streams" shape, never anything app-specific.
@@ -45,7 +45,7 @@ export function streamText(sum) {
 
 // formatBitrate renders bits/s as e.g. "10 Mbit/s"; 0 (unknown) renders as "".
 export function formatBitrate(bps) {
-  return bps > 0 ? `${formatMbit(bps / 8)} Mbit/s` : '';
+  return bps > 0 ? formatRate(bps / 8) : '';
 }
 
 // codecText says what a stream's codecs are and what the server converts them to, e.g. "hevc → h264 · aac".

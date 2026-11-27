@@ -361,13 +361,12 @@
   .ok-text { color: var(--ok); overflow-wrap: anywhere; font-size: var(--t-body); }
   p.error { font-size: var(--t-body); }
 
-  /* Firing now: the rows the bell leads to, washed in their state colour. */
-  .firing { position: relative; list-style: none; margin: 0 0 20px; padding: 0; display: grid; gap: 4px; }
+  /* Firing now: the rows the bell leads to. Their dot and words say the state; the rows stay plain. */
+  .firing { position: relative; list-style: none; margin: 0 0 20px; padding: 0; display: grid; }
   .firing li {
-    display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r); min-width: 0;
-    background: var(--warn-wash);
+    display: flex; align-items: center; gap: 10px; padding: 9px 2px; min-width: 0; border-bottom: 1px solid var(--border);
   }
-  .firing li.fail { background: var(--fail-wash); }
+  .firing li:first-child { border-top: 1px solid var(--border); }
   .firing .what { display: grid; min-width: 0; flex: 1; line-height: 1.35; }
   .firing .title { font-weight: var(--w-label); font-size: var(--t-body); }
   .detail { font-size: var(--t-small); color: var(--text2); overflow-wrap: anywhere; }

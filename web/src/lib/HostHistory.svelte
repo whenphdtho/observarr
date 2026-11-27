@@ -6,7 +6,7 @@
   import { api } from './api.js';
   import { history, snapshot } from './data.js';
   import { rangeOf, hostSeries, mean } from './history.js';
-  import { formatBytes, formatPct } from './format.js';
+  import { formatSize, formatPct } from './format.js';
 
   // HostHistory is the host's CPU and memory over a range, both in percent on one scale (memory of the total),
   // with the memory in bytes in the tooltip. The five minutes come from the shared live history; the longer
@@ -76,14 +76,14 @@
       <p class="avg">
         <span class="muted">Average over {shown.text}</span>
         <span><i class="ring" style:color="var(--cpu)"></i>CPU <b class="num">{formatPct(avgCpu)}</b></span>
-        {#if avgMem !== null}<span><i class="ring" style:color="var(--mem)"></i>Memory <b class="num">{formatBytes(avgMem)}</b></span>{/if}
+        {#if avgMem !== null}<span><i class="ring" style:color="var(--mem)"></i>Memory <b class="num">{formatSize(avgMem)}</b></span>{/if}
       </p>
     {/if}
     <TimeChart times={data.times} max={100} format={(v) => `${v}%`} value={formatPct} live={drawn === '5m'} legend={false}
       series={[
         { label: 'CPU', values: data.cpu, color: 'var(--cpu)' },
         ...(memTotal > 0 ? [{ label: 'Memory', values: memPct, color: 'var(--mem)',
-          tip: (v) => `${formatBytes((v / 100) * memTotal)} · ${formatPct(v)}` }] : []),
+          tip: (v) => `${formatSize((v / 100) * memTotal)} · ${formatPct(v)}` }] : []),
       ]}
       label={`CPU${memTotal > 0 ? ' and memory' : ''} use over ${shown.text}, in percent${avgCpu !== null ? `; CPU ${formatPct(avgCpu)} on average` : ''}`} />
     </div>

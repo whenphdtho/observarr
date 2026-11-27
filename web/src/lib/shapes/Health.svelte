@@ -32,10 +32,10 @@
   {:else}
     <p class="row">
       <span class="facts">
-        <span class="state-word" class:fail-text={!up}><span class="dot {up ? 'ok' : 'fail'}" aria-hidden="true"></span>{up ? 'Up' : 'Down'}</span>
+        <span class="state-word" class:fail-text={!up}><span class="dot {up ? 'ok' : 'fail'}" aria-hidden="true"></span>{up ? 'Running' : 'Not reachable'}</span>
         {#if data}
           {#if data.version}<span title={`version ${data.version}`}>v{data.version}</span>{/if}
-          <span title="Response time">{data.latencyMs} ms</span>
+          <span title="How long its answer took">{data.latencyMs} ms</span>
         {/if}
       </span>
       <span class="muted age" title={reading.at}>{age}</span>
@@ -49,7 +49,8 @@
           <li>
             <span class="dot {levelTone(w.level)}" aria-hidden="true"></span>
             <span class="visually-hidden">{levelLabel(w.level)}: </span>
-            <span class="msg">{w.source ? `${w.source}: ${w.message}` : w.message}</span>
+            <!-- The app's name for its check means nothing to a reader: it stays in the title. -->
+            <span class="msg" title={w.source ? `${w.source}: ${w.message}` : null}>{w.message}</span>
           </li>
         {/each}
       </ul>

@@ -1,6 +1,6 @@
 <script>
   import { niceCeil, tipAt } from './chart.js';
-  import { formatTotal } from './format.js';
+  import { formatSize } from './format.js';
 
   // DailyBars shows traffic per day as bars, what came in below what went out, with the budget per day as a
   // line over them. days are [{ day: "YYYY-MM-DD", in, out }] in bytes, oldest first, today last (still
@@ -58,8 +58,8 @@
     }
     return {
       x: cx(i), when: `${long(d.day)}${i === days.length - 1 ? ' · so far' : ''}`,
-      rx: formatTotal(d.in || 0), tx: formatTotal(d.out || 0), total: formatTotal(totals[i]),
-      limit: Number.isFinite(limit) ? `${Math.round((totals[i] / limit) * 100)}% of ${formatTotal(limit)}` : '',
+      rx: formatSize(d.in || 0), tx: formatSize(d.out || 0), total: formatSize(totals[i]),
+      limit: Number.isFinite(limit) ? `${Math.round((totals[i] / limit) * 100)}% of ${formatSize(limit)}` : '',
       over: over(i),
     };
   }
@@ -174,13 +174,14 @@
   svg { display: block; overflow: visible; }
   .grid { stroke: var(--grid); }
   .label { fill: var(--muted); font-size: var(--t-micro); }
-  .col { fill: var(--surface2); }
+  .col { fill: var(--hover); }
   /* The day's column and the tooltip follow the pointer from day to day. */
   .col, .tip { transition: transform var(--dur-fast) var(--ease-out); }
   .bar { fill-opacity: 0.9; }
   .cap { fill: var(--fail); }
-  .limit { fill: none; stroke: var(--series-1); stroke-width: 2; stroke-linejoin: round; }
-  .line-key { width: 16px; height: 2px; border-radius: 1px; background: var(--series-1); flex: none; }
+  /* The budget is a rule across the bars, not a series of its own: drawn in the text colour, dashed. */
+  .limit { fill: none; stroke: var(--text2); stroke-width: 1.5; stroke-dasharray: 5 4; stroke-linejoin: round; }
+  .line-key { width: 16px; height: 0; border-top: 1.5px dashed var(--text2); flex: none; }
   .keys { padding-left: 44px; }
   .keys .unit { margin-left: auto; color: var(--muted); }
   @media (max-width: 720px) { .keys { padding-left: 0; } }

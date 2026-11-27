@@ -171,9 +171,10 @@ export function flash(node, tone) {
   };
 }
 
-// chartShift is an action for a chart's plot group, given { t0, span, width, live }. While live, when the time
-// window moves on by a sample, the drawing starts where it was and glides to its new place, instead of jumping one
-// step to the left. When the span changes (another range was picked) the new drawing fades in over the old place.
+// chartShift is an action for a chart's plot group, given { t0, span, width, live, fade }. While live, when the
+// time window moves on by a sample, the drawing starts where it was and glides to its new place, instead of jumping
+// one step to the left. When the span changes (another range was picked) the new drawing fades in over the old
+// place, unless fade is false: the chart then moves its own lines from the one range into the other.
 export function chartShift(node, params) {
   let prev = params;
   return {
@@ -184,7 +185,7 @@ export function chartShift(node, params) {
       const d = ms(dur('slow'));
       if (!d) return;
       if (Math.abs(next.span - p.span) > p.span * 0.05) {
-        node.animate([{ opacity: 0 }, { opacity: 1 }], { duration: d, easing: curve('out') });
+        if (next.fade !== false) node.animate([{ opacity: 0 }, { opacity: 1 }], { duration: d, easing: curve('out') });
         return;
       }
       if (!next.live) return;

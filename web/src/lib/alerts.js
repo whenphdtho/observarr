@@ -66,10 +66,10 @@ export const TYPES = {
 
 // RULES names each rule, with the threshold it has, if any: { key, label, unit, min, max } of the rules document.
 export const RULES = [
-  { id: 'down', label: 'Service or container down', threshold: { key: 'downMinutes', label: 'for', unit: 'min', min: 0, max: 1440 } },
+  { id: 'down', label: 'App not reachable, container down', threshold: { key: 'downMinutes', label: 'for', unit: 'min', min: 0, max: 1440 } },
   { id: 'health', label: 'Health warnings and errors' },
   { id: 'storage', label: 'Disk or cache nearly full, mount problems', threshold: { key: 'fullPercent', label: 'at', unit: '%', min: 50, max: 100 } },
-  { id: 'traffic', label: 'Traffic budget at 80 % and 100 %' },
+  { id: 'traffic', label: 'Traffic budget at 80% and 100%' },
   { id: 'security', label: 'Sign-in lockouts and failed sign-ins', threshold: { key: 'failedSignIns', label: 'from', unit: 'in 15 min', min: 3, max: 1000 } },
   { id: 'downloads', label: 'Downloads stuck or failed' },
   { id: 'requests', label: 'Requests waiting for approval' },

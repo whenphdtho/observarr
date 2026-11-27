@@ -179,8 +179,8 @@
           {/each}
         </g>
       </g>
-      <text class="side" x={PAD.left + 8} y={PAD.top + 12}>↓ In</text>
-      <text class="side" x={PAD.left + 8} y={PAD.top + plotH - 6}>↑ Out</text>
+      <text class="side" x={PAD.left + 8} y={PAD.top + 12}>In</text>
+      <text class="side" x={PAD.left + 8} y={PAD.top + plotH - 6}>Out</text>
       {#each xTicks as t (t)}
         {@const tx = PAD.left + ((t - t0) / span) * plotW}
         {#if tx > PAD.left + 20 && tx < PAD.left + plotW - 20}
@@ -197,7 +197,7 @@
         {#if tip.gap}
           <span class="muted">No reading</span>
         {:else}
-          <span class="row head"><span>Mbit/s</span><b>↓ in</b><b>↑ out</b></span>
+          <span class="row head"><span>Mbit/s</span><b>In</b><b>Out</b></span>
           {#each tip.rows as r (r.label)}
             <span class="row"><span class="who"><i class="ring" style:color={r.color}></i><span class="ellipsis">{r.label}</span></span>
               <b class="num">{rate(r.rx)}</b><b class="num">{rate(r.tx)}</b></span>

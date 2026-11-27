@@ -10,7 +10,7 @@
   import { diskParts } from './storage.js';
   import { now } from './ticker.js';
   import {
-    formatBytes, formatRate, formatMbit, formatPct, formatDuration, formatAge, splitNotice, containerStatusClass,
+    formatSize, formatPart, formatRate, formatMbit, formatPct, formatUptime, formatAge, splitNotice, containerStatusClass, plural,
   } from './format.js';
 
   // System shows the host (CPU, memory, swap, load, uptime, disks, network) and every container
@@ -45,12 +45,12 @@
   const columns = [
     { key: 'name', label: 'Name' },
     { key: 'state', label: 'State' },
-    { key: 'cpu', label: 'CPU %', num: true },
+    { key: 'cpu', label: 'CPU', num: true },
     { key: 'mem', label: 'Memory', num: true },
     { key: 'net', label: 'Network Mbit/s', num: true },
-    { key: 'blk', label: 'Block I/O', num: true },
+    { key: 'blk', label: 'Disk Mbit/s', num: true },
     { key: 'restarts', label: 'Restarts', num: true },
-    { key: 'up', label: 'Up since' },
+    { key: 'up', label: 'Started' },
   ];
   const sortValue = {
     name: (c) => c.name.toLowerCase(),
@@ -128,21 +128,21 @@
 
   {#if host}
     <div class="kpis">
-      <Kpi label="CPU" value={formatPct(host.cpuPercent)} num={host.cpuPercent} format={formatPct} sub={`${host.cpus} core${host.cpus === 1 ? '' : 's'}`}
+      <Kpi label="CPU" value={formatPct(host.cpuPercent)} num={host.cpuPercent} format={formatPct} sub={plural(host.cpus, 'core')}
         tone={host.cpuPercent >= 90 ? 'warn' : ''} spark={$hostLines.cpu} sparkColor="var(--cpu)"
-        change={$hostLines.cpuChange !== null ? { ratio: $hostLines.cpuChange, good: 'down', against: HOUR } : null} />
-      <Kpi label="Memory" value={formatBytes(host.memUsed)}
-        sub={`of ${formatBytes(host.memTotal)} · ${barPercent(host.memUsed, host.memTotal)}%`}
+        change={$hostLines.cpuChange !== null ? { ratio: $hostLines.cpuChange, against: HOUR } : null} />
+      <Kpi label="Memory" value={formatSize(host.memUsed)}
+        sub={`of ${formatSize(host.memTotal)} · ${barPercent(host.memUsed, host.memTotal)}%`}
         tone={barPercent(host.memUsed, host.memTotal) >= 90 ? 'warn' : ''} spark={$hostLines.mem} sparkColor="var(--mem)" sparkMin={null}
-        change={$hostLines.memChange !== null ? { ratio: $hostLines.memChange, good: 'down', against: HOUR } : null} />
+        change={$hostLines.memChange !== null ? { ratio: $hostLines.memChange, against: HOUR } : null} />
       {#if host.swapTotal === 0}
         <Kpi label="Swap" value="—" sub="No swap" />
       {:else}
-        <Kpi label="Swap" value={formatBytes(host.swapUsed)}
-          sub={`of ${formatBytes(host.swapTotal)} · ${barPercent(host.swapUsed, host.swapTotal)}%`}
+        <Kpi label="Swap" value={formatSize(host.swapUsed)}
+          sub={`of ${formatSize(host.swapTotal)} · ${barPercent(host.swapUsed, host.swapTotal)}%`}
           bar={barPercent(host.swapUsed, host.swapTotal)} />
       {/if}
-      <Kpi label="Uptime" value={formatDuration(host.uptimeNs)}
+      <Kpi label="Uptime" value={formatUptime(host.uptimeNs)}
         sub={`load ${host.load.map((l) => l.toFixed(2)).join(' · ')}`} />
     </div>
 
@@ -162,8 +162,8 @@
                 <li class="disk-row">
                   <span class="ellipsis name" title={d.path}>{d.path}</span>
                   <span class="bar mini" class:warn={p.pct >= 90} aria-hidden="true"><i style:width={`${p.pct}%`}></i></span>
-                  <span class="num rate" title={`${formatBytes(p.used)} used, ${formatBytes(p.avail)} free of ${formatBytes(d.total)}`}>
-                    {p.pct}% · {formatBytes(p.avail)} free
+                  <span class="num rate" title={`${formatSize(p.used)} used, ${formatSize(p.avail)} free of ${formatSize(d.total)}`}>
+                    {p.pct}% · {formatSize(p.avail)} free
                   </span>
                 </li>
               {/each}
@@ -180,8 +180,8 @@
               {#each net as n (n.name)}
                 <li>
                   <span class="ellipsis name" title={n.name}>{n.name}</span>
-                  <span class="num rate" title={`down ${formatMbit(n.rx)} Mbit/s, up ${formatMbit(n.tx)} Mbit/s`}>
-                    ↓ {formatMbit(n.rx)} · ↑ {formatMbit(n.tx)}
+                  <span class="num rate" title={`${formatRate(n.rx)} in, ${formatRate(n.tx)} out`}>
+                    {formatMbit(n.rx)} in · {formatMbit(n.tx)} out
                   </span>
                 </li>
               {/each}
@@ -253,16 +253,16 @@
                     <span class="ellipsis">{c.state}{c.health ? ` (${c.health})` : ''}</span>
                   </span>
                 </td>
-                <td role="cell" data-label="CPU %" class="r">
+                <td role="cell" data-label="CPU" class="r">
                   <span class="ellipsis">{c.state === 'running' ? formatPct(c.cpuPercent) : '—'}</span>
                 </td>
                 <td role="cell" data-label="Memory" class="r"
                   title={c.state === 'running' ?
-                    `${formatBytes(c.memBytes)} of ${c.memLimit ? formatBytes(c.memLimit) : 'no limit'}` : ''}>
+                    c.memLimit ? formatPart(c.memBytes, c.memLimit) : `${formatSize(c.memBytes)}, no limit` : ''}>
                   {#if c.state === 'running'}
                     <span class="two">
-                      <span>{formatBytes(c.memBytes)}</span>
-                      <span class="muted">{c.memLimit ? `of ${formatBytes(c.memLimit)}` : 'no limit'}</span>
+                      <span>{formatSize(c.memBytes)}</span>
+                      <span class="muted">{c.memLimit ? `of ${formatSize(c.memLimit)}` : 'no limit'}</span>
                     </span>
                   {:else}
                     —
@@ -270,31 +270,31 @@
                 </td>
                 <td role="cell" data-label="Network" class="r"
                   title={c.state === 'running' && ownNetwork(c.networkMode) ?
-                    `down ${formatMbit(c.netRxRate)} Mbit/s, up ${formatMbit(c.netTxRate)} Mbit/s` : ''}>
+                    `${formatRate(c.netRxRate)} in, ${formatRate(c.netTxRate)} out` : ''}>
                   {#if c.state !== 'running'}
                     —
                   {:else if ownNetwork(c.networkMode)}
                     <span class="two">
-                      <span><span aria-hidden="true">↓</span> {formatMbit(c.netRxRate)}</span>
-                      <span><span aria-hidden="true">↑</span> {formatMbit(c.netTxRate)}</span>
+                      <span>{formatMbit(c.netRxRate)} <span class="muted">in</span></span>
+                      <span>{formatMbit(c.netTxRate)} <span class="muted">out</span></span>
                     </span>
                   {:else}
                     <span class="muted" title="no network of its own">—</span>
                   {/if}
                 </td>
-                <td role="cell" data-label="Block I/O" class="r"
-                  title={c.state === 'running' ? `read ${formatRate(c.blkReadRate)}, write ${formatRate(c.blkWriteRate)}` : ''}>
+                <td role="cell" data-label="Disk" class="r"
+                  title={c.state === 'running' ? `${formatRate(c.blkReadRate)} read, ${formatRate(c.blkWriteRate)} written` : ''}>
                   {#if c.state === 'running'}
                     <span class="two">
-                      <span><span class="muted">R</span> {formatRate(c.blkReadRate)}</span>
-                      <span><span class="muted">W</span> {formatRate(c.blkWriteRate)}</span>
+                      <span>{formatMbit(c.blkReadRate)} <span class="muted">read</span></span>
+                      <span>{formatMbit(c.blkWriteRate)} <span class="muted">write</span></span>
                     </span>
                   {:else}
                     —
                   {/if}
                 </td>
                 <td role="cell" data-label="Restarts" class="r">{c.restartCount}</td>
-                <td role="cell" data-label="Up since" title={c.startedAt || ''}>
+                <td role="cell" data-label="Started" title={c.startedAt || ''}>
                   <span class="ellipsis">{c.startedAt ? formatAge(c.startedAt, $now) : '—'}</span>
                 </td>
               </tr>
@@ -345,7 +345,7 @@
   }
 
   /* Narrow: the shared block layout of .data, arranged for a container: a name line and a state
-     line; CPU %, Restarts and Up since side by side; Memory, Network and Block I/O each on a line
+     line; CPU, Restarts and Started side by side; Memory, Network and Disk each on a line
      of their own, as their figures are too long to share one. */
   @container (max-width: 759px) {
     .mobile-sort { display: flex; align-items: center; gap: 8px; font-size: var(--t-body); margin-bottom: 10px; }
@@ -358,16 +358,16 @@
     td[data-label='Name'] { grid-area: name; }
     td[data-label='State'] { grid-area: state; padding-bottom: 6px; justify-content: flex-start; color: var(--text2); }
     td[data-label='State']::before { display: none; }
-    td[data-label='CPU %'], td[data-label='Restarts'], td[data-label='Up since'] { display: block; }
-    td[data-label='CPU %']::before, td[data-label='Restarts']::before, td[data-label='Up since']::before {
+    td[data-label='CPU'], td[data-label='Restarts'], td[data-label='Started'] { display: block; }
+    td[data-label='CPU']::before, td[data-label='Restarts']::before, td[data-label='Started']::before {
       display: block; margin-bottom: 2px;
     }
-    td[data-label='CPU %'] { grid-area: cpu; }
+    td[data-label='CPU'] { grid-area: cpu; }
     td[data-label='Restarts'] { grid-area: restarts; }
-    td[data-label='Up since'] { grid-area: up; }
+    td[data-label='Started'] { grid-area: up; }
     td[data-label='Memory'] { grid-area: mem; }
     td[data-label='Network'] { grid-area: net; }
-    td[data-label='Block I/O'] { grid-area: blk; }
+    td[data-label='Disk'] { grid-area: blk; }
     td .two { display: flex; gap: 10px; min-width: 0; }
   }
 </style>

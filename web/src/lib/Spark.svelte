@@ -6,7 +6,7 @@
   // its change are given as text beside it, so it is hidden from screen readers. values are evenly spaced,
   // null for a gap; min and max fix the scale (by default from zero to the highest value; min null starts it
   // at the lowest value, for a figure that never nears zero).
-  let { values, color = 'var(--series-2)', min = 0, max = null, height = 30 } = $props();
+  let { values, color = 'var(--series-1)', min = 0, max = null, height = 30 } = $props();
 
   let width = $state(0);
   const uid = $props.id();

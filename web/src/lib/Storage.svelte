@@ -4,7 +4,7 @@
   import { snapshot, systemError, adapters } from './data.js';
   import { now } from './ticker.js';
   import { connectDocs } from './urls.js';
-  import { formatBytes, formatRate, formatPercent, formatAge } from './format.js';
+  import { formatSize, formatPart, formatRate, formatPercent, formatAge, plural } from './format.js';
   import { serviceStatus } from './status.js';
   import { attention } from './live.js';
   import { diskParts, diskTotals, mountServices, mountSummary, mountProblem, percentOf } from './storage.js';
@@ -25,32 +25,28 @@
   // cacheText is the figures of a mount that keeps a disk cache.
   function cacheText(m) {
     return m.cacheMaxBytes > 0 ?
-      `${formatBytes(m.cacheUsedBytes)} of ${formatBytes(m.cacheMaxBytes)}` : `${formatBytes(m.cacheUsedBytes)}, no limit`;
+      formatPart(m.cacheUsedBytes, m.cacheMaxBytes) : `${formatSize(m.cacheUsedBytes)}, no limit`;
   }
 
   function mountState(m) {
-    if (m.state === 'mounted') return { text: 'mounted', tone: 'ok', title: `mounted at ${m.mountPoint}` };
-    if (m.state === 'unmounted') return { text: 'not mounted', tone: 'fail', title: 'not mounted' };
+    if (m.state === 'mounted') return { text: 'Mounted', tone: 'ok', title: `Mounted at ${m.mountPoint}` };
+    if (m.state === 'unmounted') return { text: 'Not mounted', tone: 'fail', title: 'Not mounted' };
     return {
-      text: 'in use', tone: '',
+      text: 'In use', tone: '',
       title: m.unlisted ?
         'The remote is served but not mounted through the remote control; whether it is mounted otherwise is not reported' :
         'The remote is served, but where or whether it is mounted is not reported',
     };
   }
 
-  function plural(n, word) {
-    return `${n} ${word}${n === 1 ? '' : 's'}`;
-  }
-
   const mountsTone = $derived(sum.readings === 0 ? '' : sum.healthy < sum.listed ? 'warn' : 'ok');
   const mountsSub = $derived(
     [sum.healthy < sum.listed ? `${plural(sum.listed - sum.healthy, 'mount')} need a look` : 'All healthy',
-      sum.total > sum.listed ? `+${sum.total - sum.listed} not listed` : ''].filter(Boolean).join(' · '),
+      sum.total > sum.listed ? `${sum.total - sum.listed} more not listed` : ''].filter(Boolean).join(' · '),
   );
   const cacheSub = $derived(
     sum.caches === 0 ? 'No disk cache' :
-      sum.cacheMax > 0 ? `of ${formatBytes(sum.cacheMax)} · ${percentOf(sum.cacheUsed, sum.cacheMax)}%` :
+      sum.cacheMax > 0 ? `of ${formatSize(sum.cacheMax)} · ${percentOf(sum.cacheUsed, sum.cacheMax)}%` :
         `${plural(sum.caches, 'cache')}, not all limited`,
   );
 </script>
@@ -62,22 +58,22 @@
 
   <div class="kpis">
     {#if disks.length > 0}
-      <Kpi label="Disks used" value={formatBytes(totals.used)}
-        sub={`${formatBytes(totals.avail)} free · ${totals.pct}%`} bar={totals.pct}
+      <Kpi label="Disks used" value={formatSize(totals.used)}
+        sub={`${formatSize(totals.avail)} free · ${totals.pct}%`} bar={totals.pct}
         barTone={totals.pct >= 90 ? 'warn' : ''} />
     {:else}
       <Kpi label="Disks used" value="—" sub="No disks measured" />
     {/if}
     {#if sum.readings > 0}
-      <Kpi label="Mounts healthy" value={`${sum.healthy}/${sum.listed}`} tone={mountsTone}
+      <Kpi label="Mounts healthy" value={sum.healthy} unit={`of ${sum.listed}`} tone={mountsTone === 'warn' ? 'warn' : ''}
         sub={mountsSub} />
-      <Kpi label="Cache used" value={sum.caches ? formatBytes(sum.cacheUsed) : '—'} sub={cacheSub}
+      <Kpi label="Cache used" value={sum.caches ? formatSize(sum.cacheUsed) : '—'} sub={cacheSub}
         bar={sum.cacheMax > 0 ? percentOf(sum.cacheUsed, sum.cacheMax) : null}
         barTone={sum.cacheMax > 0 && percentOf(sum.cacheUsed, sum.cacheMax) >= 90 ? 'warn' : ''} />
       <Kpi label="Transfer speed" value={formatRate(sum.speed)}
         sub={sum.active ? `${plural(sum.active, 'transfer')} in progress` : 'Nothing transferring'} />
     {:else}
-      <Kpi label="Mounts healthy" value="—" sub={sources.length ? 'Waiting for a reading' : 'No mount service'} />
+      <Kpi label="Mounts healthy" value="—" sub={sources.length ? 'Waiting for the first check…' : 'No app reports mounts'} />
       <Kpi label="Cache used" value="—" sub="No reading" />
       <Kpi label="Transfer speed" value="—" sub="No reading" />
     {/if}
@@ -87,8 +83,8 @@
     <section class="section" aria-labelledby="storage-disks-title">
       <div class="card-head">
         <h2 id="storage-disks-title">Disks</h2>
-        <span class="meta num" title={`${formatBytes(totals.used)} used of ${formatBytes(totals.total)}`}>
-          {formatBytes(totals.total)} in {plural(totals.count, 'file system')}
+        <span class="meta num" title={`${formatSize(totals.used)} used of ${formatSize(totals.total)}`}>
+          {formatSize(totals.total)} in {plural(totals.count, 'file system')}
         </span>
       </div>
       <div class="disks">
@@ -97,12 +93,12 @@
           <div class="disk">
             <div class="disk-head">
               <span class="ellipsis path" title={d.path}>{d.path}</span>
-              <span class="muted num figures" title={`${formatBytes(p.used)} used, ${formatBytes(p.reserved)} reserved, ${formatBytes(p.avail)} free of ${formatBytes(d.total)}`}>
-                {formatBytes(p.used)} used · <span class="free">{formatBytes(p.avail)} free</span> · <span class:warn-text={p.pct >= 90}>{p.pct}%</span>
+              <span class="muted num figures" title={`${formatSize(p.used)} used, ${formatSize(p.reserved)} reserved, ${formatSize(p.avail)} free of ${formatSize(d.total)}`}>
+                {formatSize(p.used)} used · <span class="free">{formatSize(p.avail)} free</span> · <span class:warn-text={p.pct >= 90}>{p.pct}%</span>
               </span>
             </div>
             <div class="stack" role="img"
-              aria-label={`${d.path}: ${formatBytes(p.used)} used, ${formatBytes(p.avail)} free of ${formatBytes(d.total)}, ${p.pct}% full`}>
+              aria-label={`${d.path}: ${formatSize(p.used)} used, ${formatSize(p.avail)} free of ${formatSize(d.total)}, ${p.pct}% full`}>
               <i class="used" class:warn={p.pct >= 90} style:flex-grow={p.used}></i>
               {#if p.reserved > 0}<i class="reserved" style:flex-grow={p.reserved}></i>{/if}
               <i class="avail" style:flex-grow={p.avail}></i>
@@ -134,7 +130,7 @@
           <a href="#/apps">Go to Apps</a>
         </span>
       {:else}
-        <span>Connect a service that mounts remote storage to see its mounts and caches.</span>
+        <span>Connect an app that mounts remote storage to see its mounts and caches.</span>
       {/if}
     </div>
   {/if}
@@ -202,17 +198,17 @@
                     {/if}
                   </div>
                   <div class="facts">
-                    {#if m.outOfSpace}<span class="fail-text" title="The cache disk is out of space">out of space</span>{/if}
+                    {#if m.outOfSpace}<span class="fail-text" title="The cache disk is out of space">Out of space</span>{/if}
                     {#if m.erroredFiles > 0}
-                      <span class="fail-text" title={`${m.erroredFiles} cached files could not be uploaded`}>{m.erroredFiles} errored</span>
+                      <span class="fail-text" title={`${plural(m.erroredFiles, 'cached file')} could not be uploaded`}>{m.erroredFiles} not uploaded</span>
                     {/if}
                     {#if m.uploadsInProgress > 0}
-                      <span title={`${m.uploadsInProgress} uploads in progress`}>↑ {m.uploadsInProgress} uploading</span>
+                      <span>{m.uploadsInProgress} uploading</span>
                     {/if}
                     {#if m.uploadsQueued > 0}
-                      <span title={`${m.uploadsQueued} uploads queued`}>{m.uploadsQueued} queued</span>
+                      <span title={`${plural(m.uploadsQueued, 'upload')} waiting`}>{m.uploadsQueued} queued</span>
                     {/if}
-                    {#if m.cache && m.cacheMode}<span title={`cache mode ${m.cacheMode}`}>{m.cacheMode}</span>{/if}
+                    {#if m.cache && m.cacheMode}<span title={`Cache mode ${m.cacheMode}`}>{m.cacheMode}</span>{/if}
                     {#if m.cache}
                       <span title={`${m.cachedFiles} files in the cache`}>{plural(m.cachedFiles, 'file')}</span>
                     {/if}
@@ -229,7 +225,7 @@
         <div class="transfers">
           <p class="t-head">
             <span class="label">Transfers</span>
-            <span class="num t-figures" title={`${formatRate(data.speed)}, ${data.activeTransfers} in progress, ${formatBytes(data.bytes)} since the app started`}>
+            <span class="num t-figures" title={`${formatRate(data.speed)}, ${data.activeTransfers} in progress, ${formatSize(data.bytes)} since the app started`}>
               {formatRate(data.speed)} · {data.activeTransfers} active
             </span>
             {#if data.errors > 0}
@@ -243,7 +239,7 @@
               {#each transfers as tr, i (`${tr.name}|${i}`)}
                 <li>
                   <span class="ellipsis t-name" title={tr.name}>{tr.name}</span>
-                  <span class="num t-pct" title={`${formatPercent(tr.progress)} of ${formatBytes(tr.sizeBytes)} at ${formatRate(tr.speed)}`}>
+                  <span class="num t-pct" title={`${formatPercent(tr.progress)} of ${formatSize(tr.sizeBytes)} at ${formatRate(tr.speed)}`}>
                     {formatPercent(tr.progress)}
                   </span>
                   <div class="bar t-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"
@@ -276,7 +272,7 @@
   .stack > i { display: block; flex-basis: 0; min-width: 2px; transition: flex-grow var(--dur-slow) var(--ease-out); }
   .used { background: var(--bar); }
   .used.warn { background: var(--warn); }
-  .reserved { background: var(--dim); }
+  .reserved { background: var(--bar-idle); }
   .avail { background: var(--surface3); }
   .legend { display: flex; gap: 16px; margin-top: 12px; font-size: var(--t-small); color: var(--muted); flex-wrap: wrap; }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }

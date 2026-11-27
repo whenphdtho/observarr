@@ -35,9 +35,10 @@
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1); /* standard: arrivals and state changes */
   --ease-emph: cubic-bezier(0.2, 0, 0, 1); /* emphasised: things that travel, picking up then settling */
   --ease-exit: cubic-bezier(0.32, 0, 0.67, 0); /* leaving: quick, gathering speed */
-  /* Radii: panels, controls, small marks, and pills (segmented options, the current view). */
-  --r-lg: 16px;
-  --r: 8px;
+  /* Radii: panels, rows inside a panel, controls and icon tiles, small marks, and pills (segmented options). */
+  --r-lg: 18px;
+  --r-md: 12px;
+  --r: 10px;
   --r-sm: 5px;
   --r-pill: 999px;
   /* Room inside a panel. */
@@ -50,17 +51,17 @@
   --brand-b: #3d8bff;
   --brand-glint: #2be3e6;
   /* Type. Sora sets the page title, the section and card headings and the wordmark; Inter sets the
-     rest, every figure included, in tabular numerals. Sentence case throughout, no spaced capitals. */
+     rest, every figure included. Sentence case throughout, no spaced capitals. */
   --font-display: 'Sora', 'Sora Fallback', ui-sans-serif, system-ui, sans-serif;
   --font-body: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --t-display: 24px; /* h1: the page title */
-  --t-h2: 16px; /* section and card headings, dialog titles, the wordmark */
-  --t-h3: 14px; /* headings inside a section, app names, the side column's headings */
-  --t-body: 13px; /* text, controls, tables */
-  --t-small: 12px; /* meta, keys, hints, column heads */
-  --t-micro: 11px; /* axis and dock labels: the floor for any text */
+  --t-display: 28px; /* h1: the page title */
+  --t-h2: 17px; /* section and card headings, dialog titles, the wordmark */
+  --t-h3: 15px; /* headings inside a section, app names, a row's title */
+  --t-body: 14px; /* text, controls, tables */
+  --t-small: 13px; /* meta, keys, hints, column heads */
+  --t-micro: 12px; /* axis and dock labels: the floor for any text */
   --t-figure-lg: 28px; /* lead figures */
-  --t-figure: 20px; /* key figures */
+  --t-figure: 21px; /* key figures */
   --t-figure-sm: 16px; /* figures in a list of facts */
   --w-body: 400;
   --w-label: 500;
@@ -69,14 +70,14 @@
   --w-display: 650;
   --lh-display: 1.2;
   --lh-heading: 1.3;
-  --lh-body: 1.5;
-  --track-display: -0.02em;
+  --lh-body: 1.45;
+  --track-display: -0.025em;
   --track-heading: -0.01em;
   --track-figure: -0.015em;
   font: var(--w-body) var(--t-body) / var(--lh-body) var(--font-body);
-  /* Tabular figures everywhere: live values must not jitter as they change. */
-  font-feature-settings: 'cv11', 'ss01', 'tnum';
-  font-variant-numeric: tabular-nums;
+  /* Words keep the font's own spacing: tabular figures also widen the hyphen ("Sign - in"), so they are asked
+     for only where numbers stand (.num, table cells, figures, charts), never for running text. */
+  font-feature-settings: 'cv11';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   scrollbar-width: thin;
@@ -87,13 +88,19 @@
    (lib/theme.js keeps it current); without it the page is dark. Both themes fill the same roles. */
 :root, :root[data-theme='dark'] {
   color-scheme: dark;
-  /* Neutrals: one deep indigo family. --bg is the page, --rail the side columns, --surface the
-     panels on the page (cards, the figure strip, dialogs), --surface2/3 raised controls and tracks. */
-  --bg: #0f1026;
-  --rail: #121331;
-  --surface: #181a3a;
+  /* Neutrals: one deep indigo family. --bg is the page, --rail the side columns, --surface the panels on the
+     page (cards, the figure strip, dialogs), each held by a 1px outline in --border; --surface2/3 are raised
+     controls, --hover a row under the pointer, --tile the square behind an app's icon, --track the ground of a
+     bar. */
+  --bg: #0d0e22;
+  --rail: #111232;
+  --surface: #171938;
   --surface2: #20234a;
   --surface3: #2a2e5c;
+  --hover: #1d2048;
+  --tile: #23264f;
+  --tile-ink: #e4e6fb;
+  --track: #262a52;
   --border: #262a52;
   --border2: #323668;
   /* Edge of a secondary button: at least 3:1 against the page and the panels, so its shape is seen. */
@@ -101,13 +108,15 @@
   --btn-edge-hi: #7479b0;
   /* Form fields: a ground of their own and a stronger edge than --border2, at least 3:1 against the page
      and the panels. */
-  --field: #0f1026;
+  --field: #0d0e22;
   --field-border: #6e73aa;
   --field-border-hi: #8287bd;
+  /* Text: the first, the second (details, summaries) and the third (meta, axis labels); each at least 7:1 on
+     the page, the columns and the panels. */
   --text: #eef0ff;
-  --text2: #b4b8de;
-  --muted: #9a9ec9;
-  --dim: #50548a; /* decorative only (icons, idle dots, separators), never text */
+  --text2: #c6c9ea;
+  --muted: #bcc0e4;
+  --dim: #50548a; /* decorative only (icons, separators), never text */
   /* One accent, blue: the primary action, the current view and range, focus and selection.
      --accent draws lines, rings and icons; --accent-fill is a filled control with --accent-ink on it
      (4.9:1); --accent-text is a link on the page or a panel. */
@@ -115,49 +124,50 @@
   --accent-fill: #2a6ae6;
   --accent-fill-hi: #2f70ec;
   --accent-ink: #ffffff;
-  --accent-text: #82b1ff;
-  --accent-text-hi: #a8c8ff;
+  --accent-text: #9cc0ff;
+  --accent-text-hi: #c2d8ff;
   --accent-wash: rgba(61, 139, 255, 0.28);
-  /* Data: violet, blue and cyan lead, two more for busy charts, and a quiet one for the rest. Each
-     keeps at least 3:1 against the panels and the tooltip; charts lay them over each other as translucent fills. */
-  --series-1: #8b6cf6;
-  --series-2: #3d8bff;
-  --series-3: #2be3e6;
-  --series-4: #f07ac8;
-  --series-5: #a9b8ff;
-  --series-other: #767aab;
-  --down: var(--series-2);
+  /* Data: one hue, blue, in three strengths, and a quiet neutral for the rest. A chart tells its series apart by
+     strength, so no colour is left to mean anything but data. Each keeps at least 3:1 against the panels and the
+     tooltip; charts lay them over each other as translucent fills. */
+  --series-1: #3d8bff;
+  --series-2: #6f9dff;
+  --series-3: #a8c4ff;
+  --series-other: #6e73aa;
+  --down: var(--series-1);
   --up: var(--series-3);
   --cpu: var(--series-1);
   --mem: var(--series-3);
   --grid: #262a52;
   /* Opacity of the fills under the lines: an area (top and bottom of its fade), a mirrored band, a spark. */
-  --area-hi: 0.42;
-  --area-lo: 0.03;
-  --band-hi: 0.6;
-  --band-lo: 0.28;
-  --spark-hi: 0.38;
-  /* State: a set of its own, apart from the data colours. Each keeps at least 4.5:1 on the page and panels. */
+  --area-hi: 0.24;
+  --area-lo: 0.14;
+  --band-hi: 0.55;
+  --band-lo: 0.3;
+  --spark-hi: 0.3;
+  /* State: a set of its own, used for state only: a marker, a dot, a value. --ok, --warn and --fail draw the
+     marks; the -ink ones set words, a step softer. --idle is a thing waiting or paused: nothing wrong. Each
+     keeps at least 4.5:1 on the page and panels (--idle 3:1, it only draws dots). */
   --ok: #4ad295;
   --warn: #f2b45e;
   --fail: #f7768a;
-  /* Problem rows: a faint wash of the state colour behind the row, the dot and words carry the state. A flash is
-     the brief light of a state that just changed (lib/motion.js flash). */
-  --fail-wash: rgba(247, 118, 138, 0.09);
-  --fail-wash-hi: rgba(247, 118, 138, 0.16);
+  --warn-ink: #f2c48a;
+  --fail-ink: #f7a1af;
+  --idle: #6e73aa;
+  /* A flash is the brief light of a state that just changed (lib/motion.js flash); nothing stays tinted. */
   --fail-flash: rgba(247, 118, 138, 0.28);
-  --warn-wash: rgba(242, 180, 94, 0.06);
-  --warn-wash-hi: rgba(242, 180, 94, 0.13);
   --warn-flash: rgba(242, 180, 94, 0.22);
   --ok-flash: rgba(74, 210, 149, 0.16);
-  --fail-edge: rgba(247, 118, 138, 0.42);
-  --warn-edge: rgba(242, 180, 94, 0.36);
+  /* The outline of the panel that lists what needs attention, a shade towards its worst state. */
+  --fail-edge: #3a2f4c;
+  --warn-edge: #3a3547;
   --warn-line: rgba(242, 180, 94, 0.38);
-  /* Progress and share bars: neutral, so colour is left for warnings. */
-  --bar: #8d91bd;
+  /* Progress and share bars: plain and thin, in the data colour; grey when what they show is paused. */
+  --bar: var(--series-1);
+  --bar-idle: #6e73aa;
   /* Chart tooltips, the dialog backdrop, the scrollbar thumb. */
   --tip: #2a2e5c;
-  --tip-edge: #323668;
+  --tip-edge: #353a6e;
   --scrim: rgba(6, 7, 20, 0.66);
   --scroll: #323668;
   /* Depth: panels sit a little above the page; dialogs and tooltips further. */
@@ -169,21 +179,25 @@
    text. The data and state colours keep their hues, deepened to hold the same contrast on white. */
 :root[data-theme='light'] {
   color-scheme: light;
-  --bg: #edeff7;
+  --bg: #eef0f7;
   --rail: #f6f7fb;
   --surface: #ffffff;
   --surface2: #e6e9f4;
   --surface3: #dadeee;
-  --border: #dde0ee;
-  --border2: #c9cee3;
+  --hover: #eef1fa;
+  --tile: #e9ecf6;
+  --tile-ink: #2b2f58;
+  --track: #e3e6f2;
+  --border: #d5d9ea;
+  --border2: #c4c9e0;
   --btn-edge: #8287ad;
   --btn-edge-hi: #6d729c;
   --field: #ffffff;
   --field-border: #7e83a9;
   --field-border-hi: #666b95;
   --text: #15173a;
-  --text2: #41456d;
-  --muted: #595d85;
+  --text2: #3d4168;
+  --muted: #565b84;
   --dim: #a3a7c7;
   --accent: #2a6ae6;
   --accent-fill: #2563de;
@@ -192,32 +206,30 @@
   --accent-text: #1f5bd1;
   --accent-text-hi: #163f9c;
   --accent-wash: rgba(42, 106, 230, 0.2);
-  --series-1: #6b4bdf;
-  --series-2: #2a6ae6;
-  --series-3: #078a92;
-  --series-4: #c13a98;
-  --series-5: #5868d4;
+  --series-1: #2a6ae6;
+  --series-2: #123a8c;
+  --series-3: #5a86e8;
   --series-other: #858aaf;
   --grid: #e4e7f1;
-  --area-hi: 0.2;
-  --area-lo: 0.02;
-  --band-hi: 0.34;
-  --band-lo: 0.14;
-  --spark-hi: 0.2;
+  --area-hi: 0.16;
+  --area-lo: 0.08;
+  --band-hi: 0.4;
+  --band-lo: 0.2;
+  --spark-hi: 0.18;
   --ok: #11784b;
-  --warn: #9a5800;
+  --warn: #a35f00;
   --fail: #c0283f;
-  --fail-wash: rgba(192, 40, 63, 0.05);
-  --fail-wash-hi: rgba(192, 40, 63, 0.09);
+  --warn-ink: #8a4e00;
+  --fail-ink: #b3223a;
+  --idle: #7f84ab;
   --fail-flash: rgba(192, 40, 63, 0.16);
-  --warn-wash: rgba(214, 132, 20, 0.07);
-  --warn-wash-hi: rgba(214, 132, 20, 0.12);
   --warn-flash: rgba(214, 132, 20, 0.2);
   --ok-flash: rgba(17, 120, 75, 0.12);
-  --fail-edge: rgba(192, 40, 63, 0.38);
-  --warn-edge: rgba(176, 102, 0, 0.36);
+  --fail-edge: #e6c3cb;
+  --warn-edge: #e2cfae;
   --warn-line: rgba(176, 102, 0, 0.42);
-  --bar: #7378a6;
+  --bar: var(--series-1);
+  --bar-idle: #9499bd;
   --tip: #ffffff;
   --tip-edge: #c9cee3;
   --scrim: rgba(21, 23, 58, 0.4);
@@ -237,6 +249,8 @@ h2 { font-size: var(--t-h2); letter-spacing: var(--track-heading); }
 h3 { font-size: var(--t-h3); }
 /* Counts and units inside a heading are figures: Inter, at the heading's size or their own. */
 :is(h1, h2, h3) :is(em, small, .unit, .num, .meta) { font-family: var(--font-body); letter-spacing: 0; }
+/* Numbers that change or line up keep one width per digit: figures, numeric table cells, chart labels. */
+.num, .data td.r, svg text { font-variant-numeric: tabular-nums; }
 p { text-wrap: pretty; }
 /* Disclosure summaries look like the controls they are. */
 summary { cursor: pointer; color: var(--text2); width: fit-content; border-radius: 4px; }
@@ -244,8 +258,8 @@ summary:hover { color: var(--text); text-decoration: underline; text-underline-o
 
 /* Buttons: primary (accent) by default, .quiet for everything secondary, .ibtn for icon-only. */
 button {
-  font: inherit; font-size: var(--t-body); font-weight: 500; display: inline-flex; align-items: center; justify-content: center;
-  gap: 7px; padding: 6px 12px; border-radius: var(--r); cursor: pointer; white-space: nowrap;
+  font: inherit; font-size: var(--t-body); font-weight: 600; display: inline-flex; align-items: center; justify-content: center;
+  gap: 7px; min-height: 34px; padding: 5px 14px; border-radius: var(--r); cursor: pointer; white-space: nowrap;
   color: var(--accent-ink); background: var(--accent-fill); border: 1px solid var(--accent-fill);
   transition-property: background-color, border-color, color, filter, box-shadow, transform;
   transition-duration: var(--dur-fast); transition-timing-function: var(--ease-out);
@@ -257,13 +271,24 @@ button:active:not(:disabled) { filter: brightness(0.88); transform: scale(0.97);
 button.row-link:active:not(:disabled) { transform: none; }
 button:disabled { opacity: 0.55; cursor: default; }
 /* Secondary buttons keep a fill and an edge of their own, so they read as buttons, not as text. */
-button.quiet { color: var(--text); background: var(--surface2); border-color: var(--btn-edge); }
+button.quiet { color: var(--text); background: var(--surface2); border-color: var(--btn-edge); font-weight: 500; }
 button.quiet:hover:not(:disabled) { background: var(--surface3); border-color: var(--btn-edge-hi); }
 button.ibtn {
-  width: 32px; height: 32px; padding: 0; flex: none;
+  width: 34px; height: 34px; min-height: 0; padding: 0; flex: none;
   color: var(--text2); background: transparent; border-color: var(--border);
 }
 button.ibtn:hover:not(:disabled) { color: var(--text); background: var(--surface2); border-color: var(--border2); }
+
+/* A link that is the action of its place (open the app, go to the view) looks like the button beside it. */
+a.button {
+  display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 5px 14px; border-radius: var(--r);
+  font-size: var(--t-body); font-weight: 600; text-decoration: none; white-space: nowrap;
+  color: var(--accent-ink); background: var(--accent-fill); border: 1px solid var(--accent-fill);
+}
+a.button:hover { color: var(--accent-ink); background: var(--accent-fill-hi); border-color: var(--accent-fill-hi); }
+a.button:active { filter: brightness(0.88); transform: scale(0.97); }
+a.button.quiet { color: var(--text); background: var(--surface2); border-color: var(--btn-edge); font-weight: 500; }
+a.button.quiet:hover { background: var(--surface3); border-color: var(--btn-edge-hi); }
 
 input, select, textarea {
   font: inherit; font-size: var(--t-body); color: var(--text); background: var(--field); border: 1px solid var(--field-border);
@@ -292,7 +317,7 @@ a:hover { color: var(--accent-text-hi); }
 .go:hover .icon { transform: translateX(2px); }
 /* A whole row that is a link or button: a wash on hover, a chevron that brightens. */
 .row-link { cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out); }
-.row-link:hover { background: var(--surface2); }
+.row-link:hover { background: var(--hover); }
 .row-link .chev { color: var(--muted); flex: none; display: grid; transition: color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out); }
 .row-link:hover .chev, .row-link:focus-visible .chev { color: var(--text); transform: translateX(2px); }
 
@@ -311,14 +336,20 @@ dialog .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap:
 
 /* Shared pieces used by several views. */
 .muted { color: var(--muted); }
-.num { font-variant-numeric: tabular-nums; }
 /* A live label or value stays on one line; the full text is in its title. */
 .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 /* Error and warning text is never truncated: a long unbreakable token wraps inside its box. */
-.error { color: var(--fail); overflow-wrap: anywhere; }
-/* Colour on a word only where it needs attention. */
-.warn-text { color: var(--warn); }
-.fail-text { color: var(--fail); }
+.error { color: var(--fail-ink); overflow-wrap: anywhere; }
+/* Colour on a word only where it says a state that needs attention. */
+.warn-text { color: var(--warn-ink); }
+.fail-text { color: var(--fail-ink); }
+/* The first thing a keyboard reaches: past the views, straight to the content. */
+.skip {
+  position: fixed; z-index: 100; top: 8px; left: 8px; padding: 9px 14px; border-radius: var(--r);
+  background: var(--accent-fill); color: var(--accent-ink); font-weight: 600; text-decoration: none;
+  transform: translateY(-200%);
+}
+.skip:focus { transform: none; color: var(--accent-ink); }
 .visually-hidden {
   position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
 }
@@ -332,13 +363,25 @@ dialog .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap:
   min-width: 0; padding: var(--pad); background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--r-lg); box-shadow: var(--lift);
 }
-@media (max-width: 720px) { :root { --pad: 16px 16px; } }
+/* Phones: text a step larger, to read at arm's length, and fields at 16px so the page does not zoom on focus. */
+@media (max-width: 720px) {
+  :root { --pad: 16px 16px; --t-body: 15px; --t-small: 13px; --t-h3: 15px; --t-display: 19px; }
+  input, select, textarea { font-size: 16px; }
+}
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 16px; min-width: 0; }
 .card-head h2 {
   display: flex; align-items: center; gap: 8px; min-width: 0;
 }
 /* Right-aligned note in a section head: a count, a unit, a time span. */
 .card-head .meta { font-size: var(--t-small); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* A panel that folds (Fold.svelte) and anything else that opens in place: the body's row grows from nothing to
+   its own height, so the height eases without being measured. */
+.fold { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--dur-base) var(--ease-out); }
+.fold.open { grid-template-rows: 1fr; }
+.fold > * { overflow: hidden; min-height: 0; }
+/* The chevron of a thing that opens: down when open, turned aside when shut. */
+.turn { flex: none; display: grid; color: var(--muted); transition: transform var(--dur-base) var(--ease-out); }
 
 /* A row of key figures (Kpi.svelte): one panel split by hairlines, four across, two on narrower
    layouts, one on the smallest. The 1px gap lets the panel's border colour show as the dividers. */
@@ -359,11 +402,11 @@ dialog .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap:
   background: var(--bg); border: 1px solid var(--border);
 }
 .seg button {
-  padding: 4px 12px; border-radius: var(--r-pill); font-weight: 500; font-size: var(--t-small); color: var(--text2);
-  background: transparent; border: 0; min-height: 28px;
+  padding: 4px 12px; border-radius: var(--r-pill); font-weight: 400; font-size: var(--t-small); color: var(--text2);
+  background: transparent; border: 0; min-height: 30px;
 }
 .seg button:hover:not(:disabled) { background: var(--surface2); border: 0; color: var(--text); }
-.seg button[aria-pressed='true'] { background: var(--accent-fill); color: var(--accent-ink); }
+.seg button[aria-pressed='true'] { background: var(--accent-fill); color: var(--accent-ink); font-weight: 600; }
 .seg button[aria-pressed='true']:hover:not(:disabled) { background: var(--accent-fill-hi); }
 .seg button:focus-visible { outline-offset: 1px; }
 
@@ -416,36 +459,39 @@ table.data { width: 100%; border-collapse: collapse; font-size: var(--t-body); }
 
 /* Colour key of a segment of a bar: a small square. */
 .sw { width: 8px; height: 8px; border-radius: 2px; flex: none; display: inline-block; }
-/* Colour key of a chart series: a ring in the series colour (style:color sets it). */
-.ring {
-  width: 10px; height: 10px; border-radius: 50%; flex: none; display: inline-block;
-  border: 2.5px solid currentColor; background: transparent;
-}
-.ring.blank { border-color: transparent; }
-/* A key below a chart: ring markers and names in one wrapping row. */
+/* Colour key of a chart series: a small square in the series colour (style:color sets it). */
+.ring { width: 10px; height: 10px; border-radius: 3px; flex: none; display: inline-block; background: currentColor; }
+.ring.blank { background: transparent; }
+/* A key below a chart: markers and names in one wrapping row. */
 .keys { display: flex; flex-wrap: wrap; gap: 6px 18px; list-style: none; margin: 0; padding: 0; font-size: var(--t-small); color: var(--text2); }
 .keys li { display: inline-flex; align-items: center; gap: 7px; min-width: 0; white-space: nowrap; }
 
 
-/* Icon tile: a square holding an app's icon, optionally with a status dot in its corner. */
+/* Icon tile: a neutral square holding an app's icon, optionally with a status dot in its corner. The tile never
+   takes a state's colour: the dot and the words do. */
 .tile-icon {
   width: 36px; height: 36px; border-radius: var(--r); display: grid; place-items: center; flex: none;
-  position: relative; background: var(--surface2); color: var(--text2);
+  position: relative; background: var(--tile); color: var(--tile-ink);
 }
 .status-dot {
-  position: absolute; right: -3px; bottom: -3px; width: 10px; height: 10px; border-radius: 50%;
-  border: 2px solid var(--rail); background: var(--dim);
+  position: absolute; right: -3px; bottom: -3px; width: 11px; height: 11px; border-radius: 50%;
+  box-shadow: 0 0 0 2.5px var(--dot-ground, var(--rail)); background: var(--idle);
 }
 /* A status dot before plain text: the word says the state, the dot repeats it at a glance. */
-.dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--dim); }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--idle); }
 .status-dot.ok, .dot.ok { background: var(--ok); }
 .status-dot.warn, .dot.warn { background: var(--warn); }
 .status-dot.fail, .dot.fail { background: var(--fail); }
+/* The mark at the front of a row that needs attention: 4px of its state's colour. */
+.marker { width: 4px; height: 24px; border-radius: 2px; flex: none; background: var(--idle); }
+.marker.warn { background: var(--warn); }
+.marker.fail { background: var(--fail); }
 .state-word { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 
 /* Thin progress bar. What it shows is always also given as text next to it. */
-.bar { height: 4px; border-radius: 2px; background: var(--surface3); overflow: hidden; }
+.bar { display: block; height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; }
 .bar > i { display: block; height: 100%; border-radius: 2px; background: var(--bar); transition: width var(--dur-slow) var(--ease-out); }
+.bar.idle > i { background: var(--bar-idle); }
 .bar.warn > i { background: var(--warn); }
 .bar.fail > i { background: var(--fail); }
 

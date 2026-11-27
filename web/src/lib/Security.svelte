@@ -8,10 +8,8 @@
   import { adapters } from './data.js';
   import { serviceList } from './live.js';
   import { now } from './ticker.js';
-  import { formatAge } from './format.js';
-  import {
-    securityServices, activeBans, formatCount, formatLeft, formatUntil, formatTime,
-  } from './security.js';
+  import { formatAge, formatCount, formatSpan, formatUntil, formatTime, plural } from './format.js';
+  import { securityServices, activeBans } from './security.js';
 
   // Security shows how Observarr itself is protected (GET /api/security: failed sign-ins, lockouts,
   // sessions, access settings) and, for every service filling the "security" shape, what it blocks.
@@ -72,7 +70,7 @@
     endError = '';
     try {
       const res = await api('POST', '/api/security/sign-out-others');
-      notice = `Signed out ${res.ended} other session${res.ended === 1 ? '' : 's'}.`;
+      notice = `Signed out ${plural(res.ended, 'other session')}.`;
       dialogEl?.close();
       await load();
     } catch (err) {
@@ -97,7 +95,7 @@
       <Icon name="triangle-alert" />
       <div class="banner-text">
         <p>
-          Many addresses are failing to sign in. For the next {formatLeft(view.serverLockedSec)} only addresses that
+          Many addresses are failing to sign in. For the next {formatSpan(view.serverLockedSec)} only addresses that
           signed in before may try.
         </p>
       </div>
@@ -107,16 +105,16 @@
   <div class="kpis">
     <Kpi label="Failed sign-ins" value={failed ? formatCount(failed.attempts) : '—'}
       tone={failed?.attempts ? 'warn' : ''}
-      sub={!failed ? 'Loading…' : failed.addresses ? `${failed.addresses} address${failed.addresses === 1 ? '' : 'es'} · 24 h` : 'None in 24 h'} />
+      sub={!failed ? 'Loading…' : failed.addresses ? `${plural(failed.addresses, 'address', 'addresses')} · 24 h` : 'None in 24 h'} />
     <Kpi label="Locked out" value={view ? view.lockouts.length : '—'}
       unit={view?.lockouts.length === 1 ? 'address' : 'addresses'}
       tone={view?.lockouts.length ? 'warn' : ''}
-      sub={!view ? 'Loading…' : view.lockouts.length ? `longest ${formatLeft(view.lockouts[0].seconds)} left` : 'No lockouts'} />
+      sub={!view ? 'Loading…' : view.lockouts.length ? `longest ${formatSpan(view.lockouts[0].seconds)} left` : 'No lockouts'} />
     <Kpi label="Active sessions" value={view ? view.sessionCount : '—'}
       sub={!view ? 'Loading…' : others ? `${others} besides yours` : 'Only yours'} />
     {#if blockers.length}
-      <Kpi label="Active bans" value={bans.any ? formatCount(bans.bans, bans.capped) : '—'}
-        sub={bans.any ? `by ${blockers.length === 1 ? blockers[0].name : `${blockers.length} services`}` : 'Waiting for the first check…'} />
+      <Kpi label="Blocked addresses" value={bans.any ? formatCount(bans.bans, bans.capped) : '—'}
+        sub={bans.any ? `by ${blockers.length === 1 ? blockers[0].name : `${blockers.length} apps`}` : 'Waiting for the first check…'} />
     {:else}
       <Kpi label="Last sign-in" value={lastSignIn ? lastSignIn.user : '—'}
         sub={lastSignIn ? `${formatAge(lastSignIn.at, $now)}${lastSignIn.address ? ` · ${lastSignIn.address}` : ''}` : 'None yet'} />
@@ -126,7 +124,7 @@
   <section class="section" aria-labelledby="attempts-title">
     <div class="card-head">
       <h2 id="attempts-title">Sign-in attempts</h2>
-      <span class="meta">failed · last 24 h</span>
+      <span class="meta">Failed · last 24 h</span>
     </div>
     {#if !failed}
       <Skeleton count={3} />
@@ -145,7 +143,7 @@
               <th role="columnheader" scope="col" class="r">Attempts</th>
               <th role="columnheader" scope="col">Last attempt</th>
               <th role="columnheader" scope="col">User names tried</th>
-              <th role="columnheader" scope="col">Status</th>
+              <th role="columnheader" scope="col">State</th>
             </tr>
           </thead>
           <!-- svelte-ignore a11y_no_redundant_roles -->
@@ -161,10 +159,10 @@
                   <span class="ellipsis">{formatAge(g.last, $now)}</span>
                 </td>
                 <td role="cell" data-label="User names" title={users}><span class="ellipsis">{users}</span></td>
-                <td role="cell" data-label="Status">
+                <td role="cell" data-label="State">
                   {#if lock}
-                    <span class="state-word warn-text" title={`Locked out for ${formatLeft(lock.seconds)} more`}>
-                      <span class="dot warn" aria-hidden="true"></span>Locked · {formatLeft(lock.seconds)}
+                    <span class="state-word warn-text" title={`Locked out for ${formatSpan(lock.seconds)} more`}>
+                      <span class="dot warn" aria-hidden="true"></span>Locked out · {formatSpan(lock.seconds)} left
                     </span>
                   {:else}
                     <span class="muted">Can retry</span>
@@ -186,7 +184,7 @@
   {#if blockers.length === 0}
     <div class="empty">
       <Icon name="shield" size={28} />
-      <b>No intrusion prevention connected</b>
+      <b>Nothing reports blocked addresses yet</b>
       {#if sources.length}
         <span>
           Add {sources.map((a) => a.name).join(' or ')} on the Apps view to see the addresses it blocks. Observarr only
@@ -199,7 +197,7 @@
           <a href="#/apps">Go to Apps</a>
         </span>
       {:else}
-        <span>Connect an intrusion prevention system to see the addresses it blocks.</span>
+        <span>Connect an app that blocks addresses to see what it keeps out.</span>
       {/if}
     </div>
   {:else}
@@ -218,11 +216,11 @@
         {:else if data}
           <div class="figures">
             <div class="fig">
-              <span class="muted">Active decisions</span>
+              <span class="muted">Blocked addresses</span>
               <b class="num">{formatCount(data.total, data.capped)}</b>
             </div>
             <div class="fig">
-              <span class="muted">Made here</span>
+              <span class="muted">Detected here</span>
               <b class="num">{formatCount(data.local, data.capped)}</b>
             </div>
             <div class="fig">
@@ -230,7 +228,7 @@
               <b class="num">{formatCount(data.community, data.capped)}</b>
             </div>
             <div class="fig types">
-              <span class="muted">By type</span>
+              <span class="muted">How they are blocked</span>
               <span class="facts types-list">
                 {#each data.byType as t (t.name)}
                   <span title={`${t.name}: ${formatCount(t.count)}`}>{t.name} <b class="num">{formatCount(t.count)}</b></span>
@@ -246,9 +244,9 @@
 
           <div class="pair">
             <div>
-              <h3>By origin</h3>
+              <h3>Where they come from</h3>
               {#if data.byOrigin.length === 0}
-                <p class="waiting">No decisions.</p>
+                <p class="waiting">Nothing is blocked.</p>
               {:else}
                 <ul class="bars">
                   {#each data.byOrigin as o (o.name)}
@@ -262,7 +260,7 @@
               {/if}
             </div>
             <div>
-              <h3>Top scenarios here</h3>
+              <h3>Most common reasons here</h3>
               {#if data.topScenarios.length === 0}
                 <p class="waiting">Nothing detected on this machine.</p>
               {:else}
@@ -279,23 +277,23 @@
             </div>
           </div>
 
-          <h3>Latest decisions made here</h3>
+          <h3>Latest addresses blocked here</h3>
           {#if data.recent.length === 0}
-            <p class="waiting">None: every active decision comes from a blocklist.</p>
+            <p class="waiting">None: every blocked address comes from a blocklist.</p>
           {:else}
             {@const shown = showAll[svc.id] ? data.recent : data.recent.slice(0, RECENT_SHOWN)}
             <div class="table-wrap">
               <!-- svelte-ignore a11y_no_redundant_roles -->
               <table class="data decisions" role="table">
-                <caption class="visually-hidden">Latest decisions made by {svc.name}</caption>
+                <caption class="visually-hidden">Latest addresses blocked by {svc.name}</caption>
                 <!-- svelte-ignore a11y_no_redundant_roles -->
                 <thead role="rowgroup">
                   <!-- svelte-ignore a11y_no_redundant_roles -->
                   <tr role="row">
                     <th role="columnheader" scope="col">Address</th>
-                    <th role="columnheader" scope="col">Type</th>
-                    <th role="columnheader" scope="col">Scenario</th>
-                    <th role="columnheader" scope="col">Origin</th>
+                    <th role="columnheader" scope="col">How</th>
+                    <th role="columnheader" scope="col">Reason</th>
+                    <th role="columnheader" scope="col">Source</th>
                     <th role="columnheader" scope="col">Ends</th>
                   </tr>
                 </thead>
@@ -307,9 +305,9 @@
                       <td role="cell" data-label="Address" class="lead" title={`${d.value} (${d.scope})`}>
                         <span class="ellipsis">{d.value}</span>
                       </td>
-                      <td role="cell" data-label="Type">{d.type}</td>
-                      <td role="cell" data-label="Scenario" title={d.scenario}><span class="ellipsis">{d.scenario || '—'}</span></td>
-                      <td role="cell" data-label="Origin" title={d.origin}><span class="ellipsis">{d.origin}</span></td>
+                      <td role="cell" data-label="How">{d.type}</td>
+                      <td role="cell" data-label="Reason" title={d.scenario}><span class="ellipsis">{d.scenario || '—'}</span></td>
+                      <td role="cell" data-label="Source" title={d.origin}><span class="ellipsis">{d.origin}</span></td>
                       <td role="cell" data-label="Ends" title={formatTime(d.until)}>
                         <span class="ellipsis">{d.until ? formatUntil(d.until, $now) : '—'}</span>
                       </td>
@@ -395,7 +393,7 @@
       <h2 id="access-title">Access settings</h2>
       {#if view}
         <span class="meta" class:warn-text={warnings > 0}>
-          {warnings === 0 ? 'No warnings' : `${warnings} warning${warnings === 1 ? '' : 's'}`}
+          {warnings === 0 ? 'No warnings' : plural(warnings, 'warning')}
         </span>
       {/if}
     </div>
@@ -496,22 +494,22 @@
       grid-template-areas: 'addr type' 'scen scen' 'origin ends';
     }
     .data td[data-label='Address'] { grid-area: addr; grid-column: auto; align-self: center; }
-    .attempts td[data-label='Status'], .decisions td[data-label='Type'] { justify-content: flex-end; align-self: center; }
-    .attempts td[data-label='Status']::before, .decisions td[data-label='Type']::before { display: none; }
-    .attempts td[data-label='Status'] { grid-area: status; }
+    .attempts td[data-label='State'], .decisions td[data-label='How'] { justify-content: flex-end; align-self: center; }
+    .attempts td[data-label='State']::before, .decisions td[data-label='How']::before { display: none; }
+    .attempts td[data-label='State'] { grid-area: status; }
     .attempts td[data-label='Attempts'] { grid-area: count; }
     .attempts td[data-label='Last attempt'] { grid-area: last; }
     .attempts td[data-label='User names'] { grid-area: users; }
-    .decisions td[data-label='Type'] { grid-area: type; }
-    .decisions td[data-label='Scenario'] { grid-area: scen; }
-    .decisions td[data-label='Origin'] { grid-area: origin; }
+    .decisions td[data-label='How'] { grid-area: type; }
+    .decisions td[data-label='Reason'] { grid-area: scen; }
+    .decisions td[data-label='Source'] { grid-area: origin; }
     .decisions td[data-label='Ends'] { grid-area: ends; }
     /* Paired figures put their label above the value, so both fit half a phone's width. */
     .attempts td[data-label='Attempts'], .attempts td[data-label='Last attempt'],
-    .decisions td[data-label='Origin'], .decisions td[data-label='Ends'] { display: block; }
+    .decisions td[data-label='Source'], .decisions td[data-label='Ends'] { display: block; }
     .attempts td[data-label='Attempts']::before, .attempts td[data-label='Last attempt']::before,
-    .decisions td[data-label='Origin']::before, .decisions td[data-label='Ends']::before { display: block; }
+    .decisions td[data-label='Source']::before, .decisions td[data-label='Ends']::before { display: block; }
     .data td > .ellipsis { display: block; }
-    .attempts td[data-label='User names'] > .ellipsis, .decisions td[data-label='Scenario'] > .ellipsis { flex: 1; }
+    .attempts td[data-label='User names'] > .ellipsis, .decisions td[data-label='Reason'] > .ellipsis { flex: 1; }
   }
 </style>

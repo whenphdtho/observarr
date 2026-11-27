@@ -92,9 +92,9 @@
   }
 </script>
 
-<section class="apps" aria-label="Services">
+<section class="apps" aria-label="Apps">
   <div class="toolbar">
-    <p class="count">{services.length} service{services.length === 1 ? '' : 's'}{filtered ? ' match' : ''}</p>
+    <p class="count">{services.length} app{services.length === 1 ? '' : 's'}{filtered ? ' match' : ''}</p>
     {#if services.length > 0}
       <button type="button" class="quiet" onclick={toggleAll}>
         {allExpanded ? 'Collapse all' : 'Expand all'}
@@ -135,7 +135,7 @@
     {#if filtered}
       <div class="empty">
         <Icon name="search" size={28} />
-        <b>No service matches the search</b>
+        <b>No app matches the search</b>
         <span>Try part of a name, an app or an address — or press Esc to clear it.</span>
       </div>
     {/if}

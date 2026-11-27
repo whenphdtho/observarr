@@ -1,7 +1,7 @@
 <script>
   import { now } from '../ticker.js';
-  import { formatAge } from '../format.js';
-  import { countOf, formatCount, formatUntil } from '../security.js';
+  import { formatAge, formatCount, formatUntil } from '../format.js';
+  import { countOf } from '../security.js';
 
   // Security renders one shape.Security reading compactly: the active bans and the latest decision
   // this machine made. It knows nothing about which app produced it.
@@ -11,7 +11,7 @@
   const bans = $derived(countOf(data?.byType, 'ban'));
   const last = $derived(data?.recent?.[0] ?? null);
   const age = $derived(reading ? formatAge(reading.at, $now) : '');
-  const split = $derived(data ? `${formatCount(data.local)} local · ${formatCount(data.community)} from blocklists` : '');
+  const split = $derived(data ? `${formatCount(data.local)} detected here · ${formatCount(data.community)} from blocklists` : '');
 </script>
 
 <div class="security">
@@ -19,9 +19,9 @@
     <p class="waiting">Waiting for the first check…</p>
   {:else}
     <p class="row">
-      <span class="label">Blocked</span>
+      <span class="label">Blocked addresses</span>
       {#if data}
-        <span class="count" title={`${formatCount(bans, data.capped)} active bans`}>{formatCount(bans, data.capped)}</span>
+        <span class="count num">{formatCount(bans, data.capped)}</span>
       {/if}
       <span class="muted age">{age}</span>
     </p>
@@ -30,14 +30,14 @@
     {:else if data}
       <p class="split muted ellipsis" title={split}>{split}</p>
       {#if last}
-        {@const title = `${last.value} · ${last.type} · ${last.scenario}${last.until ? ` · ends ${formatUntil(last.until, $now)}` : ''}`}
+        {@const title = `${last.value} · ${last.scenario || last.type}${last.until ? ` · ends ${formatUntil(last.until, $now)}` : ''}`}
         <p class="last" {title}>
           <span class="muted what">Latest</span>
           <span class="value num ellipsis">{last.value}</span>
           <span class="muted ellipsis scenario">{last.scenario || last.type}</span>
         </p>
       {:else}
-        <p class="waiting">No decisions made here yet.</p>
+        <p class="waiting">Nothing was blocked from here yet.</p>
       {/if}
     {/if}
   {/if}

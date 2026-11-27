@@ -12,16 +12,16 @@
   import { snapshot } from './data.js';
   import { serviceList } from './live.js';
   import { streamServices, streamSummary, formatBitrate } from './streams.js';
-  import { group, layers, sum, add } from './traffic.js';
+  import { group, layers, sum, add, advance } from './traffic.js';
   import { rangeOf, integrate, change, coverage, MIN_COVERAGE } from './history.js';
-  import { formatMbit, formatPart, formatTotal, totalParts } from './format.js';
+  import { formatMbit, formatRate, formatPart, formatPercent, formatSize, sizeParts, plural } from './format.js';
 
   // Network shows where the traffic goes: the host's rates and today's totals, the traffic of each
   // app (services with their linked containers, and other containers) over a range from five minutes
   // to a year with each app's share of it, the traffic of the last 30 days against the budget, and the
   // budget. It loads GET /api/network and, for the five minutes, adds each live reading. The key figures
-  // compare the last 24 hours with the 24 hours before.
-  const LIVE_MS = 5 * 60 * 1000;
+  // compare the last 24 hours with the 24 hours before. The chart's key follows the range picked; the table below
+  // says its own frame, now and today; the budget is shown in one place.
   const RELOAD_MS = 60 * 1000;
 
   let range = $state('5m');
@@ -77,24 +77,7 @@
   $effect(() => {
     const snap = $snapshot;
     untrack(() => {
-      if (!snap?.host || !view) return;
-      const t = new Date(snap.at).getTime();
-      if (!(t > (view.at ?? 0))) return;
-      view.at = t;
-      const live = view.range === '5m';
-      const drop = live ? view.times.filter((x) => x < t - LIVE_MS).length : 0;
-      const update = (flow, rx, tx) => {
-        flow.rx = rx;
-        flow.tx = tx;
-        if (!live || (!flow.series && !(rx || tx))) return;
-        flow.series ??= { rx: view.times.map(() => 0), tx: view.times.map(() => 0) };
-        flow.series.rx = [...flow.series.rx.slice(drop), rx];
-        flow.series.tx = [...flow.series.tx.slice(drop), tx];
-      };
-      update(view.host, sum(snap.host.net, 'rx'), sum(snap.host.net, 'tx'));
-      const now = new Map(snap.containers.map((c) => [c.name, c]));
-      for (const c of view.containers) update(c, now.get(c.name)?.netRxRate ?? 0, now.get(c.name)?.netTxRate ?? 0);
-      if (live) view.times = [...view.times.slice(drop), t];
+      if (snap && view) advance(view, snap);
     });
   });
 
@@ -132,7 +115,7 @@
   const rangeKnown = $derived(view ? coverage(view.times, view.host.series?.rx, shownRange.span) >= MIN_COVERAGE : false);
   const rangeChange = $derived(view?.previous && rangeKnown ? change(rangeTotal, view.previous.in + view.previous.out) : null);
   // Each app's share of the range: its traffic in and out, summed over the range.
-  const shares = $derived(view ? chart.map((l) => ({ label: l.label, color: l.color, value: integrate(view.times, both(l.series)) })) : []);
+  const shares = $derived(view ? chart.map((l) => ({ label: name(l), color: l.color, value: integrate(view.times, both(l.series)) })) : []);
   const shareTotal = $derived(shares.reduce((n, s) => n + s.value, 0));
   // The last 30 days, and the budget of each: the daily limit, or the monthly one spread over its month's days.
   const daily = $derived(view?.daily ?? day?.daily ?? null);
@@ -152,17 +135,16 @@
     const st = s.linked ? streaming.get(s.key) : null;
     if (!(st?.total > 0)) return '';
     const rate = formatBitrate(st.bitrate);
-    return `${st.total} stream${st.total === 1 ? '' : 's'}${rate ? `, ${rate}` : ''}`;
+    return `${plural(st.total, 'stream')}${rate ? `, ${rate}` : ''}`;
   }
+
+  // name is what a source is called: the rest of the host's traffic is said in plain words.
+  const name = (s) => (s.key ? s.label : 'Other server traffic');
 
   function sub(s) {
-    if (!s.key) return 'not attributed to an app';
-    const what = s.members.length === 1 && s.members[0] === s.label ? 'container' : s.members.join(', ');
+    if (!s.key) return 'What no app accounts for';
+    const what = s.members.length === 1 && s.members[0] === s.label ? 'Container' : s.members.join(', ');
     return [what, playing(s)].filter(Boolean).join(' · ');
-  }
-
-  function rates(s) {
-    return `↓ ${formatMbit(s.rx)} · ↑ ${formatMbit(s.tx)}`;
   }
 
 </script>
@@ -176,21 +158,19 @@
     </div>
   {:else}
     <div class="kpis">
-      <Kpi label="Download" value={formatMbit(nowRx)} num={(nowRx * 8) / 1e6} format={(v) => formatMbit((v * 1e6) / 8)} unit="Mbit/s"
-        sub={`peak ${formatMbit(Math.max(summary?.peakRx ?? 0, nowRx))} Mbit/s today`}
+      <Kpi label="Coming in" value={formatMbit(nowRx)} num={(nowRx * 8) / 1e6} format={(v) => formatMbit((v * 1e6) / 8)} unit="Mbit/s"
+        sub={`Peak today ${formatRate(Math.max(summary?.peakRx ?? 0, nowRx))}`}
         spark={mbitLine(day?.host.series?.rx)} sparkColor="var(--down)"
-        change={day?.previous && dayKnown ? { ratio: change(dayIn, day.previous.in), good: 'up', against: 'the 24 hours before' } : null} />
-      <Kpi label="Upload" value={formatMbit(nowTx)} num={(nowTx * 8) / 1e6} format={(v) => formatMbit((v * 1e6) / 8)} unit="Mbit/s"
-        sub={`peak ${formatMbit(Math.max(summary?.peakTx ?? 0, nowTx))} Mbit/s today`}
+        change={day?.previous && dayKnown ? { ratio: change(dayIn, day.previous.in), against: 'the 24 hours before' } : null} />
+      <Kpi label="Going out" value={formatMbit(nowTx)} num={(nowTx * 8) / 1e6} format={(v) => formatMbit((v * 1e6) / 8)} unit="Mbit/s"
+        sub={`Peak today ${formatRate(Math.max(summary?.peakTx ?? 0, nowTx))}`}
         spark={mbitLine(day?.host.series?.tx)} sparkColor="var(--up)"
-        change={day?.previous && dayKnown ? { ratio: change(dayOut, day.previous.out), good: 'up', against: 'the 24 hours before' } : null} />
-      <Kpi label="Today" value={totalParts(todayTotal)[0]} unit={totalParts(todayTotal)[1]}
-        sub={budget?.period === 'day' ? `limit ${formatTotal(budget.limitBytes)}` :
-          `↓ ${formatTotal(today.rx)} · ↑ ${formatTotal(today.tx)}`}
-        spark={hasDaily ? daily.slice(-14).map((d) => (d.in || 0) + (d.out || 0)) : null} sparkColor="var(--series-1)"
-        tone={usedTone} />
-      <Kpi label="Top now" value={top ? formatMbit(top.rx + top.tx) : '—'} unit={top ? 'Mbit/s' : ''}
-        sub={top ? top.label : 'No app traffic now'} />
+        change={day?.previous && dayKnown ? { ratio: change(dayOut, day.previous.out), against: 'the 24 hours before' } : null} />
+      <Kpi label="Today" value={sizeParts(todayTotal)[0]} unit={sizeParts(todayTotal)[1]}
+        sub={`${formatSize(today.rx)} in · ${formatSize(today.tx)} out`}
+        spark={hasDaily ? daily.slice(-14).map((d) => (d.in || 0) + (d.out || 0)) : null} />
+      <Kpi label="Busiest app now" value={top ? formatMbit(top.rx + top.tx) : '—'} unit={top ? 'Mbit/s' : ''}
+        sub={top ? top.label : 'No app moves traffic now'} />
     </div>
 
     <section class="section" aria-labelledby="flow-title">
@@ -209,35 +189,35 @@
         <div class="drawn settle" class:busy={view.range !== range} aria-busy={view.range !== range}>
         {#if rangeTotal > 0}
           <p class="span-total">
-            <b class="num">{formatTotal(rangeTotal)}</b>
+            <b class="num">{formatSize(rangeTotal)}</b>
             <span class="muted">in {shownRange.text}</span>
-            {#if rangeChange !== null}<Delta ratio={rangeChange} good="up" against={shownRange.before} />{/if}
+            {#if rangeChange !== null}<Delta ratio={rangeChange} against={shownRange.before} />{/if}
           </p>
         {/if}
         <div class="flow">
           <MirrorChart times={view.times} layers={chart} live={view.range === '5m'}
             label={`Traffic by app over ${shownRange.text}, in Mbit/s: incoming above the line, outgoing below; now ${formatMbit(nowRx)} in, ${formatMbit(nowTx)} out`} />
-          <ul class="legend" aria-label="Apps">
-            <li class="legend-head" aria-hidden="true"><span>App</span><span>Mbit/s now</span></li>
-            {#each chart as s (s.key)}
+          <!-- The key reads in the frame of the chart: each app's traffic over the range picked, and its share. -->
+          <ul class="legend" aria-label={`Apps, ${shownRange.text}`}>
+            <li class="legend-head" aria-hidden="true"><span>App</span><span>{shownRange.name}</span></li>
+            {#each chart as s, k (s.key)}
               <li>
                 <i class="ring" style:color={s.color}></i>
                 <span class="who">
-                  <span class="name ellipsis" title={s.label}>{s.label}</span>
+                  <span class="name ellipsis" title={name(s)}>{name(s)}</span>
                   <span class="muted ellipsis" title={sub(s)}>{sub(s)}</span>
                 </span>
                 <span class="fig num">
-                  <span title={rates(s)}>{rates(s)}</span>
-                  <span class="muted">{formatTotal(s.todayRx + s.todayTx)} today</span>
+                  <span>{formatSize(shares[k].value)}</span>
+                  <span class="muted">{shareTotal > 0 ? formatPercent(shares[k].value / shareTotal) : '—'}</span>
                 </span>
               </li>
             {/each}
           </ul>
         </div>
         <p class="note">
-          Mbit/s, stacked: above the line what comes in, below what goes out. Other is the part of the host's
-          traffic that no app explains. Apps also count traffic between each other, so a stack can briefly
-          exceed the host's total.
+          Mbit/s, stacked: above the line what comes in, below what goes out. Other server traffic is what no app
+          accounts for. Apps also count traffic between each other, so a stack can briefly exceed the server's total.
         </p>
         </div>
       {/if}
@@ -248,10 +228,10 @@
         {#if view && shareTotal > 0}
           <section class="section" aria-labelledby="share-title">
             <div class="card-head">
-              <h2 id="share-title">Traffic by app</h2>
+              <h2 id="share-title">Share by app</h2>
               <span class="meta">{shownRange.name}</span>
             </div>
-            <Donut items={shares} total={formatTotal(shareTotal)} caption="in and out" format={formatTotal}
+            <Donut items={shares} total={formatSize(shareTotal)} caption="in and out" format={formatSize}
               label={`Share of each app in the traffic of ${shownRange.text}: ${shares.filter((x) => x.value > 0).map((x) => `${x.label} ${Math.round((x.value / shareTotal) * 100)}%`).join(', ')}`} />
           </section>
         {/if}
@@ -263,7 +243,7 @@
             </div>
             <DailyBars days={daily} {limits} height={290}
               limitLabel={budget?.period === 'month' ? 'Monthly budget per day' : 'Daily budget'}
-              label={`Traffic per day over the last 30 days${budget ? `, against the ${period} budget` : ''}; today ${formatTotal((daily[daily.length - 1].in || 0) + (daily[daily.length - 1].out || 0))} so far`} />
+              label={`Traffic per day over the last 30 days${budget ? `, against the ${period} budget` : ''}; today ${formatSize((daily[daily.length - 1].in || 0) + (daily[daily.length - 1].out || 0))} so far`} />
           </section>
         {/if}
       </div>
@@ -272,8 +252,8 @@
     <div class="pair">
       <section class="section" aria-labelledby="apps-title">
         <div class="card-head">
-          <h2 id="apps-title">By app</h2>
-          <span class="meta">now · since midnight</span>
+          <h2 id="apps-title">By app, now and today</h2>
+          <span class="meta">Mbit/s now · totals since midnight</span>
         </div>
         {#if rows.length === 0}
           <p class="waiting">No app traffic yet. Containers with a network of their own are counted.</p>
@@ -284,29 +264,29 @@
               <thead>
                 <tr>
                   <th scope="col">App</th>
-                  <th scope="col" class="r"><span aria-hidden="true">↓ </span>now</th>
-                  <th scope="col" class="r"><span aria-hidden="true">↑ </span>now</th>
-                  <th scope="col" class="r"><span aria-hidden="true">↓ </span>today</th>
-                  <th scope="col" class="r"><span aria-hidden="true">↑ </span>today</th>
+                  <th scope="col" class="r">In now</th>
+                  <th scope="col" class="r">Out now</th>
+                  <th scope="col" class="r">In today</th>
+                  <th scope="col" class="r">Out today</th>
                 </tr>
               </thead>
               <tbody>
                 {#each rows as s (s.key)}
                   {@const share = todayTotal > 0 ? Math.min(1, (s.todayRx + s.todayTx) / todayTotal) : 0}
                   <tr>
-                    <td class="lead" title={s.label}>
+                    <td class="lead" title={name(s)}>
                       <span class="app">
                         <!-- A row the chart does not draw keeps an empty swatch, so every name lines up. -->
                         <i class="ring" class:blank={!s.color} style:color={s.color || null}></i>
-                        <span class="ellipsis">{s.label}</span>
+                        <span class="ellipsis">{name(s)}</span>
                         {#if playing(s)}<span class="plays ellipsis" title={playing(s)}>{playing(s)}</span>{/if}
                       </span>
                       <span class="share" title={`${Math.round(share * 100)}% of today's traffic`}><i style:width={`${share * 100}%`}></i></span>
                     </td>
-                    <td class="r" data-label="↓ now">{formatMbit(s.rx)}</td>
-                    <td class="r" data-label="↑ now">{formatMbit(s.tx)}</td>
-                    <td class="r muted" data-label="↓ today">{formatTotal(s.todayRx)}</td>
-                    <td class="r muted" data-label="↑ today">{formatTotal(s.todayTx)}</td>
+                    <td class="r" data-label="In now">{formatMbit(s.rx)}</td>
+                    <td class="r" data-label="Out now">{formatMbit(s.tx)}</td>
+                    <td class="r muted" data-label="In today">{formatSize(s.todayRx)}</td>
+                    <td class="r muted" data-label="Out today">{formatSize(s.todayTx)}</td>
                   </tr>
                 {/each}
               </tbody>
@@ -325,15 +305,15 @@
             {Math.round((budget.usedBytes / budget.limitBytes) * 100)}%<small>of {period} budget</small>
           </p>
           <span class="bar budget-bar {usedTone}" role="img"
-            aria-label={`${Math.round(used * 100)}% of the ${period} budget used: ${formatTotal(budget.usedBytes)} of ${formatTotal(budget.limitBytes)}`}>
+            aria-label={`${Math.round(used * 100)}% of the ${period} budget used: ${formatSize(budget.usedBytes)} of ${formatSize(budget.limitBytes)}`}>
             <i style:width={`${used * 100}%`}></i>
           </span>
-          <p class="used num">{formatPart(budget.usedBytes, budget.limitBytes, ' of ')} used</p>
+          <p class="used num">{formatPart(budget.usedBytes, budget.limitBytes)} used</p>
         {:else}
           <dl class="totals">
-            <div><dt><span aria-hidden="true">↓ </span>Down</dt><dd class="num">{formatTotal(today.rx)}</dd></div>
-            <div><dt><span aria-hidden="true">↑ </span>Up</dt><dd class="num">{formatTotal(today.tx)}</dd></div>
-            <div class="sum"><dt>Total</dt><dd class="num">{formatTotal(todayTotal)}</dd></div>
+            <div><dt>In</dt><dd class="num">{formatSize(today.rx)}</dd></div>
+            <div><dt>Out</dt><dd class="num">{formatSize(today.tx)}</dd></div>
+            <div class="sum"><dt>Total</dt><dd class="num">{formatSize(todayTotal)}</dd></div>
           </dl>
           <p class="waiting hint">Set OBSERVARR_TRAFFIC_BUDGET to follow a daily or monthly budget.</p>
         {/if}
@@ -367,8 +347,8 @@
   .pair.single { grid-template-columns: minmax(0, 1fr); }
   .app { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 500; }
   .plays { font-size: var(--t-small); font-weight: 400; color: var(--muted); }
-  .share { display: block; height: 2px; margin-top: 6px; border-radius: 1px; background: var(--surface3); overflow: hidden; max-width: 220px; }
-  .share i { display: block; height: 100%; background: var(--bar); }
+  .share { display: block; height: 4px; margin-top: 6px; border-radius: 2px; background: var(--track); overflow: hidden; max-width: 220px; }
+  .share i { display: block; height: 100%; border-radius: 2px; background: var(--bar); }
 
   .pct { font-size: var(--t-figure-lg); font-weight: 600; letter-spacing: var(--track-figure); line-height: 1.2; white-space: nowrap; }
   .pct small { font-size: var(--t-body); font-weight: 400; color: var(--muted); margin-left: 8px; letter-spacing: 0; }
