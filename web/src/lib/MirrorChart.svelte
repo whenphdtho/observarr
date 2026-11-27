@@ -54,6 +54,8 @@
   const span = $derived(Math.max(1, (times[times.length - 1] ?? 0) - t0));
   const sampleStep = $derived(stepOf(times));
   const yTicks = $derived.by(() => {
+    // Nothing moved at all: the zero line says so, and a scale above and below it would only repeat a number.
+    if (peak('rx') + peak('tx') === 0) return [0];
     const out = [];
     for (let v = step; v <= inTop + 1e-9; v += step) out.push(v);
     for (let v = step; v <= outTop + 1e-9; v += step) out.push(-v);
@@ -87,7 +89,7 @@
 
   function axis(v) {
     const a = Math.abs(v);
-    return a < 10 && a !== Math.round(a) ? a.toFixed(1) : String(Math.round(a));
+    return a < 10 && a !== Math.round(a) ? a.toFixed(1) : Math.round(a).toLocaleString('en-US');
   }
 
   const rate = (v) => (Number.isFinite(v) ? formatMbit(v) : '—');

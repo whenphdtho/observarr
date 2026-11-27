@@ -8,21 +8,32 @@
 // The one exception to Mbit/s: what a disk reads and writes is in MB/s (formatDisk), as every disk tool says it.
 // Mbit/s is for what travels over a network: traffic, a download, a stream, a transfer to a remote.
 
-// formatMbit renders a bytes-per-second rate as a number of Mbit/s without the unit: one decimal below 10, whole
-// numbers above, "<0.1" for a trickle. A missing or negative rate renders as "—".
+// figure writes a number for reading: one decimal below 10, whole above, thousands grouped ("9,080").
+const figure = (v) => (v < 9.95 ? v.toFixed(1) : Math.round(v).toLocaleString('en-US'));
+
+// formatMbit renders a bytes-per-second rate as a number of Mbit/s without the unit, for where the unit stands
+// apart (a column's head, a chart's axis): one decimal below 10, whole numbers above with thousands grouped,
+// "<0.1" for a trickle. A missing or negative rate renders as "—".
 export function formatMbit(bytesPerSec) {
   if (!Number.isFinite(bytesPerSec) || bytesPerSec < 0) return '—';
   const v = (bytesPerSec * 8) / 1e6;
   if (v === 0) return '0';
   if (v < 0.05) return '<0.1';
-  return v < 9.95 ? v.toFixed(1) : String(Math.round(v));
+  return figure(v);
 }
 
-// formatRate renders a bytes-per-second rate with its unit, e.g. "304 Mbit/s": a download, a transfer and the
-// host's traffic all read alike.
+// rateParts splits a bytes-per-second rate into [number, unit]: Mbit/s, and Gbit/s from 1000 Mbit/s, so a fast
+// line reads "9.1 Gbit/s", not a five-digit number.
+export function rateParts(bytesPerSec) {
+  if (!Number.isFinite(bytesPerSec) || bytesPerSec < 0) return ['—', ''];
+  const v = (bytesPerSec * 8) / 1e6;
+  return v >= 999.5 ? [figure(v / 1000), 'Gbit/s'] : [formatMbit(bytesPerSec), 'Mbit/s'];
+}
+
+// formatRate renders a bytes-per-second rate with its unit, e.g. "304 Mbit/s" or "9.1 Gbit/s": a download, a
+// transfer and the host's traffic all read alike.
 export function formatRate(bytesPerSec) {
-  const v = formatMbit(bytesPerSec);
-  return v === '—' ? v : `${v} Mbit/s`;
+  return rateParts(bytesPerSec).join(' ').trim();
 }
 
 // formatDisk renders a disk's bytes-per-second rate as a number of MB/s without the unit: one decimal below 10,
@@ -32,22 +43,23 @@ export function formatDisk(bytesPerSec) {
   const v = bytesPerSec / 1e6;
   if (v === 0) return '0';
   if (v < 0.05) return '<0.1';
-  return v < 9.95 ? v.toFixed(1) : String(Math.round(v));
+  return figure(v);
 }
 
-// sizeParts splits a number of bytes into [number, unit] in decimal GB, or TB from 1000 GB: two decimals below 1,
-// one below 10, whole numbers above; "<0.01" for a few megabytes.
+// sizeParts splits a number of bytes into [number, unit] in decimal GB, TB from 1000 GB and PB from 1000 TB:
+// two decimals below 1, one below 10, whole numbers above (grouped, beyond 1000 PB); "<0.01" for a few megabytes.
 export function sizeParts(bytes) {
   if (!Number.isFinite(bytes) || bytes < 0) return ['—', ''];
   let v = bytes / 1e9;
   let unit = 'GB';
-  if (v >= 999.5) {
+  for (const next of ['TB', 'PB']) {
+    if (v < 999.5) break;
     v /= 1000;
-    unit = 'TB';
+    unit = next;
   }
   if (v === 0) return ['0', unit];
   if (v < 0.005) return ['<0.01', unit];
-  return [v < 0.995 ? v.toFixed(2) : v < 9.95 ? v.toFixed(1) : String(Math.round(v)), unit];
+  return [v < 0.995 ? v.toFixed(2) : figure(v), unit];
 }
 
 // formatSize renders a number of bytes as e.g. "144 GB" or "1.3 TB".
@@ -56,17 +68,17 @@ export function formatSize(bytes) {
 }
 
 // formatPart renders a part of a whole in the whole's unit, named once: "6.4 of 17 GB", "464 of 1,400 GB" (a
-// whole under 10 TB stays in GB, so a part of it reads on the same scale), "49 of 60 TB".
+// whole under 10 TB stays in GB, so a part of it reads on the same scale), "49 of 60 TB", "1.2 of 40 PB".
 export function formatPart(part, whole) {
   if (!Number.isFinite(part) || !Number.isFinite(whole) || part < 0 || whole < 0) return '—';
-  const tb = whole >= 10e12;
+  const [unit, size] = whole >= 10e15 ? ['PB', 1e15] : whole >= 10e12 ? ['TB', 1e12] : ['GB', 1e9];
   const fig = (bytes) => {
-    const v = bytes / (tb ? 1e12 : 1e9);
+    const v = bytes / size;
     if (v === 0) return '0';
     if (v < 0.005) return '<0.01';
-    return v < 0.995 ? v.toFixed(2) : v < 9.95 ? v.toFixed(1) : Math.round(v).toLocaleString('en-US');
+    return v < 0.995 ? v.toFixed(2) : figure(v);
   };
-  return `${fig(part)} of ${fig(whole)} ${tb ? 'TB' : 'GB'}`;
+  return `${fig(part)} of ${fig(whole)} ${unit}`;
 }
 
 // formatPercent renders a 0..1 fraction as a whole percentage, clamped to that range.
@@ -171,6 +183,10 @@ export function formatTime(at) {
   const d = new Date(at);
   return Number.isFinite(d.getTime()) ? d.toLocaleString() : '';
 }
+
+// CONTROL finds a control character (a line break, a tab, a NUL): none belongs in a name, where it would be
+// shown as nothing or as a space.
+export const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
 
 // sentence raises the first letter of an app's status word or message: "queued" reads "Queued".
 export function sentence(text) {

@@ -14,7 +14,7 @@
   import { streamServices, streamSummary, formatBitrate } from './streams.js';
   import { group, layers, sum, add, advance } from './traffic.js';
   import { rangeOf, integrate, change, coverage, MIN_COVERAGE } from './history.js';
-  import { formatMbit, formatRate, formatPart, formatPercent, formatSize, sizeParts, plural } from './format.js';
+  import { formatMbit, formatRate, rateParts, formatPart, formatPercent, formatSize, sizeParts, plural } from './format.js';
 
   // Network shows where the traffic goes: the host's rates and today's totals, the traffic of each
   // app (services with their linked containers, and other containers) over a range from five minutes
@@ -86,7 +86,8 @@
   const nowTx = $derived(host ? sum(host.net, 'tx') : (view?.host.tx ?? 0));
   const summary = $derived($snapshot?.traffic ?? view);
   const today = $derived({ rx: summary?.todayRx ?? 0, tx: summary?.todayTx ?? 0 });
-  const budget = $derived(summary?.budget ?? null);
+  // A budget without a limit is none: nothing can be a share of it.
+  const budget = $derived(summary?.budget?.limitBytes > 0 ? summary.budget : null);
   const sources = $derived(view ? group(view.containers) : []);
   const chart = $derived(view ? layers(sources, view.host, today) : []);
   const top = $derived(sources.find((s) => s.rx + s.tx > 0) ?? null);
@@ -158,18 +159,18 @@
     </div>
   {:else}
     <div class="kpis">
-      <Kpi label="Coming in" value={formatMbit(nowRx)} num={(nowRx * 8) / 1e6} format={(v) => formatMbit((v * 1e6) / 8)} unit="Mbit/s"
+      <Kpi label="Coming in" value={rateParts(nowRx)[0]} num={nowRx} format={(v) => rateParts(v)[0]} unit={rateParts(nowRx)[1]}
         sub={`Peak today ${formatRate(Math.max(summary?.peakRx ?? 0, nowRx))}`}
         spark={mbitLine(day?.host.series?.rx)} sparkColor="var(--down)"
         change={day?.previous && dayKnown ? { ratio: change(dayIn, day.previous.in), against: 'the 24 hours before' } : null} />
-      <Kpi label="Going out" value={formatMbit(nowTx)} num={(nowTx * 8) / 1e6} format={(v) => formatMbit((v * 1e6) / 8)} unit="Mbit/s"
+      <Kpi label="Going out" value={rateParts(nowTx)[0]} num={nowTx} format={(v) => rateParts(v)[0]} unit={rateParts(nowTx)[1]}
         sub={`Peak today ${formatRate(Math.max(summary?.peakTx ?? 0, nowTx))}`}
         spark={mbitLine(day?.host.series?.tx)} sparkColor="var(--up)"
         change={day?.previous && dayKnown ? { ratio: change(dayOut, day.previous.out), against: 'the 24 hours before' } : null} />
       <Kpi label="Today" value={sizeParts(todayTotal)[0]} unit={sizeParts(todayTotal)[1]}
         sub={`${formatSize(today.rx)} in · ${formatSize(today.tx)} out`}
         spark={hasDaily ? daily.slice(-14).map((d) => (d.in || 0) + (d.out || 0)) : null} />
-      <Kpi label="Busiest app now" value={top ? formatMbit(top.rx + top.tx) : '—'} unit={top ? 'Mbit/s' : ''}
+      <Kpi label="Busiest app now" value={top ? rateParts(top.rx + top.tx)[0] : '—'} unit={top ? rateParts(top.rx + top.tx)[1] : ''}
         sub={top ? top.label : 'No app moves traffic now'} />
     </div>
 

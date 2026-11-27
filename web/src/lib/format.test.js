@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  formatMbit, formatRate, formatDisk, formatSize, formatPart, formatPercent, formatPct, formatChange, formatCount, formatSpan,
-  formatUptime, clockSeconds, formatLeft, formatAge, formatUntil, plural, prettyRelease,
+  formatMbit, formatRate, rateParts, formatDisk, formatSize, formatPart, formatPercent, formatPct, formatChange, formatCount, formatSpan,
+  formatUptime, clockSeconds, formatLeft, formatAge, formatUntil, plural, prettyRelease, CONTROL,
 } from './format.js';
 
 test('rates are always Mbit/s', () => {
@@ -16,11 +16,20 @@ test('rates are always Mbit/s', () => {
   // The step from one decimal to none is at 9.95 Mbit/s, so "10.0" never shows.
   assert.equal(formatMbit(9.94e6 / 8), '9.9');
   assert.equal(formatMbit(9.95e6 / 8), '10');
+  // A fast line reads in Gbit/s; where the unit stands apart, the thousands are grouped.
+  assert.equal(formatRate(324001e6 / 8), '324 Gbit/s');
+  assert.equal(formatRate(9080e6 / 8), '9.1 Gbit/s');
+  assert.equal(formatRate(999.4e6 / 8), '999 Mbit/s');
+  assert.equal(formatRate(999.5e6 / 8), '1.0 Gbit/s');
+  assert.deepEqual(rateParts(488000e6 / 8), ['488', 'Gbit/s']);
+  assert.deepEqual(rateParts(-1), ['—', '']);
+  assert.equal(formatMbit(9080e6 / 8), '9,080');
 });
 
 test('disk reads and writes are the one exception: MB/s', () => {
   assert.equal(formatDisk(4.8e6), '4.8');
   assert.equal(formatDisk(120e6), '120');
+  assert.equal(formatDisk(12500e6), '12,500');
   assert.equal(formatDisk(0), '0');
   assert.equal(formatDisk(1000), '<0.1');
   assert.equal(formatDisk(-1), '—');
@@ -38,6 +47,11 @@ test('sizes are GB and TB', () => {
   // GB turn into TB where they would read "1000 GB".
   assert.equal(formatSize(999.4e9), '999 GB');
   assert.equal(formatSize(999.5e9), '1.0 TB');
+  // And TB into PB: no four-digit sizes.
+  assert.equal(formatSize(7102e12), '7.1 PB');
+  assert.equal(formatSize(999.4e12), '999 TB');
+  assert.equal(formatSize(4e18), '4,000 PB');
+  assert.equal(formatPart(1.2e15, 40e15), '1.2 of 40 PB');
   assert.equal(formatSize(NaN), '—');
   assert.equal(formatPart(201e9, 250e9), '201 of 250 GB');
   assert.equal(formatPart(464e9, 1400e9), '464 of 1,400 GB');
@@ -119,6 +133,11 @@ test('ages read in one unit', () => {
   assert.equal(formatAge('', now), '');
   assert.equal(formatUntil(new Date(now + 141000).toISOString(), now), 'in 2 min 21 s');
   assert.equal(formatUntil(new Date(now - 1000).toISOString(), now), 'ended');
+});
+
+test('a name holds no control characters', () => {
+  for (const bad of ['a\u0000b', 'a\nb', 'tab\tbed', 'del\u007f', 'ne\u0085l']) assert.ok(CONTROL.test(bad), JSON.stringify(bad));
+  for (const good of ['Series', 'Films · 4K', 'Küche', 'a b']) assert.ok(!CONTROL.test(good), good);
 });
 
 test('plural counts', () => {

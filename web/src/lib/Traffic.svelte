@@ -10,7 +10,7 @@
   import { serviceList } from './live.js';
   import { RANGES, rangeOf } from './history.js';
   import { recall, remember } from './prefs.js';
-  import { formatMbit, formatRate } from './format.js';
+  import { formatMbit, formatRate, rateParts } from './format.js';
   import { advance, byPurpose, sum } from './traffic.js';
 
   // Traffic is the Overview's chart: what the server sends and receives over a range from five minutes to a year,
@@ -65,15 +65,16 @@
   const kinds = $derived(new Map($serviceList.map((s) => [s.name, s.kinds ?? []])));
   const series = $derived(view ? byPurpose(view, kinds) : []);
   const shown = $derived(rangeOf(view?.range ?? range));
-  const mbit = (v) => (v * 8) / 1e6;
-  const rate = (v) => formatMbit((v * 1e6) / 8);
-  const axis = (v) => (v < 10 && v !== Math.round(v) ? v.toFixed(1) : String(Math.round(v)));
+  const axis = (v) => (v < 10 && v !== Math.round(v) ? v.toFixed(1) : Math.round(v).toLocaleString('en-US'));
 </script>
 
 <Fold id="traffic" title="Traffic">
   {#snippet summary()}
     {#if host}
-      <span class="num"><b><Num value={mbit(rx)} format={rate} /></b> Mbit/s in · <b><Num value={mbit(tx)} format={rate} /></b> out</span>
+      <span class="num">
+        <b><Num value={rx} format={(v) => rateParts(v)[0]} /></b> {rateParts(rx)[1]} in ·
+        <b><Num value={tx} format={(v) => rateParts(v)[0]} /></b>{rateParts(tx)[1] === rateParts(rx)[1] ? '' : ` ${rateParts(tx)[1]}`} out
+      </span>
     {/if}
   {/snippet}
   {#snippet controls()}
