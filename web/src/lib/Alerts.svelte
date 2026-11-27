@@ -4,8 +4,8 @@
   import AlertChannelForm from './AlertChannelForm.svelte';
   import Icon from './icons/Icon.svelte';
   import Skeleton from './Skeleton.svelte';
-  import { api } from './api.js';
-  import { TYPES, RULES, RULE_NAMES, firing, severityTone, scrollToAlerts } from './alerts.js';
+  import { api, OFFLINE } from './api.js';
+  import { TYPES, RULES, RULE_NAMES, firing, severityTone, scrollToAlerts, rulesProblem } from './alerts.js';
   import { now } from './ticker.js';
   import { formatAge, formatTime } from './format.js';
   import { arrive, leave, reveal, conceal, smoothHeight, FLIP } from './motion.js';
@@ -91,11 +91,15 @@
 
   async function saveRules(event) {
     event.preventDefault();
-    savingRules = true;
-    rulesError = '';
     rulesSaved = false;
+    rulesError = rulesProblem(draft);
+    if (rulesError) return;
+    savingRules = true;
     try {
-      rules = await api('PUT', '/api/alerts/rules', $state.snapshot(draft));
+      // The times of quiet hours that are off are not shown to be changed: a broken pair is sent as it was.
+      const body = $state.snapshot(draft);
+      if (!body.quiet.on) body.quiet = { ...rules.quiet, on: false };
+      rules = await api('PUT', '/api/alerts/rules', body);
       draft = structuredClone($state.snapshot(rules));
       rulesSaved = true;
     } catch (err) {
@@ -241,7 +245,8 @@
       {/if}
     </div>
 
-    <form class="col rules" onsubmit={saveRules}>
+    <!-- An error is about what was sent: once the fields change, it no longer holds. -->
+    <form class="col rules" onsubmit={saveRules} oninput={() => { rulesError = ''; }}>
       <h3>Rules</h3>
       {#if draft === null}
         {#if rulesError}<p class="error" role="alert">{rulesError}</p>{:else}<Skeleton count={3} label="Loading the rules…" />{/if}

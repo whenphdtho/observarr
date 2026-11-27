@@ -12,8 +12,8 @@
   import { synced, attention } from './live.js';
   import { matches } from './status.js';
   import { now } from './ticker.js';
-  import { api } from './api.js';
-  import { issues, actions, downloads, playing, mutedText } from './overview.js';
+  import { api, OFFLINE } from './api.js';
+  import { issues, actions, downloads, playing, mutedText, menuPlace } from './overview.js';
 
   // Overview is the landing view. Its title, in the shell, states the situation; here follow what needs attention
   // (each row opens in place to say what it means and where to go), the traffic over time, and what plays and
@@ -86,17 +86,21 @@
     if (menuEl?.matches(':popover-open')) menuEl.hidePopover();
   }
 
-  function openMenu(event, row, item = null) {
+  async function openMenu(event, row, item = null) {
+    const from = event.currentTarget;
+    if (menuEl.matches(':popover-open')) menuEl.hidePopover();
     menuRow = row;
     menuItem = item;
-    menuFrom = event.currentTarget;
-    const box = menuFrom.getBoundingClientRect();
-    menuEl.style.top = `${box.bottom + 6}px`;
-    menuEl.style.left = `${Math.max(8, Math.min(box.left, window.innerWidth - 200))}px`;
+    menuFrom = from;
     // The button that opens it has the keyboard first, so that is where it returns when the menu shuts.
-    menuFrom.focus();
+    from.focus();
+    // Its buttons are drawn for this row and item before it is measured, placed and given the keyboard.
+    await tick();
     menuEl.showPopover();
-    menuEl.querySelector('button').focus();
+    const spot = menuPlace(from.getBoundingClientRect(), menuEl.getBoundingClientRect(), window.innerWidth, window.innerHeight);
+    menuEl.style.left = `${spot.left}px`;
+    menuEl.style.top = `${spot.top}px`;
+    menuEl.querySelector('button')?.focus();
   }
 
   function menuToggled(event) {
@@ -156,7 +160,8 @@
   {#if more > 0}<a class="go more" href="#/apps">{more} more in Apps<Icon name="chevron-right" size={14} /></a>{/if}
 {/snippet}
 
-<svelte:window onscrollcapture={onScroll} />
+<!-- What could not be done for want of the server is forgotten once it is back. -->
+<svelte:window onscrollcapture={onScroll} ononline={() => { if (failed?.text === OFFLINE) failed = null; }} />
 
 <div class="overview">
   {#if !$synced || $attention === null}

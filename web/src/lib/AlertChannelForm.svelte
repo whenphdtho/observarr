@@ -2,6 +2,7 @@
   import { untrack } from 'svelte';
   import { api } from './api.js';
   import { TYPES, RULES } from './alerts.js';
+  import { CONTROL } from './format.js';
 
   // AlertChannelForm adds a channel (channel null) or edits one, in place in the Alerts section. A saved secret is
   // never shown: its field stays empty and keeps it, typing replaces it, and an optional one can be removed. A
@@ -33,7 +34,7 @@
     return f.check?.(v) ?? '';
   }
   const problems = $derived(Object.fromEntries(fields.map((f) => [f.key, problem(f)])));
-  const nameProblem = $derived(name.trim() ? '' : 'Required.');
+  const nameProblem = $derived(!name.trim() ? 'Required.' : CONTROL.test(name) ? 'No line breaks or other control characters.' : '');
   const valid = $derived(!nameProblem && Object.values(problems).every((p) => !p));
   const shown = (key) => submitted || touched[key];
 

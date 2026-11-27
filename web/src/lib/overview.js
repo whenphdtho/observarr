@@ -127,6 +127,20 @@ export function issues(items, nowMs) {
   return { rows, notes };
 }
 
+// menuPlace says where a small menu goes for the button that opened it, as { left, top } in the window: under
+// the button, flipped above it when there is no room below, and always wholly inside the window. button and menu
+// are their boxes ({ left, top, bottom, width, height }), width and height the window's.
+export function menuPlace(button, menu, width, height) {
+  const edge = 8;
+  const gap = 6;
+  const below = button.bottom + gap;
+  const top = below + menu.height <= height - edge ? below : button.top - gap - menu.height;
+  return {
+    left: Math.round(Math.max(edge, Math.min(button.left, width - menu.width - edge))),
+    top: Math.round(Math.max(edge, Math.min(top, height - menu.height - edge))),
+  };
+}
+
 // mutedText says until when an item is muted: "Muted until 14:30".
 export function mutedText(untilMs) {
   return `Muted until ${clock(untilMs)}`;

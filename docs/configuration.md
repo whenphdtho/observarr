@@ -158,13 +158,18 @@ the proxy runs on the host.
 Live updates use Server-Sent Events, which must reach the browser unbuffered. Caddy's `reverse_proxy` already
 disables buffering; with nginx, add `proxy_buffering off;` to the matching `location` block.
 
+One sign-in gets live updates in up to five tabs at once (a browser has only six connections to one server over
+HTTP/1.1, and each live tab holds one). A further tab says so and refreshes every 30 seconds instead, until
+another one is closed.
+
 ## Security
 
 - Creating the admin account needs a one-time setup token from the server log, so only someone with access to
   the host can do it. Login needs HTTPS unless you explicitly allow plain HTTP, and repeated failed logins lock
   out further attempts.
 - Saved API keys are encrypted with `secret.key`. A key found in a config folder stays on the server unless you
-  choose to use it.
+  choose to use it. It is then only sent to the port its config file names, at a container or service name or a
+  loopback or private address, never to a public one.
 - Nothing Observarr reads from can be used to change your system: every host mount is read-only, the socket
   proxy answers only GET requests, and the container needs no capabilities or privilege escalation.
 - Read-only still means *visible*: the host `/proc` mount and the socket proxy expose more than Observarr

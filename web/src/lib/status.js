@@ -101,7 +101,10 @@ export function cardSummary(svc, attention) {
     if (n > 0) parts.push(`${n} downloading`);
     if (waiting > 0) parts.push(`${waiting} queued`);
     if (streams?.total > 0) parts.push(streamText(streams));
-    if (warns.length > 0) parts.push(plural(warns.length, 'warning'));
+    // An error the app reports is a problem, as the Overview and the apps column call it.
+    const errors = warns.filter((w) => w.level === 'error').length;
+    if (errors > 0) parts.push(plural(errors, 'problem'));
+    if (warns.length > errors) parts.push(plural(warns.length - errors, 'warning'));
     if (parts.length) summary = { text: parts.join(' · '), tone: worst(svc.id, attention).tone };
     else summary = { text: hasQueue ? 'No downloads' : hasStreams ? 'Nothing playing' : 'No warnings', tone: '' };
   }
@@ -110,7 +113,7 @@ export function cardSummary(svc, attention) {
   if (health && !svc.up) lead = { kind: 'note', text: health.error || 'It does not answer', tone: 'fail' };
   else if (items.length > 0) lead = { kind: 'item', item: items[0] };
   else if (streams?.streams.length > 0) lead = { kind: 'item', item: streams.streams[0] };
-  else if (warns.length > 0) lead = { kind: 'warning', warning: warns[0] };
+  else if (warns.length > 0) lead = { kind: 'warning', warning: warns.find((w) => w.level === 'error') ?? warns[0] };
   else if (hasQueue && queue?.error) lead = { kind: 'note', text: queue.error, tone: 'fail' };
   else if (hasQueue) lead = { kind: 'note', text: 'Queue is empty', tone: '' };
   else if (hasStreams && svc.readings?.streams?.error) lead = { kind: 'note', text: svc.readings.streams.error, tone: 'fail' };

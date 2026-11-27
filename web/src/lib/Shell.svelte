@@ -14,7 +14,7 @@
   import ThemeSwitch from './ThemeSwitch.svelte';
   import AlertBell from './AlertBell.svelte';
   import { arrive } from './motion.js';
-  import { live, serviceList, reconnecting, offline, lastEvent, synced, attention } from './live.js';
+  import { live, serviceList, reconnecting, offline, crowded, lastEvent, synced, attention } from './live.js';
   import { loadAdapters, loadSystem } from './data.js';
   import { matches } from './status.js';
   import { situation } from './overview.js';
@@ -55,7 +55,7 @@
   const current = $derived(VIEWS.find((v) => v.id === view));
   const services = $derived($serviceList.filter((s) => matches(query, s.name, s.type, s.url)));
   const age = $derived($lastEvent ? ($now - $lastEvent < 10000 ? 'just now' : formatAge($lastEvent, $now)) : '');
-  const down = $derived($offline || $reconnecting);
+  const down = $derived($offline || $reconnecting || $crowded);
 
   // The state of the whole, from the list the alerts count from: the Overview's title says it, the tab and the
   // views list carry its count.
@@ -217,9 +217,9 @@
   <p class="live" class:stale={down} role="status">
     <!-- The dot beats once per update; it is rebuilt each time, so there is no running loop. -->
     {#key $lastEvent}<i aria-hidden="true" class:beat={!down && $lastEvent > 0}></i>{/key}
-    <span class="word">{$offline ? 'Offline' : $reconnecting ? 'Reconnecting…' : 'Live'}</span>
+    <span class="word">{$offline ? 'Offline' : $crowded ? 'Not live' : $reconnecting ? 'Reconnecting…' : 'Live'}</span>
     <!-- While the stream is down, what is shown is as old as its last update: say so. -->
-    {#if age}<span class="ago" aria-hidden="true">· {#if down}updated {/if}{age}</span>{/if}
+    {#if age}<span class="ago" aria-hidden="true">· {down ? 'updated ' : ''}{age}</span>{/if}
   </p>
 {/snippet}
 
@@ -303,6 +303,13 @@
         {@render status()}
         {#if !phone.current}<AlertBell />{/if}
       </header>
+
+      {#if $crowded && !$offline}
+        <p class="banner crowd" role="status">
+          <Icon name="info" />
+          <span>Too many open tabs: close one to get live updates here. Until then this tab refreshes every 30 seconds.</span>
+        </p>
+      {/if}
 
       {#key addingApps ? 'add' : view}
       <div class="view" in:arrive>
@@ -393,6 +400,7 @@
   .acct .ibtn { border-color: transparent; }
 
   .top { display: flex; align-items: center; gap: 20px; margin-bottom: 20px; min-width: 0; }
+  .crowd { margin-bottom: 20px; }
   h1 { flex: 1; min-width: 0; }
   .live { display: inline-flex; align-items: center; gap: 5px; flex: none; font-size: var(--t-small); color: var(--muted); white-space: nowrap; }
   .live i { position: relative; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-right: 5px; }
@@ -450,8 +458,10 @@
     }
     .vbtn {
       flex: 1 1 0; min-width: 0; min-height: 48px; flex-direction: column; justify-content: center; gap: 3px;
-      padding: 7px 2px; margin: 0; font-size: var(--t-micro);
+      padding: 7px 0; margin: 0; font-size: 11px; letter-spacing: -0.01em;
     }
+    /* The current view's label is not set bolder here: six labels share the width, and the longest must fit. */
+    .vbtn[aria-current='page'] { font-weight: 500; }
     .vlabel { flex: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
     .vcount { display: none; }
     .top { margin: 0 0 12px; }

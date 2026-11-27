@@ -1,4 +1,8 @@
 // Thin fetch wrapper: JSON in and out, CSRF token on every change, errors carry the server's message.
+
+// OFFLINE is the message of a request that never reached the server. A view that still shows it when the browser
+// is back online clears it: its cause is gone.
+export const OFFLINE = 'Cannot reach the server';
 let csrfToken = '';
 let onUnauthorized = null;
 
@@ -44,7 +48,7 @@ async function send(method, path, body) {
   try {
     return await fetch(path, { method, headers, credentials: 'same-origin', body: payload });
   } catch (err) {
-    if (err instanceof TypeError) throw new Error('Cannot reach the server', { cause: err });
+    if (err instanceof TypeError) throw new Error(OFFLINE, { cause: err });
     throw err;
   }
 }

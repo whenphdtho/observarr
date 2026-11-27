@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { situation, tally, since, issues, mutedText, actions, downloads, playing } from './overview.js';
+import { situation, tally, since, issues, mutedText, menuPlace, actions, downloads, playing } from './overview.js';
 import { serviceLine, cardSummary } from './status.js';
 import { bucket, shownOff } from './chart.js';
 import { byPurpose } from './traffic.js';
@@ -102,6 +102,20 @@ test('what is muted stays listed, last, and counts for nothing', () => {
   assert.deepEqual(situation(list.slice(3, 4), 1, true), { title: 'Nothing new needs you · 1 muted', count: 0, tone: '' });
 });
 
+test('a menu opens under its button, above it when there is no room, and never outside the window', () => {
+  const menu = { width: 184, height: 120 };
+  const at = (left, top) => ({ left, top, bottom: top + 34, width: 40, height: 34 });
+  assert.deepEqual(menuPlace(at(600, 200), menu, 1440, 900), { left: 600, top: 240 });
+  // At the bottom edge it flips above the button.
+  assert.deepEqual(menuPlace(at(600, 850), menu, 1440, 900), { left: 600, top: 724 });
+  // At the right edge it moves in.
+  assert.deepEqual(menuPlace(at(370, 200), menu, 390, 640), { left: 198, top: 240 });
+  // A phone with the button at the very bottom: above it, and inside.
+  assert.deepEqual(menuPlace(at(300, 600), menu, 390, 640), { left: 198, top: 474 });
+  // No room either way: as far up as fits, wholly in view.
+  assert.deepEqual(menuPlace(at(10, 60), { width: 184, height: 200 }, 390, 220), { left: 10, top: 8 });
+});
+
 test('since is coarse', () => {
   const now = 1e12;
   assert.equal(since(new Date(now - 40e3).toISOString(), now), '40 s');
@@ -154,6 +168,17 @@ test('a paused queue leads with Paused and is no warning', () => {
   assert.deepEqual(d.rows.map((r) => [r.note, r.tone, r.idle]), [['Paused', '', true], ['Paused', '', true]]);
   assert.deepEqual(cardSummary(svc, []).summary, { text: 'Paused · 2 queued', tone: '' });
   assert.deepEqual(serviceLine(svc, []), { text: 'Paused', tone: 'idle' });
+});
+
+test('a card counts an error as a problem and leads with it', () => {
+  const svc = { id: 2, up: true, kinds: ['health'], readings: { health: { data: { warnings: [
+    { level: 'warning', message: '1 cached file could not be uploaded' },
+    { level: 'error', message: 'the cache disk is out of space' },
+    { level: 'info', message: 'an update is available' },
+  ] } } } };
+  const card = cardSummary(svc, [item('critical', { service: 2 })]);
+  assert.deepEqual(card.summary, { text: '1 problem · 1 warning', tone: 'fail' });
+  assert.equal(card.lead.warning.message, 'the cache disk is out of space');
 });
 
 test('the line under an app says one state in one word', () => {

@@ -77,6 +77,26 @@ export const RULES = [
 
 export const RULE_NAMES = Object.fromEntries(RULES.map((r) => [r.id, r.label]));
 
+// rulesProblem says what is wrong with the rules as the form holds them, in the form's own words, or '' when
+// they can be saved. An emptied number field holds null (or ''), which is as wrong as a number out of range.
+export function rulesProblem(d) {
+  const whole = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
+  for (const r of RULES) {
+    const t = r.threshold;
+    if (t && d.enabled?.[r.id] && !whole(d[t.key], t.min, t.max)) {
+      return `${r.label}: a whole number from ${t.min} to ${t.max}${t.unit === '%' ? '%' : ` ${t.unit}`}.`;
+    }
+  }
+  if (!whole(d.perHour, 1, 600)) return 'Messages per channel and hour: a whole number from 1 to 600.';
+  const time = /^([01]\d|2[0-3]):[0-5]\d$/;
+  if (d.quiet?.on) {
+    if (!time.test(d.quiet.from ?? '') || !time.test(d.quiet.to ?? '')) return 'Quiet hours: set both times.';
+    if (d.quiet.from === d.quiet.to) return 'Quiet hours: the two times must differ.';
+  }
+  if (d.link && !/^https?:\/\/[^\s/?#@]+/i.test(d.link)) return "Observarr's address: an http:// or https:// address.";
+  return '';
+}
+
 // severityTone maps an alert's severity to the shared status classes.
 export function severityTone(severity) {
   return severity === 'critical' ? 'fail' : severity === 'warning' ? 'warn' : 'ok';

@@ -295,6 +295,16 @@
         {#if report.dismissed > 0}
           <p class="muted small">{step === 'done' ? 'Restored' : 'Also restores'} {plural(report.dismissed, 'dismissed find')}.</p>
         {/if}
+        {#if report.rules}
+          <!-- Adding alongside keeps the rules set here; replacing, or a server with none set, takes the file's. -->
+          <p class="muted small">
+            {#if report.rules === 'kept' && mode === 'add'}
+              The alert rules set on this server {step === 'done' ? 'were kept' : 'are kept'} as they are.
+            {:else}
+              {step === 'done' ? 'Restored' : 'Also restores'} the alert rules.
+            {/if}
+          </p>
+        {/if}
 
         {#if step === 'preview'}
           <fieldset>

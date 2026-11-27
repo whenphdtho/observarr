@@ -1,6 +1,7 @@
 <script>
   import { untrack } from 'svelte';
-  import { api } from './api.js';
+  import { api, OFFLINE } from './api.js';
+  import { CONTROL } from './format.js';
   import { originOf, selfHostOf } from './urls.js';
 
   // ServiceForm adds a service by hand (mode "add") or changes one (mode "edit", with `service`).
@@ -111,6 +112,10 @@
   async function submit(event) {
     event.preventDefault();
     if (!canSubmit) return;
+    if (CONTROL.test(name)) {
+      saveError = 'Name: no line breaks or other control characters.';
+      return;
+    }
     saving = true;
     saveError = '';
     try {
@@ -133,7 +138,13 @@
   }
 </script>
 
-<form class="service-form" onsubmit={submit}>
+<svelte:window ononline={() => {
+  if (saveError === OFFLINE) saveError = '';
+  if (testState === 'error' && testError === OFFLINE) testState = 'idle';
+}} />
+
+<!-- A refusal is about what was sent: once a field changes, it no longer holds. -->
+<form class="service-form" onsubmit={submit} oninput={() => { saveError = ''; }}>
   <div class="fields">
     <label>
       App
