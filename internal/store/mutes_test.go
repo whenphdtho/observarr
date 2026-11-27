@@ -16,14 +16,14 @@ func TestAlertMutesAreKeptBoundedAndPruned(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The same key again replaces its mute.
-	if err := s.SetAlertMute(ctx, AlertMute{Key: "down/1", Until: now.Add(8 * time.Hour), CreatedBy: "sam"}); err != nil {
+	if err := s.SetAlertMute(ctx, AlertMute{Key: "down/1", Until: now.Add(8 * time.Hour), Severity: "critical", CreatedBy: "sam"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SetAlertMute(ctx, AlertMute{Key: "disk//media", Until: now.Add(time.Minute), CreatedBy: "alex"}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := s.AlertMutes(ctx)
-	if err != nil || len(got) != 2 || got[1].Key != "down/1" || !got[1].Until.Equal(now.Add(8*time.Hour)) || got[1].CreatedBy != "sam" {
+	if err != nil || len(got) != 2 || got[1].Key != "down/1" || !got[1].Until.Equal(now.Add(8*time.Hour)) || got[1].CreatedBy != "sam" || got[1].Severity != "critical" {
 		t.Fatalf("mutes = %+v, %v", got, err)
 	}
 

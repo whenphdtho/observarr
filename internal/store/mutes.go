@@ -7,10 +7,12 @@ import (
 	"time"
 )
 
-// AlertMute silences the alert of one condition, by its key, until Until.
+// AlertMute silences the alert of one condition, by its key, until Until. Severity is the condition's when it was
+// muted.
 type AlertMute struct {
 	Key       string
 	Until     time.Time
+	Severity  string
 	CreatedBy string
 }
 
@@ -22,7 +24,7 @@ var ErrTooMany = errors.New("too many")
 
 // AlertMutes returns every mute, ended ones included (PruneAlertMutes removes those).
 func (s *Store) AlertMutes(ctx context.Context) ([]AlertMute, error) {
-	rows, err := s.db.QueryContext(ctx, "SELECT key, until, created_by FROM alert_mutes ORDER BY key")
+	rows, err := s.db.QueryContext(ctx, "SELECT key, until, severity, created_by FROM alert_mutes ORDER BY key")
 	if err != nil {
 		return nil, err
 	}
@@ -31,7 +33,7 @@ func (s *Store) AlertMutes(ctx context.Context) ([]AlertMute, error) {
 	for rows.Next() {
 		var m AlertMute
 		var until int64
-		if err := rows.Scan(&m.Key, &until, &m.CreatedBy); err != nil {
+		if err := rows.Scan(&m.Key, &until, &m.Severity, &m.CreatedBy); err != nil {
 			return nil, err
 		}
 		m.Until = time.Unix(until, 0)
@@ -50,9 +52,9 @@ func (s *Store) SetAlertMute(ctx context.Context, m AlertMute) error {
 		if n >= MaxAlertMutes {
 			return ErrTooMany
 		}
-		_, err := tx.ExecContext(ctx, `INSERT INTO alert_mutes (key, until, created_by) VALUES (?, ?, ?)
-			ON CONFLICT (key) DO UPDATE SET until = excluded.until, created_by = excluded.created_by`,
-			m.Key, m.Until.Unix(), m.CreatedBy)
+		_, err := tx.ExecContext(ctx, `INSERT INTO alert_mutes (key, until, severity, created_by) VALUES (?, ?, ?, ?)
+			ON CONFLICT (key) DO UPDATE SET until = excluded.until, severity = excluded.severity,
+			created_by = excluded.created_by`, m.Key, m.Until.Unix(), m.Severity, m.CreatedBy)
 		return err
 	})
 }

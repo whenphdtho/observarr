@@ -169,6 +169,67 @@ func TestWorseSeverityBreaksTheMute(t *testing.T) {
 	}
 }
 
+// The severity a mute was set at is saved with it: what counts as worse is the same after a restart.
+func TestWorseSeverityBreaksTheMuteAfterARestart(t *testing.T) {
+	e := newEnv(t)
+	var free uint64 = 60
+	e.sys = func() system.Snapshot {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		return system.Snapshot{At: e.now, Notices: []string{system.NoticeDocker},
+			Host: &system.HostView{Disks: []collect.Disk{{Path: "/media", Total: 1000, Free: free, Avail: free}}}}
+	}
+	e.start(DefaultRules())
+	e.eval(0)
+	e.eval(6 * time.Minute)
+	if _, err := e.alert.Mute(context.Background(), "disk//media", 24*time.Hour, "alex"); err != nil {
+		t.Fatal(err)
+	}
+	if m, _ := e.st.AlertMutes(context.Background()); len(m) != 1 || m[0].Severity != "warning" {
+		t.Fatalf("saved mute = %+v", m)
+	}
+	e.stop()
+
+	// It is critical by the time Observarr is back: the very first reading breaks the mute.
+	e.mu.Lock()
+	free = 10
+	e.mu.Unlock()
+	e.advance(time.Minute)
+	e.start(DefaultRules())
+	e.eval(0)
+	if it := e.item("disk//media"); !it.MutedUntil.IsZero() || e.savedMutes() != 0 {
+		t.Fatalf("still muted after getting worse across a restart: %+v", it)
+	}
+	if got := e.events(); len(got) != 2 || got[0] != "firing critical Disk /media nearly full" {
+		t.Fatalf("sent = %q", got)
+	}
+}
+
+// A condition whose rule is switched off sends nothing anyway: muting it is accepted, shows, and simply ends.
+func TestMutingAConditionWhoseRuleIsOff(t *testing.T) {
+	e := newEnv(t)
+	r := quick()
+	r.Enabled[RuleDown] = false
+	e.start(r)
+	e.down(1)
+	e.eval(0)
+	until, err := e.alert.Mute(context.Background(), "down/1", time.Hour, "alex")
+	if err != nil {
+		t.Fatalf("muting a condition whose rule is off: %v", err)
+	}
+	if it := e.item("down/1"); !it.MutedUntil.Equal(until) || it.Firing {
+		t.Fatalf("item = %+v", it)
+	}
+	e.eval(30 * time.Minute)
+	if e.savedMutes() != 1 {
+		t.Fatal("the mute went before its time")
+	}
+	e.eval(31 * time.Minute)
+	if it := e.item("down/1"); !it.MutedUntil.IsZero() || e.savedMutes() != 0 || len(e.events()) != 0 {
+		t.Fatalf("after its time: %+v, %d saved, sent %q", it, e.savedMutes(), e.events())
+	}
+}
+
 func TestMuteSurvivesARestart(t *testing.T) {
 	e := newEnv(t)
 	e.start(quick())
@@ -179,7 +240,7 @@ func TestMuteSurvivesARestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := e.st.SetAlertMute(context.Background(), store.AlertMute{Key: "down/9", Until: e.clock().Add(-time.Minute), CreatedBy: "alex"}); err != nil {
+	if err := e.st.SetAlertMute(context.Background(), store.AlertMute{Key: "down/9", Until: e.clock().Add(-time.Minute), Severity: "critical", CreatedBy: "alex"}); err != nil {
 		t.Fatal(err)
 	}
 	e.stop()

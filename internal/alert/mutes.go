@@ -22,10 +22,10 @@ var ErrNotListed = errors.New("alert: nothing that needs attention has this key"
 // mute is one mute as the Service follows it.
 type mute struct {
 	until time.Time
-	// seen tells whether the condition was evaluated since the mute was set or loaded; sev and scope are its
-	// severity and scope then. A mute loaded at a start is not seen yet: its condition is read again first.
+	sev   Severity // the condition's severity when it was muted, saved with it: a worse one breaks the mute
+	// seen tells whether the condition was evaluated since the mute was set or loaded, and scope is its scope
+	// then. A mute loaded at a start is not seen yet: its condition is read again first.
 	seen  bool
-	sev   Severity
 	scope string
 }
 
@@ -38,14 +38,15 @@ func (s *Service) loadMutes(ctx context.Context) error {
 	now := s.cfg.Now()
 	for _, r := range rows {
 		if r.Until.After(now) {
-			s.mutes[r.Key] = &mute{until: r.Until}
+			s.mutes[r.Key] = &mute{until: r.Until, sev: Severity(r.Severity)}
 		}
 	}
 	return nil
 }
 
 // Mute silences the condition with key for span, in the name of the user by, and returns when the mute ends. The
-// key must be listed now (ErrNotListed), and at most store.MaxAlertMutes are kept (store.ErrTooMany).
+// key must be listed now (ErrNotListed), and at most store.MaxAlertMutes are kept (store.ErrTooMany). A condition
+// whose rule is switched off can be muted too: it sends nothing either way, and the mute just ends.
 func (s *Service) Mute(ctx context.Context, key string, span time.Duration, by string) (time.Time, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -55,7 +56,8 @@ func (s *Service) Mute(ctx context.Context, key string, span time.Duration, by s
 	}
 	// Whole seconds, as they are saved: the time is the same after a restart.
 	until := s.cfg.Now().Add(span).Truncate(time.Second)
-	if err := s.cfg.Store.SetAlertMute(ctx, store.AlertMute{Key: key, Until: until, CreatedBy: by}); err != nil {
+	if err := s.cfg.Store.SetAlertMute(ctx, store.AlertMute{Key: key, Until: until, Severity: string(s.conds[i].Severity),
+		CreatedBy: by}); err != nil {
 		return time.Time{}, err
 	}
 	s.mutes[key] = &mute{until: until, seen: true, sev: s.conds[i].Severity, scope: s.conds[i].Scope}
@@ -91,9 +93,9 @@ func (s *Service) settleMutes(now time.Time, conds []Condition, known map[string
 		c := byKey[key]
 		switch {
 		case !now.Before(m.until):
-		case c != nil && m.seen && rank(c.Severity) < rank(m.sev):
+		case c != nil && rank(c.Severity) < rank(m.sev):
 		case c != nil:
-			m.seen, m.sev, m.scope = true, c.Severity, c.Scope
+			m.seen, m.scope = true, c.Scope
 			continue
 		// Gone: over if what it was read from was read again without it. After a start that is not known yet;
 		// once the data has come in, a mute whose condition never showed is over too.

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"observarr/internal/alert"
 	"observarr/internal/shape"
 	"observarr/internal/state"
+	"observarr/internal/store"
 )
 
 func TestMuteAndUnmute(t *testing.T) {
@@ -63,6 +65,28 @@ func TestMuteAndUnmute(t *testing.T) {
 		if !e.hasAudit(want) {
 			t.Errorf("audit lacks %q: %v", want, e.auditRows())
 		}
+	}
+}
+
+func TestMutesAreBounded(t *testing.T) {
+	e := newServicesEnv(t, withAlerts(t))
+	const id = 99
+	e.srv.Hub.Put(state.ServiceState{ID: id, Name: "App"})
+	s := e.openEvents(timeout(t))
+	e.srv.Hub.Record(id, shape.KindHealth, shape.Reading{Error: "down for a test", At: time.Now()})
+	s.until("attention", func(data string) bool { return strings.Contains(data, `"down/99"`) })
+	for i := range store.MaxAlertMutes {
+		m := store.AlertMute{Key: "k/" + strconv.Itoa(i), Until: time.Now().Add(time.Hour), Severity: "warning", CreatedBy: "admin"}
+		if err := e.srv.Store.SetAlertMute(context.Background(), m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	code, data := e.send("POST", "/api/alerts/mutes", `{"key":"down/99","minutes":60}`)
+	if code != 409 || data["error"] != "at most 500 mutes at once: unmute some first" {
+		t.Fatalf("one mute too many = %d %v", code, data)
+	}
+	if e.hasAudit("muted alert: down/99 for 60 min") {
+		t.Fatal("a refused mute was audited")
 	}
 }
 
