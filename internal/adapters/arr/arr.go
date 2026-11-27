@@ -152,6 +152,29 @@ func levelFor(checkType string) shape.Level {
 	}
 }
 
+// checkTitles names the health checks these apps share, by the check's name as the app gives it (its "source"),
+// in a few plain words that follow the app's name. The app's own message stays the detail; a check not listed
+// here is named by its message.
+var checkTitles = map[string]string{
+	"IndexerSearchCheck":             "automatic search is off",
+	"IndexerRssCheck":                "RSS sync is off",
+	"IndexerStatusCheck":             "indexers are failing",
+	"IndexerLongTermStatusCheck":     "indexers have been failing for hours",
+	"DownloadClientCheck":            "no download client is set up",
+	"DownloadClientStatusCheck":      "the download client is failing",
+	"ImportMechanismCheck":           "completed downloads are not handled",
+	"RootFolderCheck":                "a root folder is missing",
+	"RemotePathMappingCheck":         "a remote path mapping is wrong",
+	"MountCheck":                     "a media folder is read-only",
+	"UpdateCheck":                    "an update is waiting",
+	"ProxyCheck":                     "the proxy is failing",
+	"ApplicationStatusCheck":         "apps cannot be synced",
+	"ApplicationLongTermStatusCheck": "apps have not synced for hours",
+	"NotificationStatusCheck":        "notifications are failing",
+	"ImportListStatusCheck":          "import lists are failing",
+	"SystemTimeCheck":                "the system clock is off",
+}
+
 func (a arrAdapter) probeHealth(ctx context.Context, t adapter.Target) (any, error) {
 	status, latency, err := a.fetchStatus(ctx, t)
 	if err != nil {
@@ -165,6 +188,7 @@ func (a arrAdapter) probeHealth(ctx context.Context, t adapter.Target) (any, err
 				Level:   levelFor(c.Type),
 				Message: shape.Clip(c.Message),
 				Source:  shape.Clip(c.Source),
+				Title:   checkTitles[c.Source],
 			})
 		})
 		return err

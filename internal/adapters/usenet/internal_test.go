@@ -62,11 +62,12 @@ func TestFailuresWarning(t *testing.T) {
 		add     int
 		atLeast bool
 		want    string
+		title   string
 	}{
-		{0, false, ""},
-		{1, false, "Sintel failed in the last day: Repair failed"},
-		{1, true, "1 download or more failed in the last day, most recently Sintel: Repair failed"},
-		{3, false, "3 downloads failed in the last day, most recently Sintel: Repair failed"},
+		{0, false, "", ""},
+		{1, false, "Sintel failed in the last day: Repair failed", "1 download failed"},
+		{1, true, "1 download or more failed in the last day, most recently Sintel: Repair failed", "1 download or more failed"},
+		{3, false, "3 downloads failed in the last day, most recently Sintel: Repair failed", "3 downloads failed"},
 	}
 	for _, c := range cases {
 		f := newFailures(now)
@@ -75,7 +76,7 @@ func TestFailuresWarning(t *testing.T) {
 		}
 		f.atLeast = c.atLeast
 		w, ok := f.warning()
-		if ok != (c.want != "") || w.Message != c.want {
+		if ok != (c.want != "") || w.Message != c.want || w.Title != c.title {
 			t.Errorf("%d failures (at least %v): %q, %v; want %q", c.add, c.atLeast, w.Message, ok, c.want)
 		}
 	}

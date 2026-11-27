@@ -32,7 +32,7 @@ func TestEvaluateServices(t *testing.T) {
 	health := shape.Health{Warnings: []shape.Warning{
 		{Level: shape.LevelInfo, Message: "an update is available"},
 		{Level: shape.LevelWarning, Message: "indexer unavailable", Source: "IndexerCheck"},
-		{Level: shape.LevelError, Message: "cache out of space", Source: "media:"},
+		{Level: shape.LevelError, Message: "cache out of space", Source: "media:", Title: "cache is full"},
 	}}
 	queue := shape.Queue{Items: []shape.QueueItem{
 		{Title: "Sintel", Status: "downloading"},
@@ -64,6 +64,7 @@ func TestEvaluateServices(t *testing.T) {
 	if n := len(got); n != 8 { // down, 2 warnings, 2 downloads, unmounted, cache, requests; nothing for 4
 		t.Errorf("conditions = %q (%d)", got, n)
 	}
+	var titles []string
 	for _, c := range conds {
 		if c.Service == 2 && c.Rule == RuleHealth && c.View != "#/storage" {
 			t.Errorf("a mount app's warning leads to %s", c.View)
@@ -77,6 +78,20 @@ func TestEvaluateServices(t *testing.T) {
 		}
 		if c.Key == "down/1" && c.Title != "Down is not reachable" {
 			t.Errorf("down title = %q", c.Title)
+		}
+		titles = append(titles, c.Title+" | "+c.Message)
+	}
+	// A title says what is wrong in a few words: the adapter's name for the check where it has one, else the
+	// message's first clause; the raw text stays the message.
+	for _, want := range []string{
+		"Busy: indexer unavailable | IndexerCheck: indexer unavailable",
+		"Busy: cache is full | media:: cache out of space",
+		"Busy: a download is stuck | Big Buck Bunny: no files found are eligible for import",
+		"Busy: backup: is not mounted | backup:: not mounted",
+		"Busy: cache nearly full | cache:: 95% of its limit used",
+	} {
+		if !slices.Contains(titles, want) {
+			t.Errorf("no condition reads %q in:\n%s", want, strings.Join(titles, "\n"))
 		}
 	}
 	for _, s := range []string{"1/down", "2/health", "2/queue", "2/mounts", "3/requests"} {
@@ -92,6 +107,21 @@ func TestEvaluateServices(t *testing.T) {
 	conds, _ = Evaluate(in, r)
 	if n := len(conds); n != 5 {
 		t.Errorf("with downloads and requests off: %q", keysOf(conds))
+	}
+}
+
+func TestBriefIsTheFirstClause(t *testing.T) {
+	for in, want := range map[string]string{
+		"disk space low: 0.3 GiB free for downloads":                                       "disk space low",
+		"No indexers available with Automatic Search enabled, Radarr will not ...":         "No indexers available with Automatic Search enabled",
+		"Server news.example.com uses an untrusted certificate":                            "Server news.example.com uses an untrusted certificate",
+		"a restart is needed to apply changed settings":                                    "a restart is needed to apply changed settings",
+		"one two three four five six seven eight nine ten eleven twelve thirteen fourteen": "one two three four five six seven eight nine ten eleven…",
+		"": "",
+	} {
+		if got := brief(in); got != want {
+			t.Errorf("brief(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
 

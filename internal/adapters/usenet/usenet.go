@@ -47,7 +47,7 @@ func diskWarning(free int64) (shape.Warning, bool) {
 	if free < 0 || free >= lowDisk {
 		return shape.Warning{}, false
 	}
-	return shape.Warning{Level: shape.LevelWarning,
+	return shape.Warning{Level: shape.LevelWarning, Title: "disk space is low",
 		Message: fmt.Sprintf("disk space low: %.1f GiB free for downloads", float64(free)/(1<<30))}, true
 }
 
@@ -81,6 +81,7 @@ func (f failures) warning() (shape.Warning, bool) {
 		return shape.Warning{}, false
 	}
 	var msg string
+	title := "1 download failed"
 	if f.n == 1 && !f.atLeast {
 		msg = cmp.Or(f.name, "1 download") + " failed in the last day"
 	} else {
@@ -91,6 +92,7 @@ func (f failures) warning() (shape.Warning, bool) {
 		if f.atLeast {
 			msg += " or more"
 		}
+		title = msg + " failed"
 		msg += " failed in the last day"
 		if f.name != "" {
 			msg += ", most recently " + f.name
@@ -99,7 +101,7 @@ func (f failures) warning() (shape.Warning, bool) {
 	if f.reason != "" {
 		msg += ": " + f.reason
 	}
-	return shape.Warning{Level: shape.LevelWarning, Message: shape.Clip(msg)}, true
+	return shape.Warning{Level: shape.LevelWarning, Message: shape.Clip(msg), Title: title}, true
 }
 
 // firstLine is s up to its first line break, trimmed: an app's message without a stack trace below it.

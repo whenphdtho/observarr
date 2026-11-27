@@ -138,7 +138,7 @@ func (e *evaluation) service(svc *state.ServiceState) {
 			// still the same problem, sent once.
 			e.add(Condition{Key: "health/" + strconv.FormatInt(id, 10) + "/" + digest(w.Source) + "/" + string(w.Level),
 				Rule: RuleHealth, Severity: sev, Scope: scope(id, "health"), Service: id, Name: svc.Name,
-				Title: svc.Name + " reports a problem", Message: msg, View: view})
+				Title: svc.Name + ": " + cmp.Or(w.Title, brief(w.Message)), Message: msg, View: view})
 		}
 	}
 
@@ -190,27 +190,28 @@ func (e *evaluation) mount(svc *state.ServiceState, m shape.Mount, warned []stri
 	if slices.Contains(warned, strings.TrimSuffix(m.Remote, ":")) {
 		return
 	}
-	var problem string
+	var problem, title string
 	switch {
 	case m.State == shape.MountUnmounted:
-		problem = "not mounted"
+		problem, title = "not mounted", m.Remote+" is not mounted"
 	case m.OutOfSpace:
-		problem = "cache out of space"
+		problem, title = "cache out of space", "cache is full"
 	case m.ErroredFiles > 0:
+		title = plural(int(m.ErroredFiles), "file", "files") + " not uploaded"
 		problem = plural(int(m.ErroredFiles), "file", "files") + " failed to upload"
 	}
 	key := strconv.FormatInt(svc.ID, 10) + "/" + digest(m.Remote)
 	if problem != "" {
 		e.add(Condition{Key: "mount/" + key, Rule: RuleStorage, Severity: Critical, Scope: scope(svc.ID, "mounts"),
-			Service: svc.ID, Name: svc.Name, Title: svc.Name + ": " + m.Remote + " needs attention", Message: problem,
+			Service: svc.ID, Name: svc.Name, Title: svc.Name + ": " + title, Message: m.Remote + ": " + problem,
 			View: "#/storage"})
 		return
 	}
 	if m.Cache && m.CacheMaxBytes > 0 {
 		if pct := percent(m.CacheUsedBytes, m.CacheMaxBytes); pct >= e.rules.FullPercent {
 			e.add(Condition{Key: "cache/" + key, Rule: RuleStorage, Severity: Warning, Scope: scope(svc.ID, "mounts"),
-				Service: svc.ID, Name: svc.Name, Title: "Cache of " + m.Remote + " nearly full",
-				Message: fmt.Sprintf("%d%% of its limit used", pct), Value: strconv.Itoa(pct) + "%", View: "#/storage"})
+				Service: svc.ID, Name: svc.Name, Title: svc.Name + ": cache nearly full",
+				Message: fmt.Sprintf("%s: %d%% of its limit used", m.Remote, pct), Value: strconv.Itoa(pct) + "%", View: "#/storage"})
 		}
 	}
 }
@@ -313,6 +314,28 @@ func (e *evaluation) security(s SecurityState) {
 				" in the last 15 minutes", Value: strconv.Itoa(s.Failed), View: "#/security"})
 	}
 }
+
+// brief is the first clause of an app's message, as a title's second half: up to the first full stop, colon,
+// semicolon or comma that ends a clause (a space follows it), at most briefRunes long, cut at a word.
+func brief(msg string) string {
+	msg = strings.TrimSpace(msg)
+	for _, sep := range []string{". ", ": ", "; ", ", ", "\n"} {
+		if i := strings.Index(msg, sep); i > 0 {
+			msg = msg[:i]
+		}
+	}
+	r := []rune(msg)
+	if len(r) <= briefRunes {
+		return msg
+	}
+	cut := string(r[:briefRunes])
+	if i := strings.LastIndexByte(cut, ' '); i > briefRunes/2 {
+		cut = cut[:i]
+	}
+	return cut + "…"
+}
+
+const briefRunes = 60
 
 // percent is part of whole as a whole percentage, rounded down, 0 when whole is 0.
 func percent(part, whole int64) int {

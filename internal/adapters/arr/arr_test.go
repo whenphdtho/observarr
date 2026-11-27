@@ -222,6 +222,11 @@ func TestProbeHealthMapsWarningsAndLevels(t *testing.T) {
 	if health.Warnings[1].Level != shape.LevelError || health.Warnings[1].Source != "ImportMechanismCheck" {
 		t.Errorf("Warnings[1] = %+v, want Level=error Source=ImportMechanismCheck", health.Warnings[1])
 	}
+	// A check the adapter knows gets a plain title; one it does not know is left to its message.
+	if health.Warnings[0].Title != "" || health.Warnings[1].Title != "completed downloads are not handled" {
+		t.Errorf("titles = %q, %q", health.Warnings[0].Title, health.Warnings[1].Title)
+	}
+
 }
 
 func TestProbeHealthEmptyWarningsIsNonNilSlice(t *testing.T) {

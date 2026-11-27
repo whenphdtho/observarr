@@ -195,9 +195,10 @@ func probeHealth(ctx context.Context, t adapter.Target) (any, error) {
 		switch m := v.m; {
 		case m.OutOfSpace:
 			h.Warnings = append(h.Warnings, shape.Warning{Level: shape.LevelError, Source: warningSource(m.Remote),
-				Message: "the cache disk is out of space"})
+				Title: "cache is full", Message: "the cache disk is out of space"})
 		case m.ErroredFiles > 0:
 			h.Warnings = append(h.Warnings, shape.Warning{Level: shape.LevelWarning, Source: warningSource(m.Remote),
+				Title:   plural(m.ErroredFiles, "file") + " not uploaded",
 				Message: plural(m.ErroredFiles, "cached file") + " could not be uploaded"})
 		}
 	}

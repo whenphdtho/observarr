@@ -28,6 +28,9 @@ type Warning struct {
 	Level   Level  `json:"level"`
 	Message string `json:"message"`
 	Source  string `json:"source,omitempty"` // the app's check name, if any
+	// Title names the problem in a few plain words that follow the app's name ("automatic search is off"), where
+	// the adapter knows the check; left out otherwise, and the message's first words serve.
+	Title string `json:"title,omitempty"`
 }
 
 // Health is filled by every adapter.

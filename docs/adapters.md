@@ -370,6 +370,9 @@ file's comment.
 - **The queue shape** carries two optional fields for an app that downloads the whole queue itself: `speed`
   (bytes/s) and `paused`. Both are left out when zero or false, so an \*arr queue looks as before; the `Queue`
   widget shows them only when set, and the Overview's Downloads panel adds up every reported speed.
+- **Titles:** a warning may carry a `title`, a few plain words that follow the app's name in "Needs attention"
+  and in alerts ("SABnzbd: 2 downloads failed"); the \*arr adapter names the health checks it knows by their
+  check name ("Radarr: automatic search is off"). Without one, the first clause of the message serves.
 - **Health** notes a paused downloader (as information: it is a state, not a problem) and warns of less than
   1 GiB free for downloads, the downloads that failed in the last day (with the newest one's name and reason)
   and, for SABnzbd, the warnings it logged in the last day.
