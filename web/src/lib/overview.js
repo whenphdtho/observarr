@@ -7,26 +7,29 @@ import { formatSpan, formatLeft, formatPercent, formatRate, plural, prettyReleas
 // attention list and the generic shapes, never anything app-specific.
 
 // tally counts the rows that need someone, as the title, the tab, the views list and the bell all say it:
-// { fails, warns }, the apps (and things about no app) with a problem, and those with only warnings. What is
-// muted is not counted.
-export function tally(items) {
-  const rows = issues(items, 0).rows.filter((r) => !r.muted);
+// { fails, warns, muted }, the apps (and things about no app) with a problem, those with only warnings, and,
+// apart from both, how many things are muted at nowMs.
+export function tally(items, nowMs = Date.now()) {
+  const all = issues(items, nowMs).rows;
+  const rows = all.filter((r) => !r.muted);
   const fails = rows.filter((r) => r.tone === 'fail').length;
-  return { fails, warns: rows.length - fails };
+  return { fails, warns: rows.length - fails, muted: all.reduce((n, r) => n + r.items.filter((i) => i.mutedUntil).length, 0) };
 }
 
 // situation is the Overview's title, the state of the whole in one line, and the count the tab and the views list
 // carry: { title, count, tone }. items is the attention list (null before it arrived), apps how many apps are
 // watched, checked whether each of them has been checked once. Errors come before warnings; an all-clear is only
-// given once everything was looked at, and never for an empty list.
-export function situation(items, apps, checked) {
+// given once everything was looked at, and never for an empty list. What is muted is not counted, but the title
+// says that something is: "All 10 apps are fine · 1 muted".
+export function situation(items, apps, checked, nowMs = Date.now()) {
   if (!items) return { title: 'Overview', count: 0, tone: '' };
-  const { fails, warns } = tally(items);
-  if (fails) return { title: `${plural(fails, 'problem')} need${fails === 1 ? 's' : ''} you`, count: fails, tone: 'fail' };
-  if (warns) return { title: `${plural(warns, 'warning')} to look at`, count: warns, tone: 'warn' };
+  const { fails, warns, muted } = tally(items, nowMs);
+  const also = muted ? ` · ${muted} muted` : '';
+  if (fails) return { title: `${plural(fails, 'problem')} need${fails === 1 ? 's' : ''} you${also}`, count: fails, tone: 'fail' };
+  if (warns) return { title: `${plural(warns, 'warning')} to look at${also}`, count: warns, tone: 'warn' };
   if (apps === 0) return { title: 'Overview', count: 0, tone: '' };
   if (!checked) return { title: apps === 1 ? 'Checking your app…' : `Checking ${apps} apps…`, count: 0, tone: '' };
-  return { title: apps === 1 ? 'Your app is fine' : `All ${apps} apps are fine`, count: 0, tone: 'ok' };
+  return { title: `${apps === 1 ? 'Your app is fine' : `All ${apps} apps are fine`}${also}`, count: 0, tone: 'ok' };
 }
 
 // since says how long ago a condition began, coarsely, as a row's figure: "40 s", "12 min", "3 h 5 min".
@@ -63,8 +66,8 @@ const WHY = {
 };
 
 // issues turns the attention list into the rows that need someone and the notes that are only good to know.
-// Everything about one app is one row: its marker has the worst severity, its title names the worst thing and
-// how many more there are, its line says the first in full. A row is
+// Everything about one app is one row: its marker has the worst severity, its title names the worst thing, its
+// line says that one in full, and more counts the others. A row is
 // { key, tone, service, name, view, title, detail, more, value, muted, mutedUntil, items }.
 //   - items are what it stands for, worst first, each { key, tone, title, text, mutedUntil }: title its short
 //     name, text the app's message in full, what it means and since when, mutedUntil a time in ms or 0.
@@ -111,7 +114,7 @@ export function issues(items, nowMs) {
     row.mutedUntil = row.muted ? Math.min(...row.items.map((i) => i.mutedUntil)) : 0;
     row.tone = row.muted ? 'idle' : lead.tone;
     row.more = row.items.length - 1;
-    row.title = row.more ? `${lead.heading}, ${row.more} more` : lead.heading;
+    row.title = lead.heading;
     // A line that only repeats the title is left out.
     row.detail = row.muted ? `Muted until ${clock(row.mutedUntil)}` : lead.line.toLowerCase() === lead.title.toLowerCase() ? '' : lead.line;
     row.value = row.muted ? '' : lead.value;

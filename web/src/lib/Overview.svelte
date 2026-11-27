@@ -42,7 +42,9 @@
   let busy = $state(null);
   let failed = $state(null);
   let menuEl = $state();
+  // What the menu mutes: a row, and one item of it or (null) all of them; the row's own button covers the hour.
   let menuRow = $state(null);
+  let menuItem = $state(null);
   let menuFrom = null;
 
   async function each(row, list, call) {
@@ -57,9 +59,10 @@
     }
   }
 
-  function mute(row, minutes) {
+  // mute silences list, some of row's items (all that are not muted yet, by default), for minutes.
+  function mute(row, minutes, list = row.items) {
     menuEl?.hidePopover();
-    return each(row, row.items.filter((i) => !i.mutedUntil), (it) => api('POST', '/api/alerts/mutes', { key: it.key, minutes }));
+    return each(row, list.filter((i) => !i.mutedUntil), (it) => api('POST', '/api/alerts/mutes', { key: it.key, minutes }));
   }
 
   function unmute(row, list) {
@@ -67,8 +70,9 @@
   }
 
   // The menu is one element in the top layer, so no panel clips it: it is put under the button that opened it.
-  function openMenu(event, row) {
+  function openMenu(event, row, item = null) {
     menuRow = row;
+    menuItem = item;
     menuFrom = event.currentTarget;
     const box = menuFrom.getBoundingClientRect();
     menuEl.style.top = `${box.bottom + 6}px`;
@@ -102,6 +106,9 @@
       fresh = Object.fromEntries(Object.entries(fresh).filter(([k]) => !added.includes(k)));
     }, 1600);
   });
+
+  // How long a mute may last, in minutes.
+  const MUTES = [[60, '1 hour'], [480, '8 hours'], [1440, '1 day']];
 
   // The icon of a row about no app: the view it leads to.
   const VIEW_ICONS = { '#/storage': 'hard-drive', '#/security': 'shield', '#/network': 'network', '#/system': 'server' };
@@ -176,7 +183,14 @@
                               <span class="visually-hidden">{it.tone === 'fail' ? 'Error' : 'Warning'}: </span>
                               {#if row.items.length > 1}<b>{it.title}</b>{/if}
                               <span class="text">{it.text}</span>
-                              {#if it.mutedUntil}
+                              {#if !it.mutedUntil && row.items.length > 1}
+                                <span class="quiet-note">
+                                  <button type="button" class="link" aria-haspopup="menu" disabled={busy === row.key}
+                                    onclick={(e) => openMenu(e, row, it)}>
+                                    Mute<span class="visually-hidden"> {it.title}</span>
+                                  </button>
+                                </span>
+                              {:else if it.mutedUntil}
                                 <span class="quiet-note">
                                   {mutedText(it.mutedUntil)} ·
                                   <button type="button" class="link" disabled={busy === row.key} onclick={() => unmute(row, [it])}>
@@ -201,8 +215,10 @@
                         {/each}
                         {#if live.length > 0}
                           <span class="split">
-                            <button type="button" class="quiet" disabled={busy === row.key} onclick={() => mute(row, 60)}>Mute for 1 hour</button>
-                            <button type="button" class="quiet caret" aria-label="Mute for longer" aria-haspopup="menu"
+                            <button type="button" class="quiet" disabled={busy === row.key} onclick={() => mute(row, 60)}>
+                              {live.length > 1 ? 'Mute all for 1 hour' : 'Mute for 1 hour'}
+                            </button>
+                            <button type="button" class="quiet caret" aria-label={live.length > 1 ? 'Mute all for longer' : 'Mute for longer'} aria-haspopup="menu"
                               disabled={busy === row.key} onclick={(e) => openMenu(e, row)}>
                               <Icon name="chevron-down" size={15} />
                             </button>
@@ -221,9 +237,11 @@
         </div>
       </section>
       <!-- The longer mutes: one small menu for the whole list, placed under the button that opened it. -->
-      <div class="mute-menu" popover role="menu" aria-label="Mute for longer" bind:this={menuEl} ontoggle={menuToggled}>
-        <button type="button" role="menuitem" onclick={() => mute(menuRow, 480)}>Mute for 8 hours</button>
-        <button type="button" role="menuitem" onclick={() => mute(menuRow, 1440)}>Mute for 1 day</button>
+      <div class="mute-menu" popover role="menu" aria-label={menuItem ? `Mute ${menuItem.title}` : 'Mute for longer'}
+        bind:this={menuEl} ontoggle={menuToggled}>
+        {#each menuItem ? MUTES : MUTES.slice(1) as [minutes, label] (minutes)}
+          <button type="button" role="menuitem" onclick={() => mute(menuRow, minutes, menuItem ? [menuItem] : undefined)}>Mute for {label}</button>
+        {/each}
       </div>
     {/if}
     {#if found.notes.length > 0}
@@ -302,7 +320,7 @@
     overflow: hidden; overflow-wrap: anywhere;
     display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
   }
-  .rest { color: var(--muted); white-space: nowrap; }
+  .rest { color: var(--muted); font-size: var(--t-micro); white-space: nowrap; }
   /* A muted row steps back: it is still there, and says until when. */
   .muted .title, .muted .tile-icon { opacity: 0.6; }
   .muted .line { color: var(--muted); }
@@ -365,12 +383,15 @@
   @container (max-width: 760px) {
     .pair { grid-template-columns: minmax(0, 1fr); }
   }
+  /* On a phone the line is never cut: it wraps in full, and the count of the others goes below it. */
+  @media (max-width: 720px) {
+    .detail { grid-template-columns: minmax(0, 1fr); }
+    .line { display: block; -webkit-line-clamp: none; line-clamp: none; }
+  }
   @container (max-width: 520px) {
     .attention { padding: 4px; }
     .issue { grid-template-columns: 4px 36px minmax(0, 1fr) auto 16px; gap: 10px; padding: 10px 8px 10px 6px; }
     .more-body { padding: 2px 12px 14px 20px; }
-    /* A narrow row gives the line its whole width and a third line; what else there is goes below it. */
-    .detail { grid-template-columns: minmax(0, 1fr); }
-    .line { -webkit-line-clamp: 3; line-clamp: 3; }
+
   }
 </style>

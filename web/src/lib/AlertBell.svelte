@@ -8,13 +8,14 @@
 
   // AlertBell sits in the shell's header and leads to the Alerts section of the System view. Its count is the
   // title's: the problems, in the error colour; without any, the warnings, in the warning colour; without either,
-  // none. Its name says both. What is muted is not counted. The live stream keeps the list current.
+  // none. Its name says both, and how many are muted, which the count leaves out. The live stream keeps the list
+  // current.
   const HASH = '#/system/alerts';
   const sums = $derived(tally($synced ? $attention : null));
   const count = $derived(sums.fails || sums.warns);
   const tone = $derived(sums.fails ? 'fail' : sums.warns ? 'warn' : '');
-  const label = $derived(count === 0 ? 'Alerts: nothing needs you' :
-    `Alerts: ${[sums.fails && plural(sums.fails, 'problem'), sums.warns && plural(sums.warns, 'warning')].filter(Boolean).join(', ')}`);
+  const label = $derived(`Alerts: ${[sums.fails && plural(sums.fails, 'problem'), sums.warns && plural(sums.warns, 'warning'),
+    count === 0 && 'nothing needs you', sums.muted && `${sums.muted} muted`].filter(Boolean).join(', ')}`);
 
   // Already there: the hash does not change, so scroll by hand.
   function open(event) {

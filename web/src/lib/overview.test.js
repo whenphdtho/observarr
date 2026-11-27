@@ -38,10 +38,10 @@ test('one row per app, the worst thing first', () => {
       message: 'Big.Buck.Bunny.2008.2160p.WEB: no files found' }),
   ], now);
   assert.deepEqual(rows.map((r) => [r.title, r.tone, r.value, r.more]), [
-    ['Mounts: cache is full, 1 more', 'fail', '', 1],
+    ['Mounts: cache is full', 'fail', '', 1],
     ['Sintel is not reachable', 'fail', '11 min', 0],
     ['Disk / nearly full', 'warn', '92%', 0],
-    ['Getter: automatic search is off, 1 more', 'warn', '', 1],
+    ['Getter: automatic search is off', 'warn', '', 1],
   ]);
   // The line says the first thing in full, readable; the opened row lists every one, worst first, with the app's
   // own words in full.
@@ -75,16 +75,20 @@ test('what is muted stays listed, last, and counts for nothing', () => {
   const { rows } = issues(list, now);
   assert.deepEqual(rows.map((r) => [r.title, r.tone, r.muted]), [
     // The muted error no longer leads its app's row: what still needs someone does.
-    ['Mounts: 1 file not uploaded, 1 more', 'warn', false],
+    ['Mounts: 1 file not uploaded', 'warn', false],
     ['Getter: automatic search is off', 'warn', false], // its mute has ended
     ['Sintel is not reachable', 'idle', true],
   ]);
   assert.equal(rows[2].detail, mutedText(Date.parse(later)));
   assert.match(rows[2].detail, /^Muted until \d/);
   assert.deepEqual(rows[0].items.map((i) => [i.key, i.mutedUntil > 0]), [['w2', false], ['c2', true]]);
-  assert.deepEqual(tally(list.slice(0, 3)), { fails: 0, warns: 1 });
-  assert.equal(situation(list.slice(0, 3), 10, true).title, '1 warning to look at');
-  assert.equal(situation(list.slice(0, 1), 10, true).title, 'All 10 apps are fine');
+  // The title, the tab and the bell do not count what is muted; the title says that something is.
+  assert.deepEqual(tally(list.slice(0, 3), now), { fails: 0, warns: 1, muted: 2 });
+  assert.deepEqual(situation(list.slice(0, 3), 10, true, now), { title: '1 warning to look at · 2 muted', count: 1, tone: 'warn' });
+  assert.deepEqual(situation(list.slice(0, 1), 10, true, now), { title: 'All 10 apps are fine · 1 muted', count: 0, tone: 'ok' });
+  assert.equal(situation([...list, item('critical', { key: 'x', title: 'Disk / nearly full' })], 10, true, now).title, '1 problem needs you · 2 muted');
+  // A mute that has ended counts again.
+  assert.deepEqual(tally(list.slice(0, 1), Date.parse(later) + 1), { fails: 1, warns: 0, muted: 0 });
 });
 
 test('since is coarse', () => {
@@ -92,6 +96,8 @@ test('since is coarse', () => {
   assert.equal(since(new Date(now - 40e3).toISOString(), now), '40 s');
   assert.equal(since(new Date(now - 725e3).toISOString(), now), '12 min');
   assert.equal(since(new Date(now - 3 * 3600e3 - 330e3).toISOString(), now), '3 h 5 min');
+  // The shared duration words, whatever the length.
+  assert.equal(since(new Date(now - (12 * 86400 + 4 * 3600 + 70) * 1000).toISOString(), now), '12 days 4 h');
   assert.equal(since('0001-01-01T00:00:00Z', now), '');
   assert.equal(since(undefined, now), '');
 });
