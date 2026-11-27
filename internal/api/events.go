@@ -20,8 +20,11 @@ const (
 	// maxStreams bounds open live event streams server-wide; each holds a connection and a hub subscription.
 	maxStreams = 32
 	// maxSessionStreams bounds one session's open streams (one per open tab), so a single session cannot take
-	// every slot.
-	maxSessionStreams = 8
+	// every slot. It stays below six on purpose: over plain HTTP/1.1 a browser opens at most six connections to
+	// one server for all its tabs together, and each stream holds one. Six streams would leave none for any
+	// other request, and no tab could load anything; five leave one, on which a tab without a stream is told so
+	// and asks for its data instead.
+	maxSessionStreams = 5
 	// streamWriteTimeout ends a stream whose client stops reading, instead of blocking on it forever.
 	streamWriteTimeout = 10 * time.Second
 	// retryBase is the least delay the browser waits before reconnecting a stream that broke; each stream asks for

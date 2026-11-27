@@ -119,13 +119,14 @@ func TestRefusedRequestsAreNoFailedLogins(t *testing.T) {
 	}
 }
 
-// A session has a stream for each of eight tabs. The ninth is told why it gets none, the session's state says so
+// A session has a stream for each of five tabs. One more is told why it gets none, the session's state says so
 // (a page cannot read a refused stream's answer), and what needs attention can be asked for instead.
-func TestNinthTabIsToldWhy(t *testing.T) {
+func TestATabTooManyIsToldWhy(t *testing.T) {
 	e := newServicesEnv(t, withAlerts(t))
 	ctx := timeout(t)
-	if maxSessionStreams != 8 {
-		t.Fatalf("streams per session = %d, want 8", maxSessionStreams)
+	// A browser has six connections to one server over HTTP/1.1: the streams must leave one of them free.
+	if maxSessionStreams != 5 {
+		t.Fatalf("streams per session = %d, want 5", maxSessionStreams)
 	}
 	var streams []*stream
 	for range maxSessionStreams - 1 {
@@ -137,7 +138,7 @@ func TestNinthTabIsToldWhy(t *testing.T) {
 	streams = append(streams, e.openEvents(ctx))
 	code, data, _ := e.do("GET", "/api/events", "", nil)
 	if code != 503 || data["error"] != "too many open tabs: close one to get live updates here" {
-		t.Fatalf("the ninth stream = %d %v", code, data)
+		t.Fatalf("one stream too many = %d %v", code, data)
 	}
 	if _, data, _ := e.do("GET", "/api/session", "", nil); data["streamsFull"] != true {
 		t.Fatalf("session without a stream to spare = %v", data)

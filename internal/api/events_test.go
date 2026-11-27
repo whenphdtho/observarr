@@ -177,14 +177,16 @@ func refusedStream(c *client) {
 func TestEventsCapped(t *testing.T) {
 	e := newServicesEnv(t)
 	ctx := timeout(t)
+	// Sessions open streams until the server has no slot left; the last session may get fewer than its own limit.
 	var first *stream
-	for range maxStreams / maxSessionStreams {
+	for left := maxStreams; left > 0; {
 		c := signedIn(e.client)
-		for range maxSessionStreams {
+		for range min(left, maxSessionStreams) {
 			s := c.openEvents(ctx)
 			if first == nil {
 				first = s
 			}
+			left--
 		}
 	}
 	refusedStream(signedIn(e.client))
