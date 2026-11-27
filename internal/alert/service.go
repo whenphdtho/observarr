@@ -38,6 +38,10 @@ type Service struct {
 	ctx  context.Context // the Service's lifetime, from Start
 	runs sync.WaitGroup  // the evaluation loop and the workers
 
+	// evals lets one evaluation run at a time, from reading the state to stepping the engine: two that overlap
+	// could else step it out of order, the later reading first.
+	evals sync.Mutex
+
 	mu        sync.Mutex // guards the fields below and the workers' guarded fields
 	rules     Rules
 	engine    *Engine
@@ -162,6 +166,9 @@ func (s *Service) loop(ctx context.Context) {
 	tick := time.NewTicker(s.cfg.Every)
 	defer tick.Stop()
 	var soon, due <-chan time.Time
+	// Once at the start: what needs attention is known from then on, also on a server where nothing changes
+	// (no apps yet), instead of only after the first tick.
+	s.evaluate(ctx)
 	for {
 		select {
 		case <-ctx.Done():
@@ -192,6 +199,8 @@ func (s *Service) loop(ctx context.Context) {
 
 // evaluate reads the live state, steps the engine, saves what changed and sends what it decided on.
 func (s *Service) evaluate(ctx context.Context) {
+	s.evals.Lock()
+	defer s.evals.Unlock()
 	now := s.cfg.Now()
 	in := Input{Now: now, Services: s.cfg.Hub.Snapshot()}
 	if s.cfg.System != nil {

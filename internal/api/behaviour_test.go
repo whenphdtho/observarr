@@ -156,6 +156,13 @@ func TestNinthTabIsToldWhy(t *testing.T) {
 	})
 }
 
+// What needs attention is known as soon as the server runs, also when nothing ever changes: a page that opens on
+// a server without apps is told "nothing" at once, and need not wait for the first tick to say so.
+func TestAttentionIsKnownWithoutAnyChange(t *testing.T) {
+	e := newServicesEnv(t, withAlerts(t))
+	e.openEvents(timeout(t)).until("attention", func(data string) bool { return strings.TrimSpace(data) == "[]" })
+}
+
 // Adding alongside keeps the alert rules set on this server, and a server that never had any set takes the
 // file's; the preview says which it will be.
 func TestAddAlongsideRestoresRulesWhereNoneAreSet(t *testing.T) {
