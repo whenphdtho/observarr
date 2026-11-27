@@ -219,8 +219,12 @@ copy of the server, including history and accounts, back up the data folder and 
 SABnzbd and NZBGet keep their settings in one file each rather than a `config.xml`. Mount their config folders
 like the others (e.g. `/srv/sabnzbd/config:/appconfig/sabnzbd:ro`) and Observarr reads `sabnzbd.ini` (the API
 key, port and URL base) or `nzbget.conf` (`ControlUsername`, `ControlPassword` and `ControlPort`). As with every
-found key, it is used only when you tick "Use the API key found in …" when adding the app. Connecting them is in
+found key, it is used only when you tick "Use the API key found in …" when adding the app, and it is only sent
+to the port the config names, on this server or its own network (a container's name, `localhost`, a private
+address), never to a public address: for any other address, enter the key by hand. Connecting them is in
 [deploy.md](deploy.md#connect-sabnzbd-and-nzbget).
+
+One app at one address is added once: a second service of the same type at the same address is refused.
 
 ## Alerts
 

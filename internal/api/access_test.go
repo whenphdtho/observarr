@@ -282,7 +282,7 @@ func TestLockedDatabaseKeepsServingReads(t *testing.T) {
 		t.Fatalf("session while locked = %d", code)
 	}
 	if code, _ := e.send("POST", "/api/services", fmt.Sprintf(`{"type":"fake","name":"B","url":%q,"apiKey":%q}`,
-		e.appURL, testKey)); code < 500 {
+		e.appURL+"/copy/5", testKey)); code < 500 {
 		t.Fatalf("adding a service while locked = %d, want a server error", code)
 	}
 
@@ -332,13 +332,38 @@ func TestFoundKeyGoesOnlyWhereFound(t *testing.T) {
 		"http://evil.example:8989":       false,
 		"not a url":                      true, // refused by validation instead
 	} {
-		if got := foundKeyMayGo(raw, found); got != want {
-			t.Errorf("foundKeyMayGo(%q) = %v, want %v", raw, got, want)
+		if got := foundKeyRefusal(raw, found) == ""; got != want {
+			t.Errorf("found key to %q allowed = %v, want %v", raw, got, want)
 		}
 	}
-	hostless := adapter.Candidate{BaseURL: &url.URL{Scheme: "http", Host: ":8989"}}
-	if !foundKeyMayGo("http://anything.lan:1", hostless) {
-		t.Error("a key found without a host must go where the user says")
+	// A key found in a config folder: the config names the port, the user the host. It goes to that port only,
+	// on this server or its own network, never to a public address.
+	hostless := adapter.Candidate{BaseURL: &url.URL{Scheme: "http", Host: ":8989"}, Name: "Sonarr", Container: "sonarr-main"}
+	for raw, want := range map[string]string{
+		"http://127.0.0.1:8989":                 "",
+		"http://localhost:8989/sonarr":          "",
+		"http://[::1]:8989":                     "",
+		"http://192.168.1.20:8989":              "",
+		"http://10.0.0.5:8989":                  "",
+		"http://[fd00::5]:8989":                 "",
+		"http://sonarr:8989":                    "", // a container's name
+		"http://sonarr-main:8989":               "",
+		"http://nas:8989":                       "",
+		"http://127.0.0.1:8990":                 "port",
+		"http://127.0.0.1":                      "port",
+		"http://192.168.1.20:52135":             "port",
+		"http://203.0.113.9:8989":               "public",
+		"http://[2001:db8::1]:8989":             "public",
+		"http://evil.example:8989":              "public",
+		"http://sonarr.evil.example:8989":       "public",
+		"http://192.168.1.20.evil.example:8989": "public",
+		"http://[::ffff:203.0.113.9]:8989":      "public",
+		"not a url":                             "", // refused by validation instead
+	} {
+		got := foundKeyRefusal(raw, hostless)
+		if (want == "") != (got == "") || !strings.Contains(got, want) {
+			t.Errorf("found key to %q: %q, want a refusal naming %q", raw, got, want)
+		}
 	}
 	if origin(&url.URL{Scheme: "https", Host: "a.lan"}) != origin(&url.URL{Scheme: "https", Host: "A.lan:443"}) {
 		t.Error("the default port must not make a different origin")

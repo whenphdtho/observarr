@@ -270,7 +270,7 @@ func TestTrustedProxyLogin(t *testing.T) {
 
 func TestUIRoutes(t *testing.T) {
 	c := newServer(t, config.Config{})
-	for path, want := range map[string]string{"/": "<html>app</html>", "/apps": "<html>app</html>", "/assets/app-1.js": "js", "/assets/": "<html>app</html>"} {
+	for path, want := range map[string]string{"/": "<html>app</html>", "/index.html": "<html>app</html>", "/assets/app-1.js": "js"} {
 		resp, err := c.http.Get(c.base + path)
 		if err != nil {
 			t.Fatal(err)
@@ -281,10 +281,23 @@ func TestUIRoutes(t *testing.T) {
 			t.Errorf("GET %s = %q, want %q", path, body, want)
 		}
 	}
+	// The views live in the fragment: the page has one path. A file that is not there is a 404, never the page
+	// under its name, and a dotfile is never served.
+	for _, path := range []string{"/assets/nope.js", "/assets/", "/apps", "/.git/config", "/.gitkeep", "/assets/.env", "/favicon.ico"} {
+		resp, err := c.http.Get(c.base + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != 404 || strings.Contains(string(body), "<html>") {
+			t.Errorf("GET %s = %d %q, want 404 without the page", path, resp.StatusCode, body)
+		}
+	}
 	if code, _, _ := c.do("GET", "/api/nope", "", nil); code != 404 {
 		t.Fatalf("unknown API path = %d, want 404", code)
 	}
-	if code, _, _ := c.do("POST", "/apps", "", nil); code != 405 {
+	if code, _, _ := c.do("POST", "/", "", nil); code != 405 {
 		t.Fatalf("POST to a UI path = %d, want 405", code)
 	}
 }

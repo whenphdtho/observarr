@@ -8,11 +8,13 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"observarr/internal/adapter"
@@ -130,8 +132,8 @@ func (s *Server) createService(w http.ResponseWriter, r *http.Request, sess stor
 				return
 			}
 			if in.APIKey == "" {
-				if !foundKeyMayGo(in.URL, c) {
-					writeError(w, http.StatusBadRequest, "url: the found key is only sent to the address where the app was found")
+				if why := foundKeyRefusal(in.URL, c); why != "" {
+					writeError(w, http.StatusBadRequest, why)
 					return
 				}
 				in.APIKey, keySource = c.APIKey, c.KeySource
@@ -170,6 +172,13 @@ func (s *Server) createService(w http.ResponseWriter, r *http.Request, sess stor
 			fail(http.StatusGone, errSuggestionGone)
 			return
 		}
+	}
+	if twin, err := s.twin(r.Context(), in.Type, sp.target.BaseURL, 0); err != nil {
+		s.internal(w, r, err)
+		return
+	} else if twin != "" {
+		fail(http.StatusConflict, twin)
+		return
 	}
 	svc, err := s.Store.CreateService(r.Context(),
 		store.Service{Type: in.Type, Name: sp.name, BaseURL: sp.target.BaseURL.String(), Container: sp.container},
@@ -242,6 +251,13 @@ func (s *Server) updateService(w http.ResponseWriter, r *http.Request, sess stor
 	if oldKey != "" && p.APIKey == nil && (err != nil || origin(oldURL) != origin(sp.target.BaseURL)) {
 		label := cmp.Or(strings.ToLower(sp.adapter.Info().KeyLabel), "API key")
 		writeError(w, http.StatusBadRequest, "enter the "+label+" again when changing the address")
+		return
+	}
+	if twin, err := s.twin(r.Context(), old.Type, sp.target.BaseURL, old.ID); err != nil {
+		s.internal(w, r, err)
+		return
+	} else if twin != "" {
+		writeError(w, http.StatusConflict, twin)
 		return
 	}
 	keyChanged := keyErr != nil || in.APIKey != oldKey
@@ -475,6 +491,9 @@ func (sp spec) named(name, container string) (spec, error) {
 	if n := utf8.RuneCountInString(sp.name); n < 1 || n > maxServiceName {
 		return spec{}, errors.New("name: 1-64 characters")
 	}
+	if strings.ContainsFunc(sp.name, unicode.IsControl) {
+		return spec{}, errors.New("name: no line breaks or other control characters")
+	}
 	if container != "" && !containerName.MatchString(container) {
 		return spec{}, errors.New("container: a Docker container name (letters, digits, _ . -), at most 255 characters")
 	}
@@ -517,9 +536,35 @@ func (s *Server) detect(ctx context.Context, sp spec) (adapter.Identity, string)
 	defer cancel()
 	id, err := sp.adapter.Detect(ctx, sp.target)
 	if err != nil {
+		// Refused without anything to refuse: say what is missing, not that it was rejected.
+		if errors.Is(err, adapter.ErrUnauthorized) && sp.target.APIKey == "" {
+			if strings.EqualFold(sp.adapter.Info().KeyLabel, "Credentials") {
+				return adapter.Identity{}, "the app asks for credentials: enter them as user:password"
+			}
+			return adapter.Identity{}, "the app asks for a key: enter its " + cmp.Or(strings.ToLower(sp.adapter.Info().KeyLabel), "API key")
+		}
 		return adapter.Identity{}, detectError(sp.target.BaseURL.Host, err)
 	}
 	return id, ""
+}
+
+// twin says, for a refusal, which saved service other than except already is the app of typ at u, "" for none:
+// one app watched twice would show and report everything twice.
+func (s *Server) twin(ctx context.Context, typ string, u *url.URL, except int64) (string, error) {
+	saved, err := s.Store.Services(ctx)
+	if err != nil {
+		return "", err
+	}
+	for _, svc := range saved {
+		other, err := url.Parse(svc.BaseURL)
+		if svc.ID == except || svc.Type != typ || err != nil {
+			continue
+		}
+		if origin(other) == origin(u) && strings.TrimSuffix(other.Path, "/") == strings.TrimSuffix(u.Path, "/") {
+			return "this app is already added as " + strconv.Quote(svc.Name), nil
+		}
+	}
+	return "", nil
 }
 
 // detectError explains a failed Detect. Adapter errors never contain the key (adapter.GetJSON guarantees it),
@@ -534,18 +579,50 @@ func detectError(host string, err error) string {
 	return err.Error()
 }
 
-// foundKeyMayGo reports whether c's found key may be sent to rawURL: only to the origin where the app was
-// found, when that is known. A URL that does not parse is left for validation to refuse.
-func foundKeyMayGo(rawURL string, c adapter.Candidate) bool {
+// foundKeyRefusal says why c's found key may not be sent to rawURL, "" when it may. A find with an address has
+// its key sent there only. A find from a config folder knows the app's port but not its host, which the user
+// fills in: the port must be the config's, and the host this server, a name on its network (the container's,
+// say, which has no dot) or a private address, never a public one. Whoever is signed in could else have any
+// found key sent to a server of their choosing. A URL that does not parse is left for validation to refuse.
+func foundKeyRefusal(rawURL string, c adapter.Candidate) string {
 	u, err := adapter.ParseBaseURL(rawURL)
-	return err != nil || c.BaseURL.Hostname() == "" || origin(u) == origin(c.BaseURL)
+	if err != nil {
+		return ""
+	}
+	if c.BaseURL.Hostname() != "" {
+		if origin(u) != origin(c.BaseURL) {
+			return "url: the found key is only sent to the address where the app was found"
+		}
+		return ""
+	}
+	if want := portOf(c.BaseURL); portOf(u) != want {
+		return "url: the found key is only sent to the port its config names (" + want + "); enter the key by hand for another"
+	}
+	if !nearby(u.Hostname(), c) {
+		return "url: the found key is only sent to this server or its own network, not to a public address; " +
+			"enter the key by hand to use this one"
+	}
+	return ""
+}
+
+// nearby reports whether host is this server or on its own network: a loopback or private address, "localhost",
+// the name the find suggests, or a name without a dot (a container or a machine next door). A full domain name
+// may be anyone's.
+func nearby(host string, c adapter.Candidate) bool {
+	if ip, err := netip.ParseAddr(host); err == nil {
+		ip = ip.Unmap()
+		return ip.IsLoopback() || ip.IsPrivate()
+	}
+	host = strings.ToLower(strings.TrimSuffix(host, "."))
+	return host != "" && (!strings.Contains(host, ".") || host == strings.ToLower(c.Container) || host == strings.ToLower(c.Name))
+}
+
+// portOf is the port a request to u goes to, the scheme's own when u names none.
+func portOf(u *url.URL) string {
+	return cmp.Or(u.Port(), map[string]string{"http": "80", "https": "443"}[u.Scheme])
 }
 
 // origin is u's scheme, host and port, with the scheme's default port filled in: where a request to u goes.
 func origin(u *url.URL) string {
-	port := u.Port()
-	if port == "" {
-		port = map[string]string{"http": "80", "https": "443"}[u.Scheme]
-	}
-	return u.Scheme + "://" + net.JoinHostPort(strings.ToLower(u.Hostname()), port)
+	return u.Scheme + "://" + net.JoinHostPort(strings.ToLower(u.Hostname()), portOf(u))
 }
