@@ -351,25 +351,25 @@ func TestSamplesKeepMinGap(t *testing.T) {
 	s.listEvery, s.minList, s.minGap = 30*time.Millisecond, 30*time.Millisecond, 25*time.Millisecond
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
+	sub, stop := s.Subscribe()
+	defer stop()
 	go func() { s.Run(ctx); close(done) }()
+	// Each sample says when it was taken, on the clock the sampler spaces them by: that time is compared, not the
+	// moment this test got to see it. A sample this loop misses only widens a gap it then does not check.
 	var at []time.Time
-	seen := 0
-	for deadline := time.Now().Add(600 * time.Millisecond); time.Now().Before(deadline); time.Sleep(200 * time.Microsecond) {
-		f.mu.Lock()
-		n := f.hosts
-		f.mu.Unlock()
-		for ; seen < n; seen++ {
-			at = append(at, time.Now())
+	for len(at) < 8 {
+		select {
+		case snap := <-sub:
+			at = append(at, snap.At)
+		case <-time.After(10 * time.Second):
+			t.Fatalf("only %d samples in ten seconds", len(at))
 		}
 	}
 	cancel()
 	<-done
-	if len(at) < 5 {
-		t.Fatalf("only %d samples", len(at))
-	}
 	for i := 1; i < len(at); i++ {
-		if gap := at[i].Sub(at[i-1]); gap < 20*time.Millisecond {
-			t.Fatalf("samples %d and %d only %v apart, want at least minGap (25ms)", i-1, i, gap)
+		if gap := at[i].Sub(at[i-1]); gap < s.minGap {
+			t.Fatalf("samples %d and %d taken %v apart, want at least minGap (%v)", i-1, i, gap, s.minGap)
 		}
 	}
 }
