@@ -440,7 +440,9 @@
   .figures { display: grid; gap: 12px 24px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .fig { display: grid; gap: 2px; align-content: start; min-width: 0; font-size: var(--t-small); }
   .fig b { font-size: var(--t-figure-sm); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .types-list { font-size: var(--t-body); color: var(--text2); padding-top: 3px; }
+  /* A few short facts: they wrap rather than lose their figures. */
+  .types-list { font-size: var(--t-body); color: var(--text2); padding-top: 3px; flex-wrap: wrap; }
+  .types-list > * { flex: none; }
   .types-list b { font-size: inherit; font-weight: 600; color: var(--text); }
 
   .pair { display: grid; gap: 28px 32px; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }

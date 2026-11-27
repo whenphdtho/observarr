@@ -77,7 +77,8 @@
     {/if}
   {/snippet}
   {#snippet controls()}
-    <RangeSwitch bind:value={range} />
+    <!-- Without figures there is no range to pick. -->
+    {#if host || !$snapshot}<RangeSwitch bind:value={range} />{/if}
   {/snippet}
   {#if $snapshot && !host}
     <p class="waiting pad">No traffic figures: they need the host’s /proc. The System view says how to set it up.</p>

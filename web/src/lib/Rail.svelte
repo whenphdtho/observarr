@@ -39,11 +39,11 @@
 </script>
 
 <section class="rail-section" aria-labelledby={`${uid}-apps`}>
-  <h2 id={`${uid}-apps`}>{all ? 'All apps' : 'Need you'}</h2>
+  <h2 id={`${uid}-apps`}>{$synced && services.length === 0 ? 'Apps' : all ? 'All apps' : 'Need you'}</h2>
   {#if !$synced}
     <Skeleton kind="rows" count={3} label="Loading the apps…" />
   {:else if services.length === 0}
-    <p class="none">No apps to show.</p>
+    <p class="none">None here yet.</p>
   {:else}
     <div use:smoothHeight>
       <div>

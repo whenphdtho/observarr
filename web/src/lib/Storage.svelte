@@ -315,5 +315,8 @@
   @container (max-width: 640px) {
     .m-body { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'cache' 'facts'; padding-left: 0; }
     .m-cache { justify-content: flex-start; }
+    /* In a narrow column a mount's facts wrap: each stays whole. */
+    .m-body .facts { flex-wrap: wrap; row-gap: 2px; }
+    .m-body .facts > * { flex: none; }
   }
 </style>
