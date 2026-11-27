@@ -298,7 +298,10 @@
     display: grid; grid-template-columns: minmax(0, auto) auto; justify-content: start; align-items: end; column-gap: 10px;
     font-size: var(--t-small); color: var(--text2);
   }
-  .line { max-height: calc(2 * 1.45em); overflow: hidden; overflow-wrap: anywhere; }
+  .line {
+    overflow: hidden; overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+  }
   .rest { color: var(--muted); white-space: nowrap; }
   /* A muted row steps back: it is still there, and says until when. */
   .muted .title, .muted .tile-icon { opacity: 0.6; }
@@ -366,5 +369,8 @@
     .attention { padding: 4px; }
     .issue { grid-template-columns: 4px 36px minmax(0, 1fr) auto 16px; gap: 10px; padding: 10px 8px 10px 6px; }
     .more-body { padding: 2px 12px 14px 20px; }
+    /* A narrow row gives the line its whole width and a third line; what else there is goes below it. */
+    .detail { grid-template-columns: minmax(0, 1fr); }
+    .line { -webkit-line-clamp: 3; line-clamp: 3; }
   }
 </style>
