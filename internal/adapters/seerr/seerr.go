@@ -198,7 +198,8 @@ func probeHealth(ctx context.Context, t adapter.Target) (any, error) {
 		warn(shape.LevelWarning, strings.TrimSuffix("the requests cannot be read: "+phrase, ": "))
 	default:
 		if c.Pending > 0 {
-			warn(shape.LevelWarning, plural(c.Pending, "request")+" waiting for approval")
+			// Someone waits, nothing is wrong: information, not a warning.
+			warn(shape.LevelInfo, plural(c.Pending, "request")+" waiting for approval")
 		}
 		if c.Failed > 0 {
 			warn(shape.LevelWarning, plural(c.Failed, "request")+" failed")

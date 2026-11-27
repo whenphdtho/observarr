@@ -215,7 +215,8 @@ For an app with its own API shape:
 - **Probe(security)** reads `GET /v1/decisions`, every active decision. A community blocklist can hold tens of
   thousands of entries, so the adapter uses `adapter.StreamJSONLimit` with a 48 MiB limit instead of the usual
   4 MiB, and `adapter.DecodeArray` hands it one decision at a time: each is counted, only the newest local ones
-  (origins other than `CAPI` and `lists`) are kept, every breakdown tracks at most 256 distinct names, and
+  (origins other than `CAPI` and `lists`) are kept, every breakdown tracks at most 256 distinct names, each
+  origin is given in plain words ("Community blocklist", "Subscribed lists", "Added by hand", "Detected here"), and
   every kept text is clipped. If the answer is still over the limit, the counts so far are reported with
   `Capped` set rather than failing the probe.
 - The security kind is polled once a minute (`cmd/observarr`: `poller.Config.Intervals`), not every 10 s.
@@ -368,9 +369,10 @@ file's comment.
   stream and stops at the first item older than a day (or after 200 items).
 - **The queue shape** carries two optional fields for an app that downloads the whole queue itself: `speed`
   (bytes/s) and `paused`. Both are left out when zero or false, so an \*arr queue looks as before; the `Queue`
-  widget shows them only when set, and the Overview's Downloads figure adds up every reported speed.
-- **Health** warns of a paused downloader, less than 1 GiB free for downloads, the downloads that failed in the
-  last day (with the newest one's name and reason) and, for SABnzbd, the warnings it logged in the last day.
+  widget shows them only when set, and the Overview's Downloads panel adds up every reported speed.
+- **Health** notes a paused downloader (as information: it is a state, not a problem) and warns of less than
+  1 GiB free for downloads, the downloads that failed in the last day (with the newest one's name and reason)
+  and, for SABnzbd, the warnings it logged in the last day.
 - **Discovery:** both recognise their Docker images and read their config folder (`sabnzbd.ini`: `api_key`,
   `port`, `url_base`; `nzbget.conf`: `ControlUsername`, `ControlPassword`, `ControlPort`) through
   `adapter.ReadConfigFile`, and both answer a network scan without a key: SABnzbd's `mode=version` needs none,

@@ -26,7 +26,8 @@ type Condition struct {
 	Name     string   `json:"name"`              // what it is about, e.g. the service's name; "" for none
 	Title    string   `json:"title"`
 	Message  string   `json:"message"`
-	View     string   `json:"view"` // the UI view showing the details, e.g. "#/apps"
+	Value    string   `json:"value,omitempty"` // the figure that sums it up, e.g. "92%" or "3"; "" for none
+	View     string   `json:"view"`            // the UI view showing the details, e.g. "#/apps"
 }
 
 // Input is everything conditions are read from.
@@ -104,7 +105,7 @@ func (e *evaluation) service(svc *state.ServiceState) {
 	if !svc.Up {
 		// Down: whatever else it reported before is not known now, so none of it is over either.
 		e.add(Condition{Key: "down/" + strconv.FormatInt(id, 10), Rule: RuleDown, Severity: Critical,
-			Scope: scope(id, "down"), Service: id, Name: svc.Name, Title: svc.Name + " is down",
+			Scope: scope(id, "down"), Service: id, Name: svc.Name, Title: svc.Name + " is not reachable",
 			Message: health.Error, View: "#/apps"})
 		return
 	}
@@ -166,7 +167,8 @@ func (e *evaluation) service(svc *state.ServiceState) {
 		if n := rq.Counts.Pending; n > 0 {
 			e.add(Condition{Key: "requests/" + strconv.FormatInt(id, 10), Rule: RuleRequests, Severity: Info,
 				Scope: scope(id, "requests"), Service: id, Name: svc.Name, Title: svc.Name + ": requests waiting",
-				Message: plural(n, "request waits", "requests wait") + " for approval", View: "#/apps"})
+				Message: plural(n, "request waits", "requests wait") + " for approval", Value: strconv.Itoa(n),
+				View: "#/apps"})
 		}
 	}
 }
@@ -208,7 +210,7 @@ func (e *evaluation) mount(svc *state.ServiceState, m shape.Mount, warned []stri
 		if pct := percent(m.CacheUsedBytes, m.CacheMaxBytes); pct >= e.rules.FullPercent {
 			e.add(Condition{Key: "cache/" + key, Rule: RuleStorage, Severity: Warning, Scope: scope(svc.ID, "mounts"),
 				Service: svc.ID, Name: svc.Name, Title: "Cache of " + m.Remote + " nearly full",
-				Message: fmt.Sprintf("%d%% of its limit used", pct), View: "#/storage"})
+				Message: fmt.Sprintf("%d%% of its limit used", pct), Value: strconv.Itoa(pct) + "%", View: "#/storage"})
 		}
 	}
 }
@@ -261,7 +263,8 @@ func (e *evaluation) disks(h *system.HostView) {
 			sev = Critical
 		}
 		e.add(Condition{Key: "disk/" + d.Path, Rule: RuleStorage, Severity: sev, Scope: "host", Name: d.Path,
-			Title: "Disk " + d.Path + " nearly full", Message: fmt.Sprintf("%d%% used", pct), View: "#/storage"})
+			Title: "Disk " + d.Path + " nearly full", Message: fmt.Sprintf("%d%% used", pct), Value: strconv.Itoa(pct) + "%",
+			View: "#/storage"})
 	}
 }
 
@@ -287,7 +290,8 @@ func (e *evaluation) traffic(t *system.TrafficSummary, now time.Time) {
 		}
 		e.add(Condition{Key: fmt.Sprintf("traffic/%d/%s", step.at, period), Rule: RuleTraffic, Severity: step.sev,
 			Scope: "traffic", Title: fmt.Sprintf("Traffic budget %d%% used", step.at),
-			Message: fmt.Sprintf("%d%% of this %s's budget is used", pct, b.Period), View: "#/network"})
+			Message: fmt.Sprintf("%d%% of this %s's budget is used", pct, b.Period), Value: strconv.Itoa(pct) + "%",
+			View: "#/network"})
 	}
 }
 
@@ -296,7 +300,7 @@ func (e *evaluation) security(s SecurityState) {
 	if s.LockedOut > 0 {
 		e.add(Condition{Key: "security/lockout", Rule: RuleSecurity, Severity: Warning, Scope: "security",
 			Title: "Sign-in lockout", Message: plural(s.LockedOut, "address is", "addresses are") +
-				" locked out after too many failed sign-ins", View: "#/security"})
+				" locked out after too many failed sign-ins", Value: strconv.Itoa(s.LockedOut), View: "#/security"})
 	}
 	if s.ServerLocked > 0 {
 		e.add(Condition{Key: "security/limited", Rule: RuleSecurity, Severity: Warning, Scope: "security",
@@ -306,7 +310,7 @@ func (e *evaluation) security(s SecurityState) {
 	if s.Failed >= e.rules.FailedSignIns {
 		e.add(Condition{Key: "security/failed", Rule: RuleSecurity, Severity: Warning, Scope: "security",
 			Title: "Many failed sign-ins", Message: plural(s.Failed, "failed sign-in", "failed sign-ins") +
-				" in the last 15 minutes", View: "#/security"})
+				" in the last 15 minutes", Value: strconv.Itoa(s.Failed), View: "#/security"})
 	}
 }
 

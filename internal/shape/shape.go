@@ -113,7 +113,7 @@ type SecurityDecision struct {
 	Value    string    `json:"value"`          // the address, range or other value, as given
 	Scope    string    `json:"scope"`          // what Value is: an IP, a range, a country, …
 	Type     string    `json:"type"`           // ban, captcha, …
-	Origin   string    `json:"origin"`         // where the decision came from
+	Origin   string    `json:"origin"`         // where the decision came from, in plain words
 	Scenario string    `json:"scenario"`       // the behaviour that triggered it
 	Until    time.Time `json:"until,omitzero"` // when it ends; zero (left out) if the app did not say
 }

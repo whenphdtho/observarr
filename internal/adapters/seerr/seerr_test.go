@@ -224,7 +224,7 @@ func TestProbeHealth(t *testing.T) {
 		{Level: shape.LevelWarning, Message: "a restart is needed to apply changed settings"},
 		{Level: shape.LevelInfo, Message: "an update is available"},
 		{Level: shape.LevelWarning, Message: "the settings are not on a mounted volume: recreating the container loses them"},
-		{Level: shape.LevelWarning, Message: "2 requests waiting for approval"},
+		{Level: shape.LevelInfo, Message: "2 requests waiting for approval"},
 		{Level: shape.LevelWarning, Message: "1 request failed"},
 	}
 	if h.Version != "1.33.2" || !reflect.DeepEqual(h.Warnings, want) {

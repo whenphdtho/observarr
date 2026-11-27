@@ -282,8 +282,8 @@ tell a bouncer its version, so the card shows none.
 Overseerr, Jellyseerr and Seerr (the two merged into it with version 3) share one API, and one adapter reads
 all three. Its card names the app that answers, shows its requests by state (waiting, approved, processing,
 available, declined, failed), the ten newest requests with their title, type, requester and state, and the
-issues users reported that are still open. Requests waiting for approval and failed requests also show up in
-Needs attention.
+issues users reported that are still open. Failed requests also show up in Needs attention; requests waiting
+for approval are noted below it, as good to know.
 
 1. Copy the API key from **Settings → General → API Key**.
 2. Give Observarr network access to the app (port 5055 by default), e.g. `http://jellyseerr:5055` on a shared

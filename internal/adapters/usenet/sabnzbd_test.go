@@ -177,7 +177,7 @@ func TestSABHealth(t *testing.T) {
 		msgs = append(msgs, string(w.Level)+": "+w.Message)
 	}
 	want := []string{
-		"warning: downloads are paused",
+		"info: downloads are paused",
 		"warning: disk space low: 0.5 GiB free for downloads",
 		"warning: 2 downloads failed in the last day, most recently Sintel.2010.1080p.WEB: " +
 			"Repair failed, not enough repair blocks (12 short)",

@@ -68,6 +68,16 @@ func TestEvaluateServices(t *testing.T) {
 		if c.Service == 2 && c.Rule == RuleHealth && c.View != "#/storage" {
 			t.Errorf("a mount app's warning leads to %s", c.View)
 		}
+		// The figure that sums a condition up, where it has one.
+		want := map[string]string{"cache/": "95%", "requests/": "2", "down/": ""}
+		for prefix, v := range want {
+			if strings.HasPrefix(c.Key, prefix) && c.Value != v {
+				t.Errorf("%s: value %q, want %q", c.Key, c.Value, v)
+			}
+		}
+		if c.Key == "down/1" && c.Title != "Down is not reachable" {
+			t.Errorf("down title = %q", c.Title)
+		}
 	}
 	for _, s := range []string{"1/down", "2/health", "2/queue", "2/mounts", "3/requests"} {
 		if !known[s] {
@@ -105,6 +115,13 @@ func TestEvaluateHostAndSecurity(t *testing.T) {
 	}
 	if !known["host"] || !known["containers"] || !known["traffic"] || !known["security"] {
 		t.Fatalf("known = %v", known)
+	}
+	var values []string
+	for _, c := range conds {
+		values = append(values, c.Value)
+	}
+	if want := []string{"", "", "95%", "100%", "85%", "1", "", "12"}; !slices.Equal(values, want) {
+		t.Fatalf("values = %q\nwant %q", values, want)
 	}
 
 	in.System.Traffic.Budget.Used = 100

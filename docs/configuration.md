@@ -259,7 +259,7 @@ rules to get links back to it.
 A webhook gets a JSON POST:
 
 ```json
-{"event": "firing", "severity": "critical", "service": "Sonarr", "title": "Sonarr is down",
+{"event": "firing", "severity": "critical", "service": "Sonarr", "title": "Sonarr is not reachable",
  "message": "cannot reach 192.0.2.10:8989: connection refused", "time": "2026-11-26T20:45:19Z",
  "url": "https://observarr.example/#/apps"}
 ```

@@ -48,8 +48,8 @@ type Service struct {
 }
 
 // Item is one thing that needs attention now, as the UI lists it: every condition of every rule, before any
-// debounce, whether its alert is switched on or not. Firing tells whether it is an alert firing now; Since is when
-// the condition began.
+// debounce, whether its alert is switched on or not. Value is the figure that sums it up, if it has one. Firing
+// tells whether it is an alert firing now; Since is when the condition began, known once it fires.
 type Item struct {
 	Key      string    `json:"key"`
 	Rule     Rule      `json:"rule"`
@@ -58,6 +58,7 @@ type Item struct {
 	Name     string    `json:"name"`
 	Title    string    `json:"title"`
 	Message  string    `json:"message"`
+	Value    string    `json:"value,omitempty"`
 	View     string    `json:"view"`
 	Firing   bool      `json:"firing"`
 	Since    time.Time `json:"since"`
@@ -218,7 +219,7 @@ func (s *Service) setAttention(conds []Condition) {
 	for i, c := range conds {
 		f, ok := firing[c.Key]
 		items[i] = Item{Key: c.Key, Rule: c.Rule, Severity: c.Severity, Service: c.Service, Name: c.Name,
-			Title: c.Title, Message: c.Message, View: c.View, Firing: ok, Since: f.Since}
+			Title: c.Title, Message: c.Message, Value: c.Value, View: c.View, Firing: ok, Since: f.Since}
 	}
 	slices.SortStableFunc(items, func(a, b Item) int { return cmp.Compare(rank(a.Severity), rank(b.Severity)) })
 	if s.attention != nil && slices.Equal(items, s.attention) {

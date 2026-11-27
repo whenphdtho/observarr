@@ -38,8 +38,9 @@ const lowDisk = 1 << 30
 // failedWindow is how far back health readings count failed downloads.
 const failedWindow = 24 * time.Hour
 
-// pausedWarning is the warning for a downloader that is paused. Shown under the app's name, it does not repeat it.
-var pausedWarning = shape.Warning{Level: shape.LevelWarning, Message: "downloads are paused"}
+// pausedWarning is the note for a downloader that is paused: a state someone chose, not a problem, so it is only
+// information. Shown under the app's name, it does not repeat it.
+var pausedWarning = shape.Warning{Level: shape.LevelInfo, Message: "downloads are paused"}
 
 // diskWarning warns when free bytes, as an app reports them for its download folders, are below lowDisk.
 func diskWarning(free int64) (shape.Warning, bool) {
