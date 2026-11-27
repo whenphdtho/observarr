@@ -87,8 +87,8 @@ func TestEvaluateServices(t *testing.T) {
 		"Busy: indexer unavailable | IndexerCheck: indexer unavailable",
 		"Busy: cache is full | media:: cache out of space",
 		"Busy: a download is stuck | Big Buck Bunny: no files found are eligible for import",
-		"Busy: backup: is not mounted | backup:: not mounted",
-		"Busy: cache nearly full | cache:: 95% of its limit used",
+		"Busy: backup is not mounted | backup: not mounted",
+		"Busy: cache nearly full | cache: 95% of its limit used",
 	} {
 		if !slices.Contains(titles, want) {
 			t.Errorf("no condition reads %q in:\n%s", want, strings.Join(titles, "\n"))
@@ -107,6 +107,73 @@ func TestEvaluateServices(t *testing.T) {
 	conds, _ = Evaluate(in, r)
 	if n := len(conds); n != 5 {
 		t.Errorf("with downloads and requests off: %q", keysOf(conds))
+	}
+}
+
+func healthOf(ws ...shape.Warning) map[shape.Kind]shape.Reading {
+	return map[shape.Kind]shape.Reading{shape.KindHealth: {Data: shape.Health{Warnings: ws}}}
+}
+
+// A warning keeps its key whatever else the app reports and whatever figure its text holds: the key comes from
+// the id the adapter gives it, not from its place in the list.
+func TestWarningKeysDoNotDependOnTheirNeighbours(t *testing.T) {
+	disk := shape.Warning{Level: shape.LevelWarning, ID: "disk", Message: "disk space low: 0.3 GiB free for downloads"}
+	failed := shape.Warning{Level: shape.LevelWarning, ID: "failed", Message: "2 downloads failed in the last day"}
+	line := shape.Warning{Level: shape.LevelWarning, Message: "Server news.example.com uses an untrusted certificate"}
+	keys := func(ws ...shape.Warning) map[string]string {
+		conds, _ := Evaluate(Input{Now: t0, Services: []state.ServiceState{svc(1, "Getter", true, healthOf(ws...))}}, DefaultRules())
+		out := map[string]string{}
+		for _, c := range conds {
+			out[c.Message] = c.Key
+		}
+		return out
+	}
+	all := keys(disk, failed, line)
+	if len(all) != 3 || all[disk.Message] == all[failed.Message] || strings.Contains(all[disk.Message]+all[failed.Message]+all[line.Message], "#") {
+		t.Fatalf("keys = %v: want three keys of their own, none told apart by its place", all)
+	}
+	for _, alone := range []shape.Warning{disk, failed, line} {
+		if got := keys(alone)[alone.Message]; got != all[alone.Message] {
+			t.Errorf("%q alone has key %q, among the others %q", alone.Message, got, all[alone.Message])
+		}
+	}
+	more := failed
+	more.Message = "3 downloads failed in the last day"
+	if got := keys(more)[more.Message]; got != all[failed.Message] {
+		t.Errorf("a changed count changed the key: %q, was %q", got, all[failed.Message])
+	}
+}
+
+// Two stuck downloads of one title are two conditions, keyed by the app's ids of them where it gives any.
+func TestStuckDownloadsAreKeyedByTheirIDs(t *testing.T) {
+	queue := func(items ...shape.QueueItem) []Condition {
+		conds, _ := Evaluate(Input{Now: t0, Services: []state.ServiceState{svc(1, "Getter", true,
+			map[shape.Kind]shape.Reading{shape.KindQueue: {Data: shape.Queue{Items: items}}}, shape.KindQueue)}}, DefaultRules())
+		return conds
+	}
+	a := shape.QueueItem{ID: "7", Title: "Sintel", Status: "warning", Problem: "stalled"}
+	b := shape.QueueItem{ID: "9", Title: "Sintel", Status: "warning", Problem: "no files"}
+	both := queue(a, b)
+	if len(both) != 2 || both[0].Key == both[1].Key || strings.Contains(both[0].Key+both[1].Key, "#") {
+		t.Fatalf("keys = %q", keysOf(both))
+	}
+	if only := queue(b); len(only) != 1 || only[0].Key != both[1].Key {
+		t.Fatalf("the second one alone = %q, with the first %q", keysOf(only), both[1].Key)
+	}
+}
+
+// An app that says nothing about a warning still gets a title.
+func TestWarningWithoutWordsIsStillNamed(t *testing.T) {
+	conds, _ := Evaluate(Input{Now: t0, Services: []state.ServiceState{svc(1, "Getter", true,
+		healthOf(shape.Warning{Level: shape.LevelWarning, Source: "OddCheck", ID: "OddCheck"},
+			shape.Warning{Level: shape.LevelError, Source: "IndexerSearchCheck", ID: "IndexerSearchCheck", Title: "automatic search is off", Message: "No indexers"}))}},
+		DefaultRules())
+	if len(conds) != 2 || conds[0].Title != "Getter reports a problem" || conds[0].Detail != "" {
+		t.Fatalf("conditions = %+v", conds)
+	}
+	// The line to show leaves the check's name out; the message keeps it.
+	if c := conds[1]; c.Title != "Getter: automatic search is off" || c.Message != "IndexerSearchCheck: No indexers" || c.Detail != "No indexers" {
+		t.Fatalf("condition = %+v", c)
 	}
 }
 
@@ -171,12 +238,12 @@ func TestEvaluateHostAndSecurity(t *testing.T) {
 	}
 }
 
-// A health warning keeps its key while its text changes (a count that goes up is the same problem), and two
-// warnings alike in every way stay two conditions.
+// A health warning with an id keeps its key while its text changes (a count that goes up is the same problem), and
+// two warnings alike in every way stay two conditions.
 func TestConditionKeys(t *testing.T) {
 	read := func(n int) []Condition {
 		health := shape.Health{Warnings: []shape.Warning{
-			{Level: shape.LevelWarning, Message: strconv.Itoa(n) + " requests waiting for approval"},
+			{Level: shape.LevelWarning, ID: "pending", Message: strconv.Itoa(n) + " requests waiting for approval"},
 			{Level: shape.LevelWarning, Message: "a request failed"},
 			{Level: shape.LevelError, Message: "a request failed"},
 		}}

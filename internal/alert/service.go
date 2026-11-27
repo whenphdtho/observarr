@@ -62,6 +62,7 @@ type Item struct {
 	Name     string   `json:"name"`
 	Title    string   `json:"title"`
 	Message  string   `json:"message"`
+	Detail   string   `json:"detail,omitempty"` // the line to show: the message without a check's name; left out when the same
 	Value    string   `json:"value,omitempty"`
 	View     string   `json:"view"`
 	Firing   bool     `json:"firing"`
@@ -210,6 +211,10 @@ func (s *Service) evaluate(ctx context.Context) {
 	logged := s.overrun
 	s.overrun = overflow
 	s.setAttention(all)
+	// Under the lock: a mute set again for one of these keys meanwhile would else be removed with the ended one.
+	if err := s.cfg.Store.DeleteAlertMutes(ctx, ended...); err != nil && ctx.Err() == nil {
+		s.cfg.Log.Warn("removing ended mutes failed", "err", err)
+	}
 	s.mu.Unlock()
 	if overflow > logged {
 		s.cfg.Log.Warn("too many alert conditions at once; some are ignored", "ignored", overflow-logged)
@@ -217,9 +222,6 @@ func (s *Service) evaluate(ctx context.Context) {
 
 	if err := s.save(ctx, put, del); err != nil && ctx.Err() == nil {
 		s.cfg.Log.Warn("saving the alert state failed", "err", err)
-	}
-	if err := s.cfg.Store.DeleteAlertMutes(ctx, ended...); err != nil && ctx.Err() == nil {
-		s.cfg.Log.Warn("removing ended mutes failed", "err", err)
 	}
 	for _, n := range notes {
 		s.dispatch(ctx, now, n.Rule, Message{Event: n.Event, Rule: n.Rule, Severity: n.Severity, Name: n.Name,
@@ -240,7 +242,7 @@ func (s *Service) setAttention(conds []Condition) {
 	for i, c := range conds {
 		f, ok := firing[c.Key]
 		items[i] = Item{Key: c.Key, Rule: c.Rule, Severity: c.Severity, Service: c.Service, Name: c.Name,
-			Title: c.Title, Message: c.Message, Value: c.Value, View: c.View, Firing: ok, Since: f.Since}
+			Title: c.Title, Message: c.Message, Detail: c.Detail, Value: c.Value, View: c.View, Firing: ok, Since: f.Since}
 		if m := s.mutes[c.Key]; m != nil {
 			items[i].MutedUntil = m.until
 		}

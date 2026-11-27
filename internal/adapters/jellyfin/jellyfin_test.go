@@ -179,7 +179,7 @@ func TestProbeHealth(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := got.(shape.Health)
-	want := []shape.Warning{{Level: shape.LevelWarning, Message: "a restart is pending to apply changes"}}
+	want := []shape.Warning{{Level: shape.LevelWarning, ID: "restart", Message: "a restart is pending to apply changes"}}
 	if h.Version != "10.11.3" || !reflect.DeepEqual(h.Warnings, want) {
 		t.Errorf("health = %+v", h)
 	}

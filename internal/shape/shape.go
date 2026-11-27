@@ -31,6 +31,9 @@ type Warning struct {
 	// Title names the problem in a few plain words that follow the app's name ("automatic search is off"), where
 	// the adapter knows the check; left out otherwise, and the message's first words serve.
 	Title string `json:"title,omitempty"`
+	// ID tells this warning from the app's others for as long as the problem lasts, whatever its text says then
+	// ("disk", "failed", a check's name). Left out for a line the app wrote itself, which is its own identity.
+	ID string `json:"id,omitempty"`
 }
 
 // Health is filled by every adapter.
@@ -42,6 +45,7 @@ type Health struct {
 
 // QueueItem is one download/import in progress.
 type QueueItem struct {
+	ID        string  `json:"id,omitempty"` // the app's own id of the item, if it has one: two may share a title
 	Title     string  `json:"title"`
 	Status    string  `json:"status"`   // app's status, lower case (downloading, queued, completed, …)
 	Progress  float64 `json:"progress"` // 0..1

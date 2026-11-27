@@ -230,6 +230,7 @@ func (s nzbStatus) speed() int64 {
 
 // nzbGroup is the relevant subset of one listgroups item.
 type nzbGroup struct {
+	NZBID           int64
 	NZBName         string
 	Status          string
 	FileSizeLo      uint32
@@ -240,6 +241,14 @@ type nzbGroup struct {
 	PausedSizeHi    uint32
 	Health          int
 	CriticalHealth  int
+}
+
+// nzbID is an item's id as text, "" for none.
+func nzbID(id int64) string {
+	if id <= 0 {
+		return ""
+	}
+	return strconv.FormatInt(id, 10)
 }
 
 // nzbStatusWords names NZBGet's queue states that do not read well as they are, lower case with spaces.
@@ -274,6 +283,7 @@ func probeNZBQueue(ctx context.Context, t adapter.Target) (any, error) {
 			size, left := join(g.FileSizeHi, g.FileSizeLo), join(g.RemainingSizeHi, g.RemainingSizeLo)
 			item := shape.QueueItem{
 				Title:     shape.Clip(g.NZBName),
+				ID:        nzbID(g.NZBID),
 				Status:    shape.Clip(nzbStatusWord(g.Status)),
 				Progress:  progress(float64(size), float64(left)),
 				SizeBytes: size,
@@ -368,7 +378,7 @@ func probeNZBHealth(ctx context.Context, t adapter.Target) (any, error) {
 		h.Warnings = append(h.Warnings, pausedWarning)
 	}
 	if st.QuotaReached {
-		h.Warnings = append(h.Warnings, shape.Warning{Level: shape.LevelWarning,
+		h.Warnings = append(h.Warnings, shape.Warning{Level: shape.LevelWarning, ID: "quota",
 			Message: "the download quota is reached"})
 	}
 	if w, ok := diskWarning(join(st.FreeDiskSpaceHi, st.FreeDiskSpaceLo)); ok {

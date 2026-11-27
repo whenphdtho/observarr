@@ -3,10 +3,13 @@ package alert
 import (
 	"context"
 	"errors"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"observarr/internal/collect"
+	"observarr/internal/shape"
 	"observarr/internal/store"
 	"observarr/internal/system"
 )
@@ -90,11 +93,11 @@ func TestUnmuteReportsAtOnce(t *testing.T) {
 	if _, err := e.alert.Mute(ctx, "down/1", 8*time.Hour, "alex"); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.alert.Unmute(ctx, "down/1"); err != nil {
-		t.Fatal(err)
+	if was, err := e.alert.Unmute(ctx, "down/1"); err != nil || !was {
+		t.Fatal(was, err)
 	}
-	if err := e.alert.Unmute(ctx, "down/1"); err != nil { // no mute: nothing to do
-		t.Fatal(err)
+	if was, err := e.alert.Unmute(ctx, "down/1"); err != nil || was { // no mute: nothing to do, and it says so
+		t.Fatal(was, err)
 	}
 	if it := e.item("down/1"); !it.MutedUntil.IsZero() || e.savedMutes() != 0 {
 		t.Fatalf("after unmuting: %+v", it)
@@ -230,6 +233,148 @@ func TestMutingAConditionWhoseRuleIsOff(t *testing.T) {
 	}
 }
 
+// One good reading is not the end: the app answers once and is gone again, and it is still muted, with nothing
+// sent. Only a condition gone for resolveAfter ends its mute.
+func TestAFlapKeepsTheMute(t *testing.T) {
+	e := newEnv(t)
+	e.start(quick())
+	e.down(1)
+	e.eval(0)
+	until, err := e.alert.Mute(context.Background(), "down/1", time.Hour, "alex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.up(1)
+	e.eval(5 * time.Second)
+	if e.savedMutes() != 1 {
+		t.Fatal("one good reading ended the mute")
+	}
+	e.down(1)
+	e.eval(10 * time.Second)
+	e.eval(5 * time.Minute)
+	if it := e.item("down/1"); !it.MutedUntil.Equal(until) || !it.Firing {
+		t.Fatalf("after the flap: %+v, want it still muted and the same alert", it)
+	}
+	if got := e.events(); len(got) != 1 {
+		t.Fatalf("sent = %q, want only the first report", got)
+	}
+	// Several short gaps do not add up to an end either.
+	for range 4 {
+		e.up(1)
+		e.eval(40 * time.Second)
+		e.down(1)
+		e.eval(5 * time.Second)
+	}
+	if got := e.events(); len(got) != 1 || e.savedMutes() != 1 {
+		t.Fatalf("sent = %q, %d mutes saved", got, e.savedMutes())
+	}
+}
+
+// A mute that ends while its alert is still firing says so once, as the documentation promises.
+func TestMuteEndingOnAFiringAlertReportsItOnce(t *testing.T) {
+	e := newEnv(t)
+	e.start(quick())
+	e.down(1)
+	e.eval(0)
+	if _, err := e.alert.Mute(context.Background(), "down/1", time.Hour, "alex"); err != nil {
+		t.Fatal(err)
+	}
+	e.eval(59 * time.Minute)
+	if got := e.events(); len(got) != 1 {
+		t.Fatalf("sent while muted: %q", got)
+	}
+	e.eval(2 * time.Minute)
+	e.eval(time.Minute)
+	e.eval(time.Hour)
+	want := []string{"repeat critical Sintel is not reachable", "firing critical Sintel is not reachable"}
+	if got := e.events(); !slices.Equal(got, want) {
+		t.Fatalf("sent = %q, want one reminder after the mute", got)
+	}
+	// Unmuting by hand needs no reminder: whoever did it has just seen it.
+	if _, err := e.alert.Mute(context.Background(), "down/1", time.Hour, "alex"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.alert.Unmute(context.Background(), "down/1"); err != nil {
+		t.Fatal(err)
+	}
+	e.eval(time.Minute)
+	if got := e.events(); len(got) != 2 {
+		t.Fatalf("sent after unmuting by hand: %q", got)
+	}
+}
+
+func (e *env) warn(id int64, ws ...shape.Warning) {
+	e.hub.Record(id, shape.KindHealth, shape.Reading{Data: shape.Health{Warnings: ws}})
+}
+
+// A mute stays with its problem: when the muted warning ends, another warning of the same app is not muted in
+// its place, whichever of the two came first.
+func TestMuteDoesNotSlideToAnotherWarning(t *testing.T) {
+	disk := shape.Warning{Level: shape.LevelWarning, ID: "disk", Message: "disk space low: 0.3 GiB free for downloads"}
+	failed := shape.Warning{Level: shape.LevelWarning, ID: "failed", Message: "2 downloads failed in the last day"}
+	for _, c := range []struct {
+		name          string
+		muted, other  shape.Warning
+		first, second shape.Warning
+	}{
+		{"the first of two", disk, failed, disk, failed},
+		{"the second of two", failed, disk, disk, failed},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newEnv(t)
+			e.start(quick())
+			e.warn(1, c.first, c.second)
+			e.eval(0)
+			keys := map[string]string{}
+			for _, it := range e.alert.Attention() {
+				keys[strings.TrimPrefix(it.Message, "")] = it.Key
+			}
+			mutedKey, otherKey := keys[c.muted.Message], keys[c.other.Message]
+			if mutedKey == "" || otherKey == "" || mutedKey == otherKey {
+				t.Fatalf("keys = %v", keys)
+			}
+			if _, err := e.alert.Mute(context.Background(), mutedKey, 24*time.Hour, "alex"); err != nil {
+				t.Fatal(err)
+			}
+			// The muted one ends; the other goes on.
+			e.warn(1, c.other)
+			e.eval(time.Minute)
+			e.eval(2 * time.Minute)
+			items := e.alert.Attention()
+			if len(items) != 1 || items[0].Key != otherKey || !items[0].MutedUntil.IsZero() {
+				t.Fatalf("attention = %+v, want the other warning under its own key, not muted", items)
+			}
+			if e.savedMutes() != 0 {
+				t.Fatal("the mute outlived its problem")
+			}
+		})
+	}
+}
+
+// Should a key ever come to stand for another problem (two alike conditions are told apart by their order), the
+// mute does not go with it.
+func TestMuteEndsWhenItsKeyStandsForAnotherProblem(t *testing.T) {
+	e := newEnv(t)
+	e.start(quick())
+	a := Condition{Key: "download/1/x", Rule: RuleDownloads, Severity: Warning, Scope: "1/queue", Service: 1, Ident: "7\x00Sintel", Title: "a"}
+	b := a
+	b.Ident = "9\x00Sintel"
+	e.alert.mu.Lock()
+	e.alert.setAttention([]Condition{a})
+	e.alert.mu.Unlock()
+	if _, err := e.alert.Mute(context.Background(), a.Key, time.Hour, "alex"); err != nil {
+		t.Fatal(err)
+	}
+	e.alert.mu.Lock()
+	defer e.alert.mu.Unlock()
+	if ended, _ := e.alert.settleMutes(e.clock(), []Condition{a}, map[string]bool{"1/queue": true}); len(ended) != 0 {
+		t.Fatalf("the same problem ended its mute: %q", ended)
+	}
+	if ended, _ := e.alert.settleMutes(e.clock(), []Condition{b}, map[string]bool{"1/queue": true}); len(ended) != 1 || len(e.alert.mutes) != 0 {
+		t.Fatalf("another problem under the key kept the mute: ended %q", ended)
+	}
+}
+
 func TestMuteSurvivesARestart(t *testing.T) {
 	e := newEnv(t)
 	e.start(quick())
@@ -240,7 +385,7 @@ func TestMuteSurvivesARestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := e.st.SetAlertMute(context.Background(), store.AlertMute{Key: "down/9", Until: e.clock().Add(-time.Minute), Severity: "critical", CreatedBy: "alex"}); err != nil {
+	if err := e.st.SetAlertMute(context.Background(), store.AlertMute{Key: "down/9", Until: e.clock().Add(-time.Minute), Severity: "critical", CreatedBy: "alex"}, e.clock()); err != nil {
 		t.Fatal(err)
 	}
 	e.stop()
@@ -267,8 +412,9 @@ func TestMuteSurvivesARestart(t *testing.T) {
 	if len(repeats) != 1 || repeats[0] != "repeat critical Caminandes is not reachable" {
 		t.Fatalf("repeats = %q", repeats)
 	}
-	// A mute whose condition never shows again after a start is dropped once the data has come in.
+	// Its condition is over: once that has lasted, the mute goes.
 	e.up(1)
+	e.eval(2 * time.Minute)
 	e.eval(2 * time.Minute)
 	if n := e.savedMutes(); n != 1 { // the ended one of down/9 is left to upkeep
 		t.Fatalf("%d mutes saved", n)

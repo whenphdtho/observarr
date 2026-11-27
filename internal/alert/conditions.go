@@ -26,8 +26,14 @@ type Condition struct {
 	Name     string   `json:"name"`              // what it is about, e.g. the service's name; "" for none
 	Title    string   `json:"title"`
 	Message  string   `json:"message"`
-	Value    string   `json:"value,omitempty"` // the figure that sums it up, e.g. "92%" or "3"; "" for none
-	View     string   `json:"view"`            // the UI view showing the details, e.g. "#/apps"
+	// Detail is the message as a line to show under the title: without the name of the app's check, which only
+	// the app's own pages explain. Left out when it is the message.
+	Detail string `json:"detail,omitempty"`
+	// Ident tells the problem from another that may come to have the same key (two alike conditions share a base
+	// key and are told apart by their order); "" when the key alone says what it is. A mute keeps it.
+	Ident string `json:"ident,omitempty"`
+	Value string `json:"value,omitempty"` // the figure that sums it up, e.g. "92%" or "3"; "" for none
+	View  string `json:"view"`            // the UI view showing the details, e.g. "#/apps"
 }
 
 // Input is everything conditions are read from.
@@ -130,15 +136,24 @@ func (e *evaluation) service(svc *state.ServiceState) {
 			if w.Level == shape.LevelError {
 				sev = Critical
 			}
-			msg := w.Message
+			msg, detail := w.Message, ""
 			if w.Source != "" {
 				msg = w.Source + ": " + w.Message
+				if w.Source == w.ID {
+					detail = w.Message // the source is only the check's name
+				}
 			}
-			// The key names the warning by where it comes from, not by its text: a figure in it that changes is
-			// still the same problem, sent once.
-			e.add(Condition{Key: "health/" + strconv.FormatInt(id, 10) + "/" + digest(w.Source) + "/" + string(w.Level),
+			title := svc.Name + " reports a problem"
+			if what := cmp.Or(w.Title, brief(w.Message)); what != "" {
+				title = svc.Name + ": " + what
+			}
+			// The key names the warning by what it is, not by its text: a figure in it that changes is still the
+			// same problem, sent once. That is the id the adapter gives it, else where it comes from, else (a line
+			// the app wrote itself) the line.
+			what := cmp.Or(w.ID, w.Source, w.Message)
+			e.add(Condition{Key: "health/" + strconv.FormatInt(id, 10) + "/" + digest(what) + "/" + string(w.Level),
 				Rule: RuleHealth, Severity: sev, Scope: scope(id, "health"), Service: id, Name: svc.Name,
-				Title: svc.Name + ": " + cmp.Or(w.Title, brief(w.Message)), Message: msg, View: view})
+				Title: title, Message: msg, Detail: detail, Ident: cmp.Or(w.ID, w.Source+"\x00"+brief(w.Message)), View: view})
 		}
 	}
 
@@ -148,10 +163,12 @@ func (e *evaluation) service(svc *state.ServiceState) {
 			if it.Problem == "" && it.Status != "failed" && it.Status != "warning" {
 				continue
 			}
-			e.add(Condition{Key: "download/" + strconv.FormatInt(id, 10) + "/" + digest(it.Title),
+			// By the app's own id of the item where it has one: two downloads may share a title.
+			what := cmp.Or(it.ID, it.Title)
+			e.add(Condition{Key: "download/" + strconv.FormatInt(id, 10) + "/" + digest(what),
 				Rule: RuleDownloads, Severity: Warning, Scope: scope(id, "queue"), Service: id, Name: svc.Name,
 				Title: svc.Name + ": a download is stuck", Message: it.Title + ": " + cmp.Or(it.Problem, it.Status),
-				View: "#/apps"})
+				Ident: what + "\x00" + it.Title, View: "#/apps"})
 		}
 	}
 
@@ -190,10 +207,12 @@ func (e *evaluation) mount(svc *state.ServiceState, m shape.Mount, warned []stri
 	if slices.Contains(warned, strings.TrimSuffix(m.Remote, ":")) {
 		return
 	}
+	// A whole remote is written "name:"; in a sentence the colon goes.
+	name := strings.TrimSuffix(m.Remote, ":")
 	var problem, title string
 	switch {
 	case m.State == shape.MountUnmounted:
-		problem, title = "not mounted", m.Remote+" is not mounted"
+		problem, title = "not mounted", name+" is not mounted"
 	case m.OutOfSpace:
 		problem, title = "cache out of space", "cache is full"
 	case m.ErroredFiles > 0:
@@ -203,7 +222,7 @@ func (e *evaluation) mount(svc *state.ServiceState, m shape.Mount, warned []stri
 	key := strconv.FormatInt(svc.ID, 10) + "/" + digest(m.Remote)
 	if problem != "" {
 		e.add(Condition{Key: "mount/" + key, Rule: RuleStorage, Severity: Critical, Scope: scope(svc.ID, "mounts"),
-			Service: svc.ID, Name: svc.Name, Title: svc.Name + ": " + title, Message: m.Remote + ": " + problem,
+			Service: svc.ID, Name: svc.Name, Title: svc.Name + ": " + title, Message: name + ": " + problem,
 			View: "#/storage"})
 		return
 	}
@@ -211,7 +230,7 @@ func (e *evaluation) mount(svc *state.ServiceState, m shape.Mount, warned []stri
 		if pct := percent(m.CacheUsedBytes, m.CacheMaxBytes); pct >= e.rules.FullPercent {
 			e.add(Condition{Key: "cache/" + key, Rule: RuleStorage, Severity: Warning, Scope: scope(svc.ID, "mounts"),
 				Service: svc.ID, Name: svc.Name, Title: svc.Name + ": cache nearly full",
-				Message: fmt.Sprintf("%s: %d%% of its limit used", m.Remote, pct), Value: strconv.Itoa(pct) + "%", View: "#/storage"})
+				Message: fmt.Sprintf("%s: %d%% of its limit used", name, pct), Value: strconv.Itoa(pct) + "%", View: "#/storage"})
 		}
 	}
 }

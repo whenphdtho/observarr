@@ -153,14 +153,14 @@ func TestNZBQueue(t *testing.T) {
 	}
 	want := []shape.QueueItem{
 		// 6 GiB at 4 MiB/s: 1536 s.
-		{Title: "Tears.of.Steel.2012.2160p.WEB", Status: "downloading", Progress: 0.25, SizeBytes: 8 << 30,
+		{ID: "1", Title: "Tears.of.Steel.2012.2160p.WEB", Status: "downloading", Progress: 0.25, SizeBytes: 8 << 30,
 			LeftBytes: 6 << 30, ETA: "0:25:36"},
 		// Then 1 GiB less 128 MiB of paused repair files: 1760 s in all.
-		{Title: "Pepper.and.Carrot.S01E05.1080p.WEB", Status: "queued", Progress: 0, SizeBytes: 1 << 30,
+		{ID: "1", Title: "Pepper.and.Carrot.S01E05.1080p.WEB", Status: "queued", Progress: 0, SizeBytes: 1 << 30,
 			LeftBytes: 1 << 30, ETA: "0:29:20"},
-		{Title: "Caminandes.Gran.Dillama.2013.1080p.WEB", Status: "paused", Progress: 0, SizeBytes: 512 << 20,
+		{ID: "1", Title: "Caminandes.Gran.Dillama.2013.1080p.WEB", Status: "paused", Progress: 0, SizeBytes: 512 << 20,
 			LeftBytes: 512 << 20},
-		{Title: "Sintel.2010.1080p.WEB", Status: "waiting", Progress: 1, SizeBytes: 2 << 30,
+		{ID: "1", Title: "Sintel.2010.1080p.WEB", Status: "waiting", Progress: 1, SizeBytes: 2 << 30,
 			Problem: "too many articles are missing to repair it"},
 	}
 	if !slices.Equal(q.Items, want) {

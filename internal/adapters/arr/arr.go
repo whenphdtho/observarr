@@ -189,6 +189,7 @@ func (a arrAdapter) probeHealth(ctx context.Context, t adapter.Target) (any, err
 				Message: shape.Clip(c.Message),
 				Source:  shape.Clip(c.Source),
 				Title:   checkTitles[c.Source],
+				ID:      shape.Clip(c.Source),
 			})
 		})
 		return err
@@ -213,6 +214,7 @@ type queueStatusMessage struct {
 // (not int64) because some apps report them with a fractional part; a value like "size": 100.0
 // must not fail the whole queue.
 type queueRecord struct {
+	ID                    json.Number          `json:"id"`
 	Title                 string               `json:"title"`
 	Status                string               `json:"status"`
 	Size                  float64              `json:"size"`
@@ -243,6 +245,7 @@ func mapQueueItem(r queueRecord) shape.QueueItem {
 	}
 
 	return shape.QueueItem{
+		ID:        shape.Clip(r.ID.String()),
 		Title:     shape.Clip(r.Title),
 		Status:    shape.Clip(strings.ToLower(r.Status)),
 		Progress:  progress,

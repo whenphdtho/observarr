@@ -20,10 +20,15 @@ func TestUpkeepRemovesEndedMutes(t *testing.T) {
 	}
 	defer st.Close()
 	ctx, cancel := context.WithCancel(context.Background())
-	for key, until := range map[string]time.Time{"down/1": time.Now().Add(-time.Minute), "down/2": time.Now().Add(time.Hour)} {
-		if err := st.SetAlertMute(ctx, store.AlertMute{Key: key, Until: until, Severity: "critical", CreatedBy: "alex"}); err != nil {
+	// The one that has ended is saved last: saving a mute clears the others that ended, and this is about upkeep.
+	now := time.Now()
+	for _, m := range []store.AlertMute{{Key: "down/2", Until: now.Add(time.Hour)}, {Key: "down/1", Until: now.Add(-time.Minute)}} {
+		if err := st.SetAlertMute(ctx, m, now); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if mutes, _ := st.AlertMutes(ctx); len(mutes) != 2 {
+		t.Fatalf("before upkeep: %+v", mutes)
 	}
 	done := make(chan struct{})
 	go func() {

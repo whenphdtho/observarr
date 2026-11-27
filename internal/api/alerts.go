@@ -362,15 +362,17 @@ func (s *Server) muteAlert(w http.ResponseWriter, r *http.Request, sess store.Se
 	writeJSON(w, http.StatusOK, map[string]any{"key": in.Key, "mutedUntil": until})
 }
 
-// unmuteAlert ends the mute of the key in the path; without one it changes nothing.
+// unmuteAlert ends the mute of ?key=. A key is free text (a path, a "#1"), so it travels as a query value, not as
+// part of the path. Without such a mute it is a 404 and nothing is noted.
 func (s *Server) unmuteAlert(w http.ResponseWriter, r *http.Request, sess store.Session) {
-	key := r.PathValue("key")
-	if key == "" {
-		writeError(w, http.StatusNotFound, "unknown API endpoint")
+	key := r.URL.Query().Get("key")
+	was, err := s.Alerts.Unmute(r.Context(), key)
+	if err != nil {
+		s.internal(w, r, err)
 		return
 	}
-	if err := s.Alerts.Unmute(r.Context(), key); err != nil {
-		s.internal(w, r, err)
+	if !was {
+		writeError(w, http.StatusNotFound, "nothing with this key is muted")
 		return
 	}
 	s.audit(r, sess.UserName, "unmuted alert", key)

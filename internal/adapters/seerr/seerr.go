@@ -172,21 +172,22 @@ func probeHealth(ctx context.Context, t adapter.Target) (any, error) {
 		return nil, err
 	}
 	h := shape.Health{Version: s.Version, LatencyMS: latency.Milliseconds(), Warnings: []shape.Warning{}}
-	warn := func(level shape.Level, msg string) {
-		h.Warnings = append(h.Warnings, shape.Warning{Level: level, Message: msg})
+	// Each warning has an id of its own: its text may count ("2 requests failed"), its identity does not.
+	warn := func(level shape.Level, id, msg string) {
+		h.Warnings = append(h.Warnings, shape.Warning{Level: level, ID: id, Message: msg})
 	}
 	if *s.RestartRequired {
-		warn(shape.LevelWarning, "a restart is needed to apply changed settings")
+		warn(shape.LevelWarning, "restart", "a restart is needed to apply changed settings")
 	}
 	if s.UpdateAvailable {
-		warn(shape.LevelInfo, "an update is available")
+		warn(shape.LevelInfo, "update", "an update is available")
 	}
 	var appData struct {
 		AppData *bool `json:"appData"`
 	}
 	if err := adapter.GetJSON(ctx, t, pathAppData, "", &appData); err == nil && appData.AppData != nil &&
 		!*appData.AppData {
-		warn(shape.LevelWarning, "the settings are not on a mounted volume: recreating the container loses them")
+		warn(shape.LevelWarning, "appdata", "the settings are not on a mounted volume: recreating the container loses them")
 	}
 	c, err := fetchCounts(ctx, t)
 	switch {
@@ -195,14 +196,14 @@ func probeHealth(ctx context.Context, t adapter.Target) (any, error) {
 			return nil, ctx.Err()
 		}
 		phrase, _ := adapter.Describe(err)
-		warn(shape.LevelWarning, strings.TrimSuffix("the requests cannot be read: "+phrase, ": "))
+		warn(shape.LevelWarning, "requests", strings.TrimSuffix("the requests cannot be read: "+phrase, ": "))
 	default:
 		if c.Pending > 0 {
 			// Someone waits, nothing is wrong: information, not a warning.
-			warn(shape.LevelInfo, plural(c.Pending, "request")+" waiting for approval")
+			warn(shape.LevelInfo, "pending", plural(c.Pending, "request")+" waiting for approval")
 		}
 		if c.Failed > 0 {
-			warn(shape.LevelWarning, plural(c.Failed, "request")+" failed")
+			warn(shape.LevelWarning, "failed", plural(c.Failed, "request")+" failed")
 		}
 	}
 	return h, nil

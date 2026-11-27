@@ -50,6 +50,7 @@ type entry struct {
 	notified    time.Time // last sent; zero when never
 	notifiedSev Severity  // the severity last sent: only a worse one is sent again before the repeat interval
 	restored    bool      // it was firing before this start
+	remind      bool      // its mute ended while it was firing: it is sent once more
 }
 
 // Engine decides, from one evaluation to the next, which conditions are reported, repeated and over. It holds
@@ -107,7 +108,8 @@ func (e *Engine) Step(now time.Time, r Rules, conds []Condition, known map[strin
 		case worse:
 			en.notified, en.notifiedSev = now, c.Severity
 			notes = append(notes, Note{Event: EventFiring, Condition: c, Since: en.since})
-		case en.firing && r.RepeatHours > 0 && now.Sub(en.notified) >= time.Duration(r.RepeatHours)*time.Hour:
+		case en.firing && (en.remind || r.RepeatHours > 0 && now.Sub(en.notified) >= time.Duration(r.RepeatHours)*time.Hour):
+			en.remind = false
 			en.notified, en.notifiedSev = now, c.Severity
 			notes = append(notes, Note{Event: EventRepeat, Condition: c, Since: en.since})
 		case !changed || !en.firing:
@@ -129,6 +131,8 @@ func (e *Engine) Step(now time.Time, r Rules, conds []Condition, known map[strin
 			// A blip that never lasted its debounce.
 		case en.Rule == RuleTraffic:
 			// The period ended: there is nothing to recover from.
+		case e.Muted[key]:
+			continue // its mute decides when it is over, and then it goes without a word (see Forget)
 		default:
 			if en.gone.IsZero() {
 				en.gone = now
@@ -147,6 +151,14 @@ func (e *Engine) Step(now time.Time, r Rules, conds []Condition, known map[strin
 		return cmp.Or(cmp.Compare(rank(a.Severity), rank(b.Severity)), cmp.Compare(a.Key, b.Key))
 	})
 	return notes, put, del
+}
+
+// Remind has the firing alert with key sent once more at the next step, as when its mute has ended and it is
+// still there. One that has not fired yet needs no reminder: it fires then.
+func (e *Engine) Remind(key string) {
+	if en, ok := e.entries[key]; ok && en.firing {
+		en.remind = true
+	}
 }
 
 // Forget stops following the condition with key without a word, as for one whose mute outlived it, and reports

@@ -200,14 +200,14 @@ func probeHealth(ctx context.Context, t adapter.Target) (any, error) {
 	}
 	h := shape.Health{Version: shape.Clip(s.Version), LatencyMS: latency.Milliseconds(), Warnings: []shape.Warning{}}
 	if s.IsShuttingDown {
-		h.Warnings = append(h.Warnings, shape.Warning{Level: shape.LevelWarning, Message: "the server is shutting down"})
+		h.Warnings = append(h.Warnings, shape.Warning{Level: shape.LevelWarning, ID: "shutdown", Message: "the server is shutting down"})
 	}
 	if s.HasPendingRestart {
-		h.Warnings = append(h.Warnings, shape.Warning{Level: shape.LevelWarning,
+		h.Warnings = append(h.Warnings, shape.Warning{Level: shape.LevelWarning, ID: "restart",
 			Message: "a restart is pending to apply changes"})
 	}
 	if s.HasUpdateAvailable {
-		h.Warnings = append(h.Warnings, shape.Warning{Level: shape.LevelInfo, Message: "a new version is available"})
+		h.Warnings = append(h.Warnings, shape.Warning{Level: shape.LevelInfo, ID: "update", Message: "a new version is available"})
 	}
 	return h, nil
 }

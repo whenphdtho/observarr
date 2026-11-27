@@ -40,14 +40,14 @@ const failedWindow = 24 * time.Hour
 
 // pausedWarning is the note for a downloader that is paused: a state someone chose, not a problem, so it is only
 // information. Shown under the app's name, it does not repeat it.
-var pausedWarning = shape.Warning{Level: shape.LevelInfo, Message: "downloads are paused"}
+var pausedWarning = shape.Warning{Level: shape.LevelInfo, ID: "paused", Message: "downloads are paused"}
 
 // diskWarning warns when free bytes, as an app reports them for its download folders, are below lowDisk.
 func diskWarning(free int64) (shape.Warning, bool) {
 	if free < 0 || free >= lowDisk {
 		return shape.Warning{}, false
 	}
-	return shape.Warning{Level: shape.LevelWarning, Title: "disk space is low",
+	return shape.Warning{Level: shape.LevelWarning, ID: "disk", Title: "disk space is low",
 		Message: fmt.Sprintf("disk space low: %.1f GiB free for downloads", float64(free)/(1<<30))}, true
 }
 
@@ -101,7 +101,7 @@ func (f failures) warning() (shape.Warning, bool) {
 	if f.reason != "" {
 		msg += ": " + f.reason
 	}
-	return shape.Warning{Level: shape.LevelWarning, Message: shape.Clip(msg), Title: title}, true
+	return shape.Warning{Level: shape.LevelWarning, ID: "failed", Message: shape.Clip(msg), Title: title}, true
 }
 
 // firstLine is s up to its first line break, trimmed: an app's message without a stack trace below it.

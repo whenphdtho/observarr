@@ -221,11 +221,11 @@ func TestProbeHealth(t *testing.T) {
 	}
 	h := got.(shape.Health)
 	want := []shape.Warning{
-		{Level: shape.LevelWarning, Message: "a restart is needed to apply changed settings"},
-		{Level: shape.LevelInfo, Message: "an update is available"},
-		{Level: shape.LevelWarning, Message: "the settings are not on a mounted volume: recreating the container loses them"},
-		{Level: shape.LevelInfo, Message: "2 requests waiting for approval"},
-		{Level: shape.LevelWarning, Message: "1 request failed"},
+		{Level: shape.LevelWarning, ID: "restart", Message: "a restart is needed to apply changed settings"},
+		{Level: shape.LevelInfo, ID: "update", Message: "an update is available"},
+		{Level: shape.LevelWarning, ID: "appdata", Message: "the settings are not on a mounted volume: recreating the container loses them"},
+		{Level: shape.LevelInfo, ID: "pending", Message: "2 requests waiting for approval"},
+		{Level: shape.LevelWarning, ID: "failed", Message: "1 request failed"},
 	}
 	if h.Version != "1.33.2" || !reflect.DeepEqual(h.Warnings, want) {
 		t.Fatalf("Health = %+v", h)
@@ -239,7 +239,7 @@ func TestProbeHealthRejectedKeyIsAWarning(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []shape.Warning{{Level: shape.LevelWarning,
+	want := []shape.Warning{{Level: shape.LevelWarning, ID: "requests",
 		Message: "the requests cannot be read: the app rejected the API key"}}
 	if h := got.(shape.Health); !reflect.DeepEqual(h.Warnings, want) {
 		t.Fatalf("Warnings = %+v", h.Warnings)

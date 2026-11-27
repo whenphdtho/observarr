@@ -199,6 +199,7 @@ func (n sabNumber) bytes(unit float64) int64 {
 }
 
 type sabSlot struct {
+	ID       string    `json:"nzo_id"`
 	Filename string    `json:"filename"`
 	Status   string    `json:"status"`
 	MB       sabNumber `json:"mb"`
@@ -249,6 +250,7 @@ func probeSABQueue(ctx context.Context, t adapter.Target) (any, error) {
 	for _, s := range a.Queue.Slots[:min(len(a.Queue.Slots), shape.MaxQueueItems)] {
 		size, left := s.MB.bytes(1<<20), s.MBLeft.bytes(1<<20)
 		item := shape.QueueItem{
+			ID:        shape.Clip(s.ID),
 			Title:     shape.Clip(s.Filename),
 			Status:    shape.Clip(strings.ToLower(s.Status)),
 			Progress:  progress(float64(size), float64(left)),

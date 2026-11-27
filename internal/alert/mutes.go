@@ -1,6 +1,7 @@
 package alert
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"slices"
@@ -10,8 +11,9 @@ import (
 )
 
 // A mute silences one condition, by its key, for a while: it sends nothing and the UI does not count it, but it
-// stays listed. It ends at its time, when the condition is over (no "resolved" is sent then), or when the
-// condition gets worse than it was when muted. Mutes are saved, so a restart keeps them.
+// stays listed. It ends at its time (a condition still firing is then reported once more), when the condition has
+// been over for resolveAfter (no "resolved" is sent then), when the condition gets worse than it was when muted,
+// or when the key comes to stand for another problem. Mutes are saved, so a restart keeps them.
 
 // MuteSpans are the spans a mute may last.
 var MuteSpans = []time.Duration{time.Hour, 8 * time.Hour, 24 * time.Hour}
@@ -23,10 +25,19 @@ var ErrNotListed = errors.New("alert: nothing that needs attention has this key"
 type mute struct {
 	until time.Time
 	sev   Severity // the condition's severity when it was muted, saved with it: a worse one breaks the mute
+	print string   // the condition's fingerprint when it was muted, saved with it: another problem breaks the mute
 	// seen tells whether the condition was evaluated since the mute was set or loaded, and scope is its scope
 	// then. A mute loaded at a start is not seen yet: its condition is read again first.
 	seen  bool
 	scope string
+	gone  time.Time // since when the condition is missing; zero while it is there
+}
+
+// fingerprint tells one problem from another that may come to have the same key: where it is read from and what
+// it is. A key is unique at any moment, but two alike conditions share a base key and are told apart by their
+// order, so the one left takes the other's key when that one ends.
+func fingerprint(c Condition) string {
+	return digest(c.Scope, cmp.Or(c.Ident, c.Key))
 }
 
 // loadMutes reads the saved mutes that have not ended.
@@ -38,7 +49,7 @@ func (s *Service) loadMutes(ctx context.Context) error {
 	now := s.cfg.Now()
 	for _, r := range rows {
 		if r.Until.After(now) {
-			s.mutes[r.Key] = &mute{until: r.Until, sev: Severity(r.Severity)}
+			s.mutes[r.Key] = &mute{until: r.Until, sev: Severity(r.Severity), print: r.Fingerprint}
 		}
 	}
 	return nil
@@ -54,36 +65,43 @@ func (s *Service) Mute(ctx context.Context, key string, span time.Duration, by s
 	if i < 0 {
 		return time.Time{}, ErrNotListed
 	}
+	c := s.conds[i]
+	now := s.cfg.Now()
 	// Whole seconds, as they are saved: the time is the same after a restart.
-	until := s.cfg.Now().Add(span).Truncate(time.Second)
-	if err := s.cfg.Store.SetAlertMute(ctx, store.AlertMute{Key: key, Until: until, Severity: string(s.conds[i].Severity),
-		CreatedBy: by}); err != nil {
+	until := now.Add(span).Truncate(time.Second)
+	if err := s.cfg.Store.SetAlertMute(ctx, store.AlertMute{Key: key, Until: until, Severity: string(c.Severity),
+		Fingerprint: fingerprint(c), CreatedBy: by}, now); err != nil {
 		return time.Time{}, err
 	}
-	s.mutes[key] = &mute{until: until, seen: true, sev: s.conds[i].Severity, scope: s.conds[i].Scope}
+	s.mutes[key] = &mute{until: until, seen: true, sev: c.Severity, print: fingerprint(c), scope: c.Scope}
 	s.setAttention(s.conds)
 	return until, nil
 }
 
-// Unmute ends the mute of key; without one it does nothing.
-func (s *Service) Unmute(ctx context.Context, key string) error {
+// Unmute ends the mute of key and reports whether there was one.
+func (s *Service) Unmute(ctx context.Context, key string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.mutes[key]; !ok {
-		return nil
+		return false, nil
 	}
 	if err := s.cfg.Store.DeleteAlertMutes(ctx, key); err != nil {
-		return err
+		return false, err
 	}
 	delete(s.mutes, key)
 	s.setAttention(s.conds)
-	return nil
+	return true, nil
 }
 
-// settleMutes ends the mutes that are due at now, given the conditions and the scopes just read: one whose time
-// has come, one whose condition got worse (the engine then sends it as it would any worse alert), and one whose
-// condition is over, which the engine forgets without a word. It returns the keys of the mutes ended, to remove
-// from the store, and of the firing alerts forgotten. Callers hold s.mu.
+// settleMutes ends the mutes that are due at now, given the conditions and the scopes just read:
+//   - one whose time has come; if its condition still fires, the engine reports it once more;
+//   - one whose key now stands for another problem, or whose condition got worse: the engine then treats the
+//     condition as any other;
+//   - one whose condition has been over for resolveAfter, which the engine then forgets without a word. A single
+//     reading without it is not the end: a condition that comes back within that time is still muted.
+//
+// It returns the keys of the mutes ended, to remove from the store, and of the firing alerts forgotten. Callers
+// hold s.mu.
 func (s *Service) settleMutes(now time.Time, conds []Condition, known map[string]bool) (ended, forgotten []string) {
 	byKey := make(map[string]*Condition, len(conds))
 	for i := range conds {
@@ -93,13 +111,23 @@ func (s *Service) settleMutes(now time.Time, conds []Condition, known map[string
 		c := byKey[key]
 		switch {
 		case !now.Before(m.until):
+			if c != nil {
+				s.engine.Remind(key)
+			}
+		case c != nil && m.print != "" && fingerprint(*c) != m.print:
 		case c != nil && rank(c.Severity) < rank(m.sev):
 		case c != nil:
-			m.seen, m.scope = true, c.Scope
+			m.seen, m.scope, m.gone = true, c.Scope, time.Time{}
 			continue
 		// Gone: over if what it was read from was read again without it. After a start that is not known yet;
 		// once the data has come in, a mute whose condition never showed is over too.
 		case m.seen && known[m.scope], !m.seen && now.Sub(s.started) >= warmUp:
+			if m.gone.IsZero() {
+				m.gone = now
+			}
+			if now.Sub(m.gone) < resolveAfter {
+				continue
+			}
 			if s.engine.Forget(key) {
 				forgotten = append(forgotten, key)
 			}

@@ -125,7 +125,7 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle("PUT /api/alerts/rules", s.requireSession(s.setAlertRules))
 		mux.Handle("GET /api/alerts/log", s.requireSession(s.alertLog))
 		mux.Handle("POST /api/alerts/mutes", s.requireSession(s.muteAlert))
-		mux.Handle("DELETE /api/alerts/mutes/{key...}", s.requireSession(s.unmuteAlert))
+		mux.Handle("DELETE /api/alerts/mutes", s.requireSession(s.unmuteAlert))
 	}
 	// Any other API request, including a wrong method on a known path, is a 404: simpler than 405 with Allow.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
