@@ -6,16 +6,22 @@ import { formatSpan, formatLeft, formatPercent, formatRate, plural, prettyReleas
 // and what each explains when opened, and the lines of the downloads and streams. It reads only the server's
 // attention list and the generic shapes, never anything app-specific.
 
+// tally counts the rows that need someone, as the title, the tab, the views list and the bell all say it:
+// { fails, warns }, the apps (and things about no app) with a problem, and those with only warnings. What is
+// muted is not counted.
+export function tally(items) {
+  const rows = issues(items, 0).rows.filter((r) => !r.muted);
+  const fails = rows.filter((r) => r.tone === 'fail').length;
+  return { fails, warns: rows.length - fails };
+}
+
 // situation is the Overview's title, the state of the whole in one line, and the count the tab and the views list
 // carry: { title, count, tone }. items is the attention list (null before it arrived), apps how many apps are
 // watched, checked whether each of them has been checked once. Errors come before warnings; an all-clear is only
 // given once everything was looked at, and never for an empty list.
 export function situation(items, apps, checked) {
   if (!items) return { title: 'Overview', count: 0, tone: '' };
-  // It counts the rows the Overview lists, so the title and the list agree.
-  const { rows } = issues(items, 0);
-  const fails = rows.filter((r) => r.tone === 'fail').length;
-  const warns = rows.length - fails;
+  const { fails, warns } = tally(items);
   if (fails) return { title: `${plural(fails, 'problem')} need${fails === 1 ? 's' : ''} you`, count: fails, tone: 'fail' };
   if (warns) return { title: `${plural(warns, 'warning')} to look at`, count: warns, tone: 'warn' };
   if (apps === 0) return { title: 'Overview', count: 0, tone: '' };
@@ -42,49 +48,10 @@ function detail(message) {
   return sentence(plain);
 }
 
-// issues turns the attention list into the rows that need someone, errors before warnings, and the notes that are
-// only good to know. Several things about one app at one severity make one row with their count, so an app is
-// not listed five times. A row is { key, tone, rule, service, name, view, title, detail, value, items }, items
-// what it stands for (each { message, rule, began }) and value the figure that sums it up: the server's, how long
-// a thing has been down, or how many it stands for.
-export function issues(items, nowMs) {
-  const rows = [];
-  const notes = [];
-  const groups = new Map();
-  for (const it of items ?? []) {
-    const t = tone(it.severity);
-    if (!t) {
-      notes.push({ key: it.key, text: `${it.name ? `${it.name}: ` : ''}${it.message}`, view: it.view, service: it.service });
-      continue;
-    }
-    const one = { message: it.message, rule: it.rule, began: it.since };
-    const group = it.service ? groups.get(`${it.service}/${t}`) : null;
-    if (group) {
-      group.items.push(one);
-      continue;
-    }
-    const row = {
-      key: it.key, tone: t, rule: it.rule, service: it.service ?? null, name: it.name, view: it.view,
-      title: it.title, detail: detail(it.message), items: [one],
-      value: it.value || (it.rule === 'down' ? since(it.since, nowMs) : ''),
-    };
-    if (it.service) groups.set(`${it.service}/${t}`, row);
-    rows.push(row);
-  }
-  for (const row of rows) {
-    const n = row.items.length;
-    if (n === 1) continue;
-    row.title = `${row.name}: ${plural(n, row.tone === 'fail' ? 'problem' : 'warning')}`;
-    row.detail = row.items.map((i) => detail(i.message)).join(' · ');
-    row.value = String(n);
-  }
-  // The server sends worst first; errors stay ahead of warnings whatever order arrives.
-  rows.sort((a, b) => (a.tone === b.tone ? 0 : a.tone === 'fail' ? -1 : 1));
-  return { rows, notes };
-}
+const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-// What a row says when opened, after the app's own words: what it means and what helps. Told by the rule that
-// raised it, so it holds for any app.
+// What an item says when its row is opened, after the app's own words: what it means and what helps. Told by the
+// rule that raised it, so it holds for any app.
 const WHY = {
   down: 'Observarr gets no answer from it. It may have stopped or be restarting.',
   container: 'Docker reports this state. The container’s log says why.',
@@ -95,18 +62,69 @@ const WHY = {
   downloads: 'It will not finish on its own. Open the app to retry it or remove it.',
 };
 
-// explain is the text of an opened row, a paragraph for each thing it stands for: the app's message in full, as
-// it gave it, where the row shows it shortened or reworded (an opened row shows its own line unshortened); what it
-// means and what helps; and since when.
-export function explain(row) {
-  return row.items.map((it) => {
+// issues turns the attention list into the rows that need someone and the notes that are only good to know.
+// Everything about one app is one row: its marker has the worst severity, its title names the worst thing and
+// how many more there are, its line says the first in full. A row is
+// { key, tone, service, name, view, title, detail, more, value, muted, mutedUntil, items }.
+//   - items are what it stands for, worst first, each { key, tone, title, text, mutedUntil }: title its short
+//     name, text the app's message in full, what it means and since when, mutedUntil a time in ms or 0.
+//   - value is the figure of its first item: the server's, or for a thing that is down how long it has been.
+//   - muted says every item is muted (mutedUntil then is when the first mute ends): such a row is listed last,
+//     counts for nothing, and its tone is "idle".
+// Errors come before warnings, what is muted last.
+export function issues(items, nowMs) {
+  const rows = [];
+  const notes = [];
+  const byService = new Map();
+  for (const it of items ?? []) {
+    const t = tone(it.severity);
+    if (!t) {
+      notes.push({ key: it.key, text: `${it.name ? `${it.name}: ` : ''}${it.message}`, view: it.view, service: it.service });
+      continue;
+    }
+    const until = new Date(it.mutedUntil ?? 0).getTime();
+    const began = new Date(it.since ?? 0).getTime();
     const full = sentence(it.message ?? '');
-    const said = full && (row.items.length > 1 || full !== row.detail) ? `${full}${/[.!?…]$/.test(full) ? '' : '.'}` : '';
-    const why = WHY[it.rule === 'down' && row.service === null ? 'container' : it.rule] ?? '';
-    const t = new Date(it.began).getTime();
-    const when = t > 0 ? `Since ${new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.` : '';
-    return [said, why, when].filter(Boolean).join(' ');
-  });
+    const one = {
+      key: it.key, tone: t, mutedUntil: until > nowMs ? until : 0, line: detail(it.message ?? ''), view: it.view,
+      heading: it.title,
+      // The name of the app leads the row already: an item is named by the rest of its title.
+      title: sentence(it.name && it.title.startsWith(`${it.name}: `) ? it.title.slice(it.name.length + 2) : it.title),
+      value: it.value || (it.rule === 'down' ? since(it.since, nowMs) : ''),
+      text: [full && `${full}${/[.!?…]$/.test(full) ? '' : '.'}`, WHY[it.rule === 'down' && !it.service ? 'container' : it.rule] ?? '',
+        began > 0 ? `Since ${clock(began)}.` : ''].filter(Boolean).join(' '),
+    };
+    let row = it.service ? byService.get(it.service) : null;
+    if (!row) {
+      row = { key: it.service ? `app/${it.service}` : it.key, service: it.service ?? null, name: it.name, items: [] };
+      if (it.service) byService.set(it.service, row);
+      rows.push(row);
+    }
+    row.items.push(one);
+  }
+  const rank = (i) => (i.mutedUntil ? 2 : i.tone === 'fail' ? 0 : 1);
+  for (const row of rows) {
+    row.items.sort((a, b) => rank(a) - rank(b));
+    const [lead] = row.items;
+    const live = row.items.filter((i) => !i.mutedUntil);
+    row.muted = live.length === 0;
+    row.mutedUntil = row.muted ? Math.min(...row.items.map((i) => i.mutedUntil)) : 0;
+    row.tone = row.muted ? 'idle' : lead.tone;
+    row.more = row.items.length - 1;
+    row.title = row.more ? `${lead.heading}, ${row.more} more` : lead.heading;
+    // A line that only repeats the title is left out.
+    row.detail = row.muted ? `Muted until ${clock(row.mutedUntil)}` : lead.line.toLowerCase() === lead.title.toLowerCase() ? '' : lead.line;
+    row.value = row.muted ? '' : lead.value;
+    row.view = lead.view;
+  }
+  const order = { fail: 0, warn: 1, idle: 2 };
+  rows.sort((a, b) => order[a.tone] - order[b.tone]);
+  return { rows, notes };
+}
+
+// mutedText says until when an item is muted: "Muted until 14:30".
+export function mutedText(untilMs) {
+  return `Muted until ${clock(untilMs)}`;
 }
 
 // The view a row leads to, as its action says it.

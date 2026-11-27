@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  formatMbit, formatRate, formatSize, formatPart, formatPercent, formatPct, formatChange, formatCount, formatSpan,
+  formatMbit, formatRate, formatDisk, formatSize, formatPart, formatPercent, formatPct, formatChange, formatCount, formatSpan,
   formatUptime, clockSeconds, formatLeft, formatAge, formatUntil, plural, prettyRelease, stripSource,
 } from './format.js';
 
@@ -15,6 +15,16 @@ test('rates are always Mbit/s', () => {
   assert.equal(formatMbit(1.25e6), '10');
 });
 
+test('disk reads and writes are the one exception: MB/s', () => {
+  assert.equal(formatDisk(4.8e6), '4.8');
+  assert.equal(formatDisk(120e6), '120');
+  assert.equal(formatDisk(0), '0');
+  assert.equal(formatDisk(1000), '<0.1');
+  assert.equal(formatDisk(-1), '—');
+  // The same bytes a second over a network read eight times the number, in Mbit/s.
+  assert.equal(formatMbit(4.8e6), '38');
+});
+
 test('sizes are GB and TB', () => {
   assert.equal(formatSize(10e9), '10 GB');
   assert.equal(formatSize(1.5e9), '1.5 GB');
@@ -24,7 +34,11 @@ test('sizes are GB and TB', () => {
   assert.equal(formatSize(8e12), '8.0 TB');
   assert.equal(formatSize(NaN), '—');
   assert.equal(formatPart(201e9, 250e9), '201 of 250 GB');
-  assert.equal(formatPart(900e9, 20e12), '900 GB of 20 TB');
+  assert.equal(formatPart(464e9, 1400e9), '464 of 1,400 GB');
+  assert.equal(formatPart(6.4e9, 17e9), '6.4 of 17 GB');
+  assert.equal(formatPart(900e9, 20e12), '0.90 of 20 TB');
+  assert.equal(formatPart(48.6e12, 60e12), '49 of 60 TB');
+  assert.equal(formatPart(NaN, 1), '—');
 });
 
 test('percent has no space', () => {

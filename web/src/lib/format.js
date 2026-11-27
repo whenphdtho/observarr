@@ -1,6 +1,9 @@
 // The one place that turns figures into words, so every view says the same thing the same way: rates in Mbit/s,
 // sizes in GB and TB, spans of time in two units ("2 min 21 s"), ages in one ("3 days ago"), percentages without
 // a space. Nothing here knows an app.
+//
+// The one exception to Mbit/s: what a disk reads and writes is in MB/s (formatDisk), as every disk tool says it.
+// Mbit/s is for what travels over a network: traffic, a download, a stream, a transfer to a remote.
 
 // formatMbit renders a bytes-per-second rate as a number of Mbit/s without the unit: one decimal below 10, whole
 // numbers above, "<0.1" for a trickle. A missing or negative rate renders as "—".
@@ -17,6 +20,16 @@ export function formatMbit(bytesPerSec) {
 export function formatRate(bytesPerSec) {
   const v = formatMbit(bytesPerSec);
   return v === '—' ? v : `${v} Mbit/s`;
+}
+
+// formatDisk renders a disk's bytes-per-second rate as a number of MB/s without the unit: one decimal below 10,
+// whole numbers above, "<0.1" for a trickle. It is for disk reads and writes only; see the rule above.
+export function formatDisk(bytesPerSec) {
+  if (!Number.isFinite(bytesPerSec) || bytesPerSec < 0) return '—';
+  const v = bytesPerSec / 1e6;
+  if (v === 0) return '0';
+  if (v < 0.05) return '<0.1';
+  return v < 9.95 ? v.toFixed(1) : String(Math.round(v));
 }
 
 // sizeParts splits a number of bytes into [number, unit] in decimal GB, or TB from 1000 GB: two decimals below 1,
@@ -39,11 +52,18 @@ export function formatSize(bytes) {
   return sizeParts(bytes).join(' ').trim();
 }
 
-// formatPart renders a part of a whole, e.g. "144 of 1400 GB", naming the unit once when both share it.
+// formatPart renders a part of a whole in the whole's unit, named once: "6.4 of 17 GB", "464 of 1,400 GB" (a
+// whole under 10 TB stays in GB, so a part of it reads on the same scale), "49 of 60 TB".
 export function formatPart(part, whole) {
-  const [p, pu] = sizeParts(part);
-  const [w, wu] = sizeParts(whole);
-  return `${p}${pu === wu ? '' : ` ${pu}`} of ${w} ${wu}`;
+  if (!Number.isFinite(part) || !Number.isFinite(whole) || part < 0 || whole < 0) return '—';
+  const tb = whole >= 10e12;
+  const fig = (bytes) => {
+    const v = bytes / (tb ? 1e12 : 1e9);
+    if (v === 0) return '0';
+    if (v < 0.005) return '<0.01';
+    return v < 0.995 ? v.toFixed(2) : v < 9.95 ? v.toFixed(1) : Math.round(v).toLocaleString('en-US');
+  };
+  return `${fig(part)} of ${fig(whole)} ${tb ? 'TB' : 'GB'}`;
 }
 
 // formatPercent renders a 0..1 fraction as a whole percentage, clamped to that range.

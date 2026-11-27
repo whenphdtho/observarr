@@ -1,15 +1,20 @@
 <script>
   import Icon from './icons/Icon.svelte';
   import { arrive } from './motion.js';
-  import { firing, severityTone, scrollToAlerts } from './alerts.js';
+  import { synced, attention } from './live.js';
+  import { scrollToAlerts } from './alerts.js';
+  import { tally } from './overview.js';
+  import { plural } from './format.js';
 
-  // AlertBell sits in the shell's header: how many errors and warnings fire as alerts now, in the colour of the
-  // worst, leading to the Alerts section of the System view. The live stream keeps the list current.
+  // AlertBell sits in the shell's header and leads to the Alerts section of the System view. Its count is the
+  // title's: the problems, in the error colour; without any, the warnings, in the warning colour; without either,
+  // none. Its name says both. What is muted is not counted. The live stream keeps the list current.
   const HASH = '#/system/alerts';
-  const counted = $derived(($firing ?? []).filter((a) => a.severity !== 'info'));
-  const count = $derived(counted.length);
-  const tone = $derived(count ? severityTone(counted[0].severity) : '');
-  const label = $derived(count === 0 ? 'Alerts: nothing firing' : `Alerts: ${count} firing`);
+  const sums = $derived(tally($synced ? $attention : null));
+  const count = $derived(sums.fails || sums.warns);
+  const tone = $derived(sums.fails ? 'fail' : sums.warns ? 'warn' : '');
+  const label = $derived(count === 0 ? 'Alerts: nothing needs you' :
+    `Alerts: ${[sums.fails && plural(sums.fails, 'problem'), sums.warns && plural(sums.warns, 'warning')].filter(Boolean).join(', ')}`);
 
   // Already there: the hash does not change, so scroll by hand.
   function open(event) {
@@ -29,20 +34,18 @@
 
 <style>
   .bell {
-    position: relative; display: inline-grid; place-items: center; width: 32px; height: 32px; flex: none;
+    position: relative; display: inline-grid; place-items: center; width: 34px; height: 34px; flex: none;
     border-radius: var(--r); color: var(--muted); border: 1px solid transparent;
     transition-property: background-color, color, border-color;
     transition-duration: var(--dur-fast); transition-timing-function: var(--ease-out);
   }
-  .bell:hover { color: var(--text); background: var(--surface2); border-color: var(--border2); }
-  .bell.warn { color: var(--warn); }
-  .bell.fail { color: var(--fail); }
-  /* The count: the page colour on the state colour, at least 4.5:1 in both themes. */
+  .bell:hover { color: var(--text); background: var(--hover); border-color: var(--border2); }
+  /* The count: the page colour on the state colour, at least 4.5:1 in both themes. The bell itself stays neutral. */
   .count {
     position: absolute; top: -3px; right: -5px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: var(--r-pill);
     display: grid; place-items: center; font-size: var(--t-micro); font-weight: var(--w-strong); line-height: 1;
-    color: var(--accent-ink); background: var(--accent-fill);
+    color: var(--bg);
   }
-  .bell.warn .count { color: var(--bg); background: var(--warn); }
-  .bell.fail .count { color: var(--bg); background: var(--fail); }
+  .bell.warn .count { background: var(--warn); }
+  .bell.fail .count { background: var(--fail); }
 </style>

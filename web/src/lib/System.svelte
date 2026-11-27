@@ -10,7 +10,7 @@
   import { diskParts } from './storage.js';
   import { now } from './ticker.js';
   import {
-    formatSize, formatPart, formatRate, formatMbit, formatPct, formatUptime, formatAge, splitNotice, containerStatusClass, plural,
+    formatSize, formatPart, formatRate, formatMbit, formatDisk, formatPct, formatUptime, formatAge, splitNotice, containerStatusClass, plural,
   } from './format.js';
 
   // System shows the host (CPU, memory, swap, load, uptime, disks, network) and every container
@@ -48,7 +48,7 @@
     { key: 'cpu', label: 'CPU', num: true },
     { key: 'mem', label: 'Memory', num: true },
     { key: 'net', label: 'Network Mbit/s', num: true },
-    { key: 'blk', label: 'Disk Mbit/s', num: true },
+    { key: 'blk', label: 'Disk MB/s', num: true },
     { key: 'restarts', label: 'Restarts', num: true },
     { key: 'up', label: 'Started' },
   ];
@@ -283,11 +283,11 @@
                   {/if}
                 </td>
                 <td role="cell" data-label="Disk" class="r"
-                  title={c.state === 'running' ? `${formatRate(c.blkReadRate)} read, ${formatRate(c.blkWriteRate)} written` : ''}>
+                  title={c.state === 'running' ? `${formatDisk(c.blkReadRate)} MB/s read, ${formatDisk(c.blkWriteRate)} MB/s written` : ''}>
                   {#if c.state === 'running'}
                     <span class="two">
-                      <span>{formatMbit(c.blkReadRate)} <span class="muted">read</span></span>
-                      <span>{formatMbit(c.blkWriteRate)} <span class="muted">write</span></span>
+                      <span>{formatDisk(c.blkReadRate)} <span class="muted">read</span></span>
+                      <span>{formatDisk(c.blkWriteRate)} <span class="muted">write</span></span>
                     </span>
                   {:else}
                     —

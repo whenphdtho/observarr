@@ -33,6 +33,9 @@
   const containers = $derived($snapshot?.containers ?? []);
   const running = $derived(containers.filter((c) => c.state === 'running').length);
   const traffic = $derived($snapshot?.traffic ?? null);
+  // With a budget, the traffic counts against it: today's for a daily one, the month's for a monthly one.
+  const budget = $derived(traffic?.budget?.limitBytes > 0 ? traffic.budget : null);
+  const budgetPct = $derived(budget ? percentOf(budget.usedBytes, budget.limitBytes) : 0);
   // The fullest disk is the one worth a line.
   const disk = $derived((host?.disks ?? []).map((d) => ({ path: d.path, ...diskParts(d) })).sort((a, b) => b.pct - a.pct)[0] ?? null);
   const memPct = $derived(host ? percentOf(host.memUsed, host.memTotal) : 0);
@@ -102,7 +105,13 @@
           <span class="bar" class:warn={running < containers.length} aria-hidden="true"><i style:width={`${percentOf(running, containers.length)}%`}></i></span>
         </a></li>
       {/if}
-      {#if traffic}
+      {#if budget}
+        <li><a class="fact row-link" href="#/network" title={`${budgetPct}% of the ${budget.period === 'month' ? 'monthly' : 'daily'} budget`}>
+          <span class="label">{budget.period === 'month' ? 'Traffic this month' : 'Traffic today'}</span>
+          <b class="num" class:warn-text={budgetPct >= 80 && budgetPct < 100} class:fail-text={budgetPct >= 100}>{formatPart(budget.usedBytes, budget.limitBytes)}</b>
+          <span class="bar" class:warn={budgetPct >= 80 && budgetPct < 100} class:fail={budgetPct >= 100} aria-hidden="true"><i style:width={`${budgetPct}%`}></i></span>
+        </a></li>
+      {:else if traffic}
         <li><a class="fact row-link" href="#/network">
           <span class="label">Traffic today</span><b class="num">{formatSize(traffic.todayRx + traffic.todayTx)}</b>
         </a></li>
@@ -142,6 +151,7 @@
   }
   .fact b { color: var(--text); font-weight: 600; white-space: nowrap; }
   .fact b.warn-text { color: var(--warn-ink); }
+  .fact b.fail-text { color: var(--fail-ink); }
   .fact .bar { grid-column: 1 / -1; }
   .fact:focus-visible { outline-offset: 0; }
 </style>

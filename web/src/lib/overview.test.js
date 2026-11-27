@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { situation, since, issues, explain, actions, downloads, playing } from './overview.js';
+import { situation, tally, since, issues, mutedText, actions, downloads, playing } from './overview.js';
 import { serviceLine, cardSummary } from './status.js';
 import { bucket } from './chart.js';
 import { byPurpose } from './traffic.js';
@@ -24,49 +24,67 @@ test('no all-clear before everything was checked, or without apps', () => {
   assert.equal(situation([], 4, false).tone, '');
 });
 
-test('rows are errors first, with a plain detail and a figure', () => {
+test('one row per app, the worst thing first', () => {
   const now = Date.parse('2026-11-27T12:00:00Z');
   const { rows, notes } = issues([
-    item('warning'),
+    item('warning', { key: 'w1', service: 2, name: 'Mounts', title: 'Mounts: 1 file not uploaded', message: 'media: 1 cached file could not be uploaded' }),
     item('info', { rule: 'requests', name: 'Requests', message: '3 requests wait for approval' }),
-    item('critical', { rule: 'down', service: 4, title: 'Sintel is not reachable', message: 'connection refused',
+    item('critical', { key: 'd4', rule: 'down', service: 4, title: 'Sintel is not reachable', message: 'connection refused',
       since: '2026-11-27T11:48:10Z' }),
-    item('warning', { rule: 'storage', title: 'Disk / nearly full', message: '92% used', value: '92%', view: '#/storage' }),
-    item('warning', { rule: 'downloads', message: 'Big.Buck.Bunny.2008.2160p.WEB: no files found' }),
+    item('critical', { key: 'c2', service: 2, name: 'Mounts', title: 'Mounts: cache is full', message: 'cloud:archive: the cache disk is out of space' }),
+    item('warning', { key: 'disk', rule: 'storage', title: 'Disk / nearly full', name: '/', message: '92% used', value: '92%', view: '#/storage' }),
+    item('warning', { key: 'h3', service: 3, name: 'Getter', title: 'Getter: automatic search is off', message: 'IndexerSearchCheck: No indexers available' }),
+    item('warning', { key: 'q3', service: 3, name: 'Getter', title: 'Getter: a download is stuck', rule: 'downloads',
+      message: 'Big.Buck.Bunny.2008.2160p.WEB: no files found' }),
   ], now);
-  assert.deepEqual(rows.map((r) => r.tone), ['fail', 'warn', 'warn', 'warn']);
-  assert.equal(rows[0].value, '11 min');
-  assert.equal(rows[0].detail, 'Connection refused');
-  assert.equal(rows[1].detail, 'No indexers available');
-  assert.equal(rows[1].items[0].message, 'IndexerSearchCheck: No indexers available');
-  assert.equal(rows[2].value, '92%');
-  assert.equal(rows[3].detail, 'Big Buck Bunny (2008) · 2160p: no files found');
+  assert.deepEqual(rows.map((r) => [r.title, r.tone, r.value, r.more]), [
+    ['Mounts: cache is full, 1 more', 'fail', '', 1],
+    ['Sintel is not reachable', 'fail', '11 min', 0],
+    ['Disk / nearly full', 'warn', '92%', 0],
+    ['Getter: automatic search is off, 1 more', 'warn', '', 1],
+  ]);
+  // The line says the first thing in full, readable; the opened row lists every one, worst first, with the app's
+  // own words in full.
+  assert.equal(rows[0].detail, 'Cloud:archive: the cache disk is out of space');
+  assert.equal(rows[3].detail, 'No indexers available');
+  assert.deepEqual(rows[0].items.map((i) => [i.tone, i.title]), [['fail', 'Cache is full'], ['warn', '1 file not uploaded']]);
+  assert.deepEqual(rows[3].items.map((i) => i.text), [
+    'IndexerSearchCheck: No indexers available. The app reports this about itself. Open it to see what it suggests.',
+    'Big.Buck.Bunny.2008.2160p.WEB: no files found. It will not finish on its own. Open the app to retry it or remove it.',
+  ]);
+  assert.equal(rows[1].items[0].text, 'Connection refused. Observarr gets no answer from it. It may have stopped or be restarting. Since ' +
+    `${new Date('2026-11-27T11:48:10Z').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`);
+  assert.equal(rows[0].key, 'app/2');
   assert.deepEqual(notes.map((n) => n.text), ['Requests: 3 requests wait for approval']);
   assert.deepEqual(issues(null, now), { rows: [], notes: [] });
+  // The title counts apps with a problem, then those with only warnings.
+  assert.equal(situation(rows.length ? [
+    item('critical', { key: 'c2', service: 2 }), item('warning', { key: 'w1', service: 2 }), item('warning', { key: 'h3', service: 3 }),
+  ] : [], 10, true).title, '1 problem needs you');
 });
 
-test('several things about one app at one severity are one row', () => {
-  const { rows } = issues([
-    item('critical', { service: 2, name: 'Mounts', title: 'Mounts reports a problem', message: 'cloud:archive: the cache disk is out of space' }),
-    item('warning', { service: 2, name: 'Mounts', title: 'a', message: 'media: 1 cached file could not be uploaded' }),
-    item('warning', { service: 3, name: 'Getter', title: 'b', message: 'Sintel.2010.1080p.WEB failed in the last day: Repair failed' }),
-    item('warning', { service: 3, name: 'Getter', title: 'c', rule: 'downloads', message: 'Tears.of.Steel.2012.2160p.WEB: stalled' }),
-    item('warning', { title: 'Disk / nearly full', rule: 'storage', name: '/', message: '92% used', value: '92%' }),
-    item('warning', { title: 'Disk /data nearly full', rule: 'storage', name: '/data', message: '95% used', value: '95%' }),
-  ], 0);
-  assert.deepEqual(rows.map((r) => [r.title, r.value, r.tone]), [
-    ['Mounts reports a problem', '', 'fail'],
-    ['a', '', 'warn'],
-    ['Getter: 2 warnings', '2', 'warn'],
-    ['Disk / nearly full', '92%', 'warn'],
-    ['Disk /data nearly full', '95%', 'warn'],
+test('what is muted stays listed, last, and counts for nothing', () => {
+  const now = Date.parse('2026-11-27T12:00:00Z');
+  const later = '2026-11-27T13:00:00Z';
+  const list = [
+    item('critical', { key: 'd4', rule: 'down', service: 4, name: 'Sintel', title: 'Sintel is not reachable', message: 'connection refused', mutedUntil: later }),
+    item('critical', { key: 'c2', service: 2, name: 'Mounts', title: 'Mounts: cache is full', mutedUntil: later }),
+    item('warning', { key: 'w2', service: 2, name: 'Mounts', title: 'Mounts: 1 file not uploaded' }),
+    item('warning', { key: 'h3', service: 3, name: 'Getter', title: 'Getter: automatic search is off', mutedUntil: '2026-11-27T11:00:00Z' }),
+  ];
+  const { rows } = issues(list, now);
+  assert.deepEqual(rows.map((r) => [r.title, r.tone, r.muted]), [
+    // The muted error no longer leads its app's row: what still needs someone does.
+    ['Mounts: 1 file not uploaded, 1 more', 'warn', false],
+    ['Getter: automatic search is off', 'warn', false], // its mute has ended
+    ['Sintel is not reachable', 'idle', true],
   ]);
-  assert.equal(rows[2].detail, 'Sintel (2010) · 1080p failed in the last day: Repair failed · Tears of Steel (2012) · 2160p: stalled');
-  assert.equal(rows[2].key, 'warning/b');
-  assert.deepEqual(explain(rows[2]), [
-    'Sintel.2010.1080p.WEB failed in the last day: Repair failed. The app reports this about itself. Open it to see what it suggests.',
-    'Tears.of.Steel.2012.2160p.WEB: stalled. It will not finish on its own. Open the app to retry it or remove it.',
-  ]);
+  assert.equal(rows[2].detail, mutedText(Date.parse(later)));
+  assert.match(rows[2].detail, /^Muted until \d/);
+  assert.deepEqual(rows[0].items.map((i) => [i.key, i.mutedUntil > 0]), [['w2', false], ['c2', true]]);
+  assert.deepEqual(tally(list.slice(0, 3)), { fails: 0, warns: 1 });
+  assert.equal(situation(list.slice(0, 3), 10, true).title, '1 warning to look at');
+  assert.equal(situation(list.slice(0, 1), 10, true).title, 'All 10 apps are fine');
 });
 
 test('since is coarse', () => {
@@ -76,14 +94,6 @@ test('since is coarse', () => {
   assert.equal(since(new Date(now - 3 * 3600e3 - 330e3).toISOString(), now), '3 h 5 min');
   assert.equal(since('0001-01-01T00:00:00Z', now), '');
   assert.equal(since(undefined, now), '');
-});
-
-test('an opened row keeps the full text and says what helps', () => {
-  const [row] = issues([item('warning')], 0).rows;
-  assert.deepEqual(explain(row), ['IndexerSearchCheck: No indexers available. The app reports this about itself. Open it to see what it suggests.']);
-  // What the row already says in full is not said twice.
-  const [box] = issues([item('critical', { rule: 'down', message: 'Docker reports it unhealthy', name: 'app' })], 0).rows;
-  assert.deepEqual(explain(box), ['Docker reports this state. The container’s log says why.']);
 });
 
 test('actions lead to the app or to the view with the details', () => {

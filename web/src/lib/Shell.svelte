@@ -73,7 +73,7 @@
   let spoken = $state('');
   let heard = null;
   $effect(() => {
-    const errors = ($attention ?? []).filter((it) => it.severity === 'critical');
+    const errors = ($attention ?? []).filter((it) => it.severity === 'critical' && !it.mutedUntil);
     untrack(() => {
       if ($attention === null) {
         heard = null;

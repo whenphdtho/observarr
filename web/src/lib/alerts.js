@@ -83,8 +83,8 @@ export function severityTone(severity) {
 }
 
 // firing holds the alerts firing now, worst first, from the attention list the live stream carries; null until
-// it arrived.
-export const firing = derived(attention, (list) => list?.filter((it) => it.firing) ?? null);
+// it arrived. A muted one sends nothing, so it is not among them.
+export const firing = derived(attention, (list) => list?.filter((it) => it.firing && !it.mutedUntil) ?? null);
 
 // scrollToAlerts brings the System view's Alerts section into view.
 export function scrollToAlerts() {

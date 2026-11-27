@@ -12,7 +12,8 @@
   import { synced, attention } from './live.js';
   import { matches } from './status.js';
   import { now } from './ticker.js';
-  import { issues, explain, actions, downloads, playing } from './overview.js';
+  import { api } from './api.js';
+  import { issues, actions, downloads, playing, mutedText } from './overview.js';
 
   // Overview is the landing view. Its title, in the shell, states the situation; here follow what needs attention
   // (each row opens in place to say what it means and where to go), the traffic over time, and what plays and
@@ -24,7 +25,7 @@
   const MAX_ROWS = 5;
 
   // The rows are the server's list, the one the alerts and the bell count from, narrowed by the search. The clock
-  // only moves a row's "12 min" on, so it is read by the minute.
+  // only moves a row's "12 min" on, so it is read by the minute. now, in seconds, also ends a mute on time.
   const minute = $derived(Math.floor($now / 60000) * 60000);
   const found = $derived(issues(($attention ?? []).filter((it) => matches(query, it.title, it.message, it.name)), minute));
   const rows = $derived(found.rows);
@@ -35,6 +36,52 @@
 
   // One row is open at a time.
   let open = $state(null);
+
+  // Muting silences what a row stands for, for an hour or longer: it stays listed, dimmed, and is not counted.
+  // The server's list says what is muted; here is only the request, which row waits for it, and what went wrong.
+  let busy = $state(null);
+  let failed = $state(null);
+  let menuEl = $state();
+  let menuRow = $state(null);
+  let menuFrom = null;
+
+  async function each(row, list, call) {
+    busy = row.key;
+    failed = null;
+    try {
+      for (const it of list) await call(it);
+    } catch (err) {
+      failed = { key: row.key, text: err.message };
+    } finally {
+      busy = null;
+    }
+  }
+
+  function mute(row, minutes) {
+    menuEl?.hidePopover();
+    return each(row, row.items.filter((i) => !i.mutedUntil), (it) => api('POST', '/api/alerts/mutes', { key: it.key, minutes }));
+  }
+
+  function unmute(row, list) {
+    return each(row, list.filter((i) => i.mutedUntil), (it) => api('DELETE', `/api/alerts/mutes/${encodeURIComponent(it.key)}`));
+  }
+
+  // The menu is one element in the top layer, so no panel clips it: it is put under the button that opened it.
+  function openMenu(event, row) {
+    menuRow = row;
+    menuFrom = event.currentTarget;
+    const box = menuFrom.getBoundingClientRect();
+    menuEl.style.top = `${box.bottom + 6}px`;
+    menuEl.style.left = `${Math.max(8, Math.min(box.left, window.innerWidth - 200))}px`;
+    menuEl.showPopover();
+    menuEl.querySelector('button').focus();
+  }
+
+  function menuToggled(event) {
+    if (event.newState !== 'closed') return;
+    if (menuEl.contains(document.activeElement) || document.activeElement === document.body) menuFrom?.focus();
+    menuFrom = null;
+  }
 
   // Rows that appear after the first reading are lit for a moment, so a new problem is noticed; the rows already
   // there when the view opens are not.
@@ -99,7 +146,8 @@
             {#each rows as row (row.key)}
               {@const svc = row.service === null ? null : byId.get(row.service) ?? null}
               {@const isOpen = open === row.key}
-              <li class:open={isOpen} class:fresh={fresh[row.key]} class={row.tone} in:arrive out:leave animate:flip={FLIP}>
+              {@const live = row.items.filter((i) => !i.mutedUntil)}
+              <li class:open={isOpen} class:fresh={fresh[row.key]} class:muted={row.muted} class={row.tone} in:arrive out:leave animate:flip={FLIP}>
                 <button type="button" class="issue" aria-expanded={isOpen} aria-controls={`more-${row.key}`}
                   onclick={() => { open = isOpen ? null : row.key; }}>
                   <span class="marker {row.tone}" aria-hidden="true"></span>
@@ -107,9 +155,12 @@
                     {#if svc}<AppIcon adapter={adapterFor($adapters, svc.type)} size={19} />{:else}<Icon name={VIEW_ICONS[row.view] ?? 'server'} size={19} />{/if}
                   </span>
                   <span class="what">
-                    <span class="visually-hidden">{row.tone === 'fail' ? 'Error' : 'Warning'}: </span>
+                    <span class="visually-hidden">{row.muted ? 'Muted' : row.tone === 'fail' ? 'Error' : 'Warning'}: </span>
                     <span class="title">{row.title}</span>
-                    {#if row.detail}<span class="detail ellipsis">{row.detail}</span>{/if}
+                    <!-- The first thing in full, on two lines at most; the rest are counted, and listed when open. -->
+                    {#if (row.detail || row.more) && !isOpen}
+                      <span class="detail"><span class="line">{row.detail}</span>{#if row.more && !row.muted}<span class="rest">+{row.more} more</span>{/if}</span>
+                    {/if}
                   </span>
                   {#if row.value}<span class="value num {row.tone}">{row.value}</span>{/if}
                   <span class="turn" class:up={isOpen} aria-hidden="true"><Icon name="chevron-down" size={16} /></span>
@@ -117,7 +168,26 @@
                 <div class="fold" class:open={isOpen} id={`more-${row.key}`} inert={!isOpen}>
                   <div>
                     <div class="more-body">
-                      <div class="said">{#each explain(row) as text, i (i)}<p>{text}</p>{/each}</div>
+                      <ul class="items">
+                        {#each row.items as it (it.key)}
+                          <li class:off={!!it.mutedUntil}>
+                            <span class="dot {it.mutedUntil ? '' : it.tone}" aria-hidden="true"></span>
+                            <span class="said">
+                              <span class="visually-hidden">{it.tone === 'fail' ? 'Error' : 'Warning'}: </span>
+                              {#if row.items.length > 1}<b>{it.title}</b>{/if}
+                              <span class="text">{it.text}</span>
+                              {#if it.mutedUntil}
+                                <span class="quiet-note">
+                                  {mutedText(it.mutedUntil)} ·
+                                  <button type="button" class="link" disabled={busy === row.key} onclick={() => unmute(row, [it])}>
+                                    Unmute<span class="visually-hidden"> {it.title}</span>
+                                  </button>
+                                </span>
+                              {/if}
+                            </span>
+                          </li>
+                        {/each}
+                      </ul>
                       <div class="acts">
                         {#each actions(row, svc) as act, i (act.label)}
                           {#if act.jump !== undefined}
@@ -129,7 +199,19 @@
                             </a>
                           {/if}
                         {/each}
+                        {#if live.length > 0}
+                          <span class="split">
+                            <button type="button" class="quiet" disabled={busy === row.key} onclick={() => mute(row, 60)}>Mute for 1 hour</button>
+                            <button type="button" class="quiet caret" aria-label="Mute for longer" aria-haspopup="menu"
+                              disabled={busy === row.key} onclick={(e) => openMenu(e, row)}>
+                              <Icon name="chevron-down" size={15} />
+                            </button>
+                          </span>
+                        {:else}
+                          <button type="button" class="quiet" disabled={busy === row.key} onclick={() => unmute(row, row.items)}>Unmute</button>
+                        {/if}
                       </div>
+                      {#if failed?.key === row.key}<p class="error" role="alert">{failed.text}</p>{/if}
                     </div>
                   </div>
                 </div>
@@ -138,6 +220,11 @@
           </ul>
         </div>
       </section>
+      <!-- The longer mutes: one small menu for the whole list, placed under the button that opened it. -->
+      <div class="mute-menu" popover role="menu" aria-label="Mute for longer" bind:this={menuEl} ontoggle={menuToggled}>
+        <button type="button" role="menuitem" onclick={() => mute(menuRow, 480)}>Mute for 8 hours</button>
+        <button type="button" role="menuitem" onclick={() => mute(menuRow, 1440)}>Mute for 1 day</button>
+      </div>
     {/if}
     {#if found.notes.length > 0}
       <p class="notes settle">
@@ -207,18 +294,50 @@
   .issue:focus-visible { outline-offset: -2px; }
   .what { display: grid; gap: 1px; min-width: 0; }
   .title { font-size: var(--t-h3); font-weight: 600; overflow-wrap: anywhere; }
-  .detail { font-size: var(--t-small); color: var(--text2); }
-  /* An opened row says its line in full. */
-  .open .detail { white-space: normal; overflow-wrap: anywhere; }
+  .detail {
+    display: grid; grid-template-columns: minmax(0, auto) auto; justify-content: start; align-items: end; column-gap: 10px;
+    font-size: var(--t-small); color: var(--text2);
+  }
+  .line { max-height: calc(2 * 1.45em); overflow: hidden; overflow-wrap: anywhere; }
+  .rest { color: var(--muted); white-space: nowrap; }
+  /* A muted row steps back: it is still there, and says until when. */
+  .muted .title, .muted .tile-icon { opacity: 0.6; }
+  .muted .line { color: var(--muted); }
   .value { font-family: var(--font-display); font-weight: 600; white-space: nowrap; }
   .value.fail { color: var(--fail-ink); }
   .value.warn { color: var(--warn-ink); }
   /* The chevron keeps the last column, with or without a figure before it. */
   .issue .turn { grid-column: 5; }
   .turn.up { transform: rotate(180deg); }
-  .more-body { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 4px 16px 16px 76px; }
-  .said { flex: 1 1 320px; display: grid; gap: 8px; max-width: 62ch; color: var(--text2); overflow-wrap: anywhere; }
+  .more-body { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px 20px; padding: 2px 16px 16px 76px; }
+  .items { flex: 1 1 320px; list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; max-width: 66ch; }
+  .items li { display: flex; gap: 10px; min-width: 0; }
+  .items .dot { margin-top: 7px; }
+  .said { display: grid; gap: 1px; min-width: 0; color: var(--text2); overflow-wrap: anywhere; }
+  .said b { font-weight: 600; color: var(--text); }
+  .off .text, .off b { opacity: 0.6; }
+  .quiet-note { font-size: var(--t-small); color: var(--muted); }
+  .link {
+    display: inline; min-height: 0; padding: 0; border: 0; border-radius: 4px; background: transparent;
+    color: var(--accent-text); font: inherit; font-weight: 500;
+  }
+  .link:hover:not(:disabled) { background: transparent; border: 0; color: var(--accent-text-hi); text-decoration: underline; }
   .acts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .more-body .error { flex-basis: 100%; font-size: var(--t-small); }
+  /* Mute for an hour, and a caret for longer: two halves of one button. */
+  .split { display: inline-flex; }
+  .split button:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  .split .caret { padding: 5px 8px; margin-left: -1px; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+  .mute-menu {
+    position: fixed; inset: auto; margin: 0; padding: 6px; min-width: 184px; border: 1px solid var(--border2);
+    border-radius: var(--r-md); background: var(--surface); color: var(--text); box-shadow: var(--float);
+  }
+  .mute-menu:popover-open { display: grid; gap: 2px; animation: menu-in var(--dur-fast) var(--ease-out); }
+  @keyframes menu-in { from { opacity: 0; transform: translateY(-4px); } }
+  .mute-menu button {
+    justify-content: flex-start; border: 0; background: transparent; color: var(--text); font-weight: 400; padding: 7px 10px;
+  }
+  .mute-menu button:hover:not(:disabled) { background: var(--hover); border: 0; }
 
   /* What is only good to know: one quiet line. */
   .notes { display: flex; flex-wrap: wrap; gap: 2px 14px; padding: 0 12px; margin-top: -8px; font-size: var(--t-small); color: var(--muted); }
