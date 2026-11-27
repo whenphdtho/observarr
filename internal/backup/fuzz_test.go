@@ -2,6 +2,7 @@ package backup
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -96,9 +97,16 @@ func FuzzSealOpen(f *testing.F) {
 		if err != nil {
 			t.Fatalf("a sealed file does not open: %v", err)
 		}
-		want, _ := json.Marshal(keys) // as JSON: invalid UTF-8 comes back replaced, both ways alike
-		if back, _ := json.Marshal(got); string(back) != string(want) {
-			t.Fatalf("opened %s, sealed %s", back, want)
+		// Invalid UTF-8 comes back replaced, so compare what the sealed JSON holds, as values:
+		// encoders differ in whether they write the replacement character or its escape.
+		var want Keys
+		if raw, err := json.Marshal(keys); err != nil {
+			t.Fatal(err)
+		} else if err := json.Unmarshal(raw, &want); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("opened %+v, sealed %+v", got, want)
 		}
 		if _, err := Open(parsed, "another passphrase of some length"); err != ErrPassphrase {
 			t.Fatalf("a wrong passphrase: %v", err)
