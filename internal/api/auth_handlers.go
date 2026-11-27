@@ -57,6 +57,8 @@ type sessionInfo struct {
 	User  string `json:"user,omitempty"`
 	CSRF  string `json:"csrf,omitempty"`
 	Setup bool   `json:"setup,omitempty"` // no account exists yet: show the setup form
+	// StreamsFull: the session has every live stream it may have open (one per tab); another tab gets none.
+	StreamsFull bool `json:"streamsFull,omitempty"`
 }
 
 // session reports the current session. Behind a trusted login proxy it logs the asserted user in; on a fresh
@@ -71,7 +73,7 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request) {
 	sess, err := s.Sessions.Lookup(r)
 	switch {
 	case err == nil && (!viaProxy || strings.EqualFold(proxyName, sess.UserName)):
-		writeJSON(w, http.StatusOK, sessionInfo{User: sess.UserName, CSRF: sess.CSRF})
+		writeJSON(w, http.StatusOK, sessionInfo{User: sess.UserName, CSRF: sess.CSRF, StreamsFull: s.streamsFull(sess.CSRF)})
 		return
 	case err != nil && !errors.Is(err, store.ErrNotFound):
 		s.internal(w, r, err)
@@ -138,6 +140,10 @@ func (s *Server) setup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "password: at least 12 characters and at most 1024 bytes")
 		return
 	}
+	if auth.WeakPassword(in.Password) {
+		writeError(w, http.StatusBadRequest, "password: too easy to guess; not one character repeated, and not a common password")
+		return
+	}
 	// Refuse a finished setup before the costly hash. CreateFirstUser still decides a race atomically.
 	hasUsers, err := s.Store.HasUsers(r.Context())
 	if err != nil {
@@ -195,11 +201,14 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	if !s.attempt(w, key) {
 		return
 	}
+	// A request refused before a password was checked is no guess: it gives its attempt back.
 	var c credentials
 	if !readJSON(w, r, &c) {
+		s.Limiter.Release(key)
 		return
 	}
 	if len(c.Password) > maxPasswordLen {
+		s.Limiter.Release(key)
 		writeError(w, http.StatusBadRequest, "password: at most 1024 bytes")
 		return
 	}

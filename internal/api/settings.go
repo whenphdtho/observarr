@@ -179,11 +179,14 @@ type importReport struct {
 	ObservarrVersion string            `json:"observarrVersion"`
 	Services         []importedService `json:"services"`
 	Channels         []importedChannel `json:"channels"` // alert channels
-	Skipped          []skippedService  `json:"skipped"`
-	Dismissed        int               `json:"dismissed"` // dismissed finds of known app types
-	Saved            int               `json:"saved"`     // services saved here before the import
-	Removed          int               `json:"removed"`   // saved services removed (applied "replace")
-	Applied          bool              `json:"applied"`
+	// Rules says what becomes of the file's alert rules: "" when it has none, "kept" when this server has rules
+	// of its own (adding alongside keeps those; replacing takes the file's), "restored" when it has none.
+	Rules     string           `json:"rules,omitempty"`
+	Skipped   []skippedService `json:"skipped"`
+	Dismissed int              `json:"dismissed"` // dismissed finds of known app types
+	Saved     int              `json:"saved"`     // services saved here before the import
+	Removed   int              `json:"removed"`   // saved services removed (applied "replace")
+	Applied   bool             `json:"applied"`
 }
 
 type importedService struct {
@@ -255,6 +258,13 @@ func (s *Server) importSettings(w http.ResponseWriter, r *http.Request, sess sto
 		return
 	}
 	rep.Saved = len(saved)
+	switch {
+	case alerts.rules == nil:
+	case alerts.ownRules:
+		rep.Rules = "kept"
+	default:
+		rep.Rules = "restored"
+	}
 	rep.Channels = append(rep.Channels, alerts.report...)
 	rep.Skipped = append(rep.Skipped, alerts.skipped...)
 	if in.Mode == "preview" {

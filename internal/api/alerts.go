@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -172,7 +173,9 @@ func (s *Server) updateAlertChannel(w http.ResponseWriter, r *http.Request, sess
 			return
 		}
 	}
-	changed := p.Settings != nil || len(p.Secrets) > 0
+	// Sent again is not changed: what counts is whether the settings or secrets differ from the saved ones.
+	sent := p.Settings != nil || len(p.Secrets) > 0
+	was := settings
 	if p.Settings != nil {
 		next, err := alert.CheckSettings(ch.Type, *p.Settings)
 		if err != nil {
@@ -195,17 +198,21 @@ func (s *Server) updateAlertChannel(w http.ResponseWriter, r *http.Request, sess
 			return
 		}
 	}
-	if secErr != nil && !changed {
+	if secErr != nil && !sent {
 		writeError(w, http.StatusUnprocessableEntity, secErr.Error())
 		return
 	}
 	newSec := maps.Clone(sec)
 	maps.Copy(newSec, p.Secrets)
-	if changed {
+	changed := false
+	if sent {
 		if settings, err = alert.CheckChannel(ch.Type, settings, newSec); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		changed = secErr != nil || !reflect.DeepEqual(settings, was) || !maps.Equal(newSec, sec)
+	}
+	if changed {
 		if ch.Settings, err = json.Marshal(settings); err != nil {
 			s.internal(w, r, err)
 			return
@@ -319,6 +326,16 @@ func (s *Server) setAlertRules(w http.ResponseWriter, r *http.Request, sess stor
 	if !readJSON(w, r, &in) {
 		return
 	}
+	// A rule the request leaves out keeps its value: only an explicit false switches one off.
+	cur := s.Alerts.Rules()
+	if in.Enabled == nil {
+		in.Enabled = map[alert.Rule]bool{}
+	}
+	for _, rule := range alert.AllRules {
+		if _, ok := in.Enabled[rule]; !ok {
+			in.Enabled[rule] = cur.Enabled[rule]
+		}
+	}
 	if err := in.Check(); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -329,6 +346,16 @@ func (s *Server) setAlertRules(w http.ResponseWriter, r *http.Request, sess stor
 	}
 	s.audit(r, sess.UserName, "changed alert rules", "")
 	writeJSON(w, http.StatusOK, in)
+}
+
+// alertAttention answers with what needs attention now, as the live stream's "attention" event does: for a page
+// that has no stream (its session has every one it may have open) and asks now and then instead.
+func (s *Server) alertAttention(w http.ResponseWriter, _ *http.Request, _ store.Session) {
+	items := s.Alerts.Attention()
+	if items == nil {
+		items = []alert.Item{}
+	}
+	writeJSON(w, http.StatusOK, items)
 }
 
 // muteAlert silences one thing that needs attention, by its key, for an hour, eight hours or a day. It stays

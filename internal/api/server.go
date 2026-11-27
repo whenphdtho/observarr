@@ -124,6 +124,7 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle("GET /api/alerts/rules", s.requireSession(s.alertRules))
 		mux.Handle("PUT /api/alerts/rules", s.requireSession(s.setAlertRules))
 		mux.Handle("GET /api/alerts/log", s.requireSession(s.alertLog))
+		mux.Handle("GET /api/alerts/attention", s.requireSession(s.alertAttention))
 		mux.Handle("POST /api/alerts/mutes", s.requireSession(s.muteAlert))
 		mux.Handle("DELETE /api/alerts/mutes", s.requireSession(s.unmuteAlert))
 	}

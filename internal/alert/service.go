@@ -161,7 +161,7 @@ func (s *Service) liftTopics(ctx context.Context) error {
 func (s *Service) loop(ctx context.Context) {
 	tick := time.NewTicker(s.cfg.Every)
 	defer tick.Stop()
-	var soon <-chan time.Time
+	var soon, due <-chan time.Time
 	for {
 		select {
 		case <-ctx.Done():
@@ -174,9 +174,19 @@ func (s *Service) loop(ctx context.Context) {
 			continue
 		case <-soon:
 			soon = nil
+		case <-due:
 		case <-tick.C:
 		}
 		s.evaluate(ctx)
+		// A condition that waits out its time is looked at again exactly then: nothing else may change until
+		// the next tick, and the alert would be that much late.
+		due = nil
+		s.mu.Lock()
+		wait := s.engine.NextDue(s.cfg.Now(), s.rules)
+		s.mu.Unlock()
+		if wait > 0 {
+			due = time.After(wait)
+		}
 	}
 }
 

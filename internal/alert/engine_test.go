@@ -71,6 +71,24 @@ func TestDebounceWaitsTheMinutesSet(t *testing.T) {
 	}
 }
 
+// The engine says when the next waiting condition is due, so that it is reported then and not at the next tick.
+func TestNextDueIsWhenTheDebounceEnds(t *testing.T) {
+	st := newStepper(t)
+	st.r.DownMinutes = 1
+	if got := st.e.NextDue(t0, st.r); got != 0 {
+		t.Fatalf("nothing waits, yet due in %v", got)
+	}
+	st.want(st.at(10*time.Second, down(1)))
+	got := st.e.NextDue(t0.Add(25*time.Second), st.r)
+	if got < 45*time.Second || got > 46*time.Second {
+		t.Fatalf("seen at 10 s, asked at 25 s: due in %v, want 45 s", got)
+	}
+	st.want(st.at(70*time.Second+100*time.Millisecond, down(1)), "firing down/1")
+	if got := st.e.NextDue(t0.Add(71*time.Second), st.r); got != 0 {
+		t.Fatalf("it fires already, yet due in %v", got)
+	}
+}
+
 func TestBlipShorterThanTheDebounceSendsNothing(t *testing.T) {
 	st := newStepper(t)
 	st.want(st.at(0, down(1)))

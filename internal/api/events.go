@@ -19,8 +19,9 @@ import (
 const (
 	// maxStreams bounds open live event streams server-wide; each holds a connection and a hub subscription.
 	maxStreams = 32
-	// maxSessionStreams bounds one session's open streams, so a single session cannot take every slot.
-	maxSessionStreams = 4
+	// maxSessionStreams bounds one session's open streams (one per open tab), so a single session cannot take
+	// every slot.
+	maxSessionStreams = 8
 	// streamWriteTimeout ends a stream whose client stops reading, instead of blocking on it forever.
 	streamWriteTimeout = 10 * time.Second
 	// retryBase is the least delay the browser waits before reconnecting a stream that broke; each stream asks for
@@ -48,7 +49,11 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, sess store.Sessi
 	slot, ok := s.openStream(sess.CSRF, cancel)
 	if !ok {
 		w.Header().Set("Retry-After", "5")
-		writeError(w, http.StatusServiceUnavailable, "too many live connections; try again shortly")
+		msg := "too many live connections; try again shortly"
+		if s.streamsFull(sess.CSRF) {
+			msg = "too many open tabs: close one to get live updates here"
+		}
+		writeError(w, http.StatusServiceUnavailable, msg)
 		return
 	}
 	defer s.closeStream(sess.CSRF, slot)
@@ -176,6 +181,14 @@ func (s *Server) openStream(key string, end context.CancelFunc) (*streamSlot, bo
 	s.sessionStreams[key][slot] = true
 	s.streams.Add(1)
 	return slot, true
+}
+
+// streamsFull reports whether the session whose CSRF token is key has every stream it may have open: one more
+// tab gets none, and is told why (GET /api/session says so too, as a page cannot read a refused stream's answer).
+func (s *Server) streamsFull(key string) bool {
+	s.streamsMu.Lock()
+	defer s.streamsMu.Unlock()
+	return len(s.sessionStreams[key]) >= maxSessionStreams
 }
 
 // closeStream gives back a slot openStream took.

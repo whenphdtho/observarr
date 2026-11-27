@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -231,10 +232,15 @@ func TestRateLimitSuppressesThenSummarises(t *testing.T) {
 	e.down(2)
 	e.alert.evaluate(context.Background())
 	eventually(t, "one message", func() bool { return r.count() == 1 })
+	// The message has arrived; that it was sent is written down a moment later.
 	var statuses []string
-	for _, l := range e.log() {
-		statuses = append(statuses, l.Deliveries[0].Status)
-	}
+	eventually(t, "the delivery is recorded", func() bool {
+		statuses = statuses[:0]
+		for _, l := range e.log() {
+			statuses = append(statuses, l.Deliveries[0].Status)
+		}
+		return !slices.Contains(statuses, StatusQueued)
+	})
 	if strings.Join(statuses, " ") != "suppressed sent" && strings.Join(statuses, " ") != "sent suppressed" {
 		t.Fatalf("statuses = %v", statuses)
 	}

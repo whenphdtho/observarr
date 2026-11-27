@@ -153,6 +153,23 @@ func (e *Engine) Step(now time.Time, r Rules, conds []Condition, known map[strin
 	return notes, put, del
 }
 
+// NextDue is how long after now the next waiting condition has lasted its time and is to be reported; 0 when
+// none waits. The caller steps again then, so "down for a minute" is sent after a minute, not at whatever later
+// moment something else changes.
+func (e *Engine) NextDue(now time.Time, r Rules) time.Duration {
+	var next time.Duration
+	for key, en := range e.entries {
+		if en.firing || e.Muted[key] || !en.gone.IsZero() {
+			continue
+		}
+		// A moment past the time itself, so that the step then finds it due whatever the clock's grain.
+		if wait := en.since.Add(r.debounce(en.Rule)).Sub(now) + 50*time.Millisecond; wait > 0 && (next == 0 || wait < next) {
+			next = wait
+		}
+	}
+	return next
+}
+
 // Remind has the firing alert with key sent once more at the next step, as when its mute has ended and it is
 // still there. One that has not fired yet needs no reminder: it fires then.
 func (e *Engine) Remind(key string) {

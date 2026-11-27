@@ -69,6 +69,7 @@ func (s *Server) exportAlerts(ctx context.Context, withSecrets bool) (*backup.Al
 // alertPlan is the alert part of a settings import, checked as saving it by hand would check it.
 type alertPlan struct {
 	rules    []byte // nil: the file has no alerts
+	ownRules bool   // this server has rules of its own saved: adding alongside keeps them
 	channels []store.AlertChannel
 	secrets  []alert.Secrets
 	report   []importedChannel
@@ -89,6 +90,11 @@ func (s *Server) planAlerts(ctx context.Context, f backup.File, keys backup.Keys
 	if p.rules, err = json.Marshal(r); err != nil {
 		return p, err
 	}
+	own, err := s.Store.AlertRules(ctx)
+	if err != nil {
+		return p, err
+	}
+	p.ownRules = own != nil
 	if len(f.Alerts.Channels) > maxImportChannels {
 		return p, fmt.Errorf("the file holds more than %d alert channels", maxImportChannels)
 	}
@@ -199,8 +205,9 @@ func (p *alertPlan) apply(s *Server, replace bool) *store.AlertImport {
 	}
 	p.report = report
 	a.Seal = func(i int, id int64) ([]byte, error) { return alert.SealSecrets(s.Box, id, secrets[i]) }
-	if replace {
-		a.Rules = p.rules // adding keeps the rules in force here
+	// Adding keeps the rules set here; a server that never had any set takes the file's.
+	if replace || !p.ownRules {
+		a.Rules = p.rules
 	}
 	return a
 }
