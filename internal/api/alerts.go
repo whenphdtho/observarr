@@ -331,6 +331,52 @@ func (s *Server) setAlertRules(w http.ResponseWriter, r *http.Request, sess stor
 	writeJSON(w, http.StatusOK, in)
 }
 
+// muteAlert silences one thing that needs attention, by its key, for an hour, eight hours or a day. It stays
+// listed, with when its mute ends, but sends nothing and is not counted.
+func (s *Server) muteAlert(w http.ResponseWriter, r *http.Request, sess store.Session) {
+	var in struct {
+		Key     string `json:"key"`
+		Minutes int    `json:"minutes"`
+	}
+	if !readJSON(w, r, &in) {
+		return
+	}
+	span := time.Duration(in.Minutes) * time.Minute
+	if !slices.Contains(alert.MuteSpans, span) {
+		writeError(w, http.StatusBadRequest, "minutes: 60, 480 or 1440")
+		return
+	}
+	until, err := s.Alerts.Mute(r.Context(), in.Key, span, sess.UserName)
+	switch {
+	case errors.Is(err, alert.ErrNotListed):
+		writeError(w, http.StatusNotFound, "nothing that needs attention has this key")
+		return
+	case errors.Is(err, store.ErrTooMany):
+		writeError(w, http.StatusConflict, fmt.Sprintf("at most %d mutes at once: unmute some first", store.MaxAlertMutes))
+		return
+	case err != nil:
+		s.internal(w, r, err)
+		return
+	}
+	s.audit(r, sess.UserName, "muted alert", fmt.Sprintf("%s for %d min", in.Key, in.Minutes))
+	writeJSON(w, http.StatusOK, map[string]any{"key": in.Key, "mutedUntil": until})
+}
+
+// unmuteAlert ends the mute of the key in the path; without one it changes nothing.
+func (s *Server) unmuteAlert(w http.ResponseWriter, r *http.Request, sess store.Session) {
+	key := r.PathValue("key")
+	if key == "" {
+		writeError(w, http.StatusNotFound, "unknown API endpoint")
+		return
+	}
+	if err := s.Alerts.Unmute(r.Context(), key); err != nil {
+		s.internal(w, r, err)
+		return
+	}
+	s.audit(r, sess.UserName, "unmuted alert", key)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // alertLog answers with the newest alerts sent, at most ?limit= (default 50, at most 200).
 func (s *Server) alertLog(w http.ResponseWriter, r *http.Request, _ store.Session) {
 	limit := 50

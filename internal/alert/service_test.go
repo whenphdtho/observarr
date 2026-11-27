@@ -17,6 +17,7 @@ import (
 	"observarr/internal/shape"
 	"observarr/internal/state"
 	"observarr/internal/store"
+	"observarr/internal/system"
 )
 
 type syncBuffer struct {
@@ -47,6 +48,7 @@ type env struct {
 	now   time.Time
 	alert *Service
 	stop  context.CancelFunc
+	sys   func() system.Snapshot // the host as the Service reads it; nil for none
 }
 
 func newEnv(t *testing.T) *env {
@@ -88,7 +90,7 @@ func (e *env) start(r Rules) {
 		e.t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	e.alert = New(Config{Store: e.st, Box: e.box, Hub: e.hub, Deps: Deps{HTTP: NewHTTPClient()},
+	e.alert = New(Config{Store: e.st, Box: e.box, Hub: e.hub, System: e.sys, Deps: Deps{HTTP: NewHTTPClient()},
 		Log: slog.New(slog.NewTextHandler(e.logs, nil)), Now: e.clock, Every: time.Hour, Backoff: time.Millisecond})
 	if err := e.alert.Start(ctx); err != nil {
 		e.t.Fatal(err)

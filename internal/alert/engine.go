@@ -59,6 +59,9 @@ type Engine struct {
 	started time.Time
 	// Overflow counts the conditions ignored because maxEntries were followed already.
 	Overflow int
+	// Muted holds the keys whose conditions are followed but not reported: nothing is sent for them. One that has
+	// not fired yet waits, and fires once it is no longer muted.
+	Muted map[string]bool
 }
 
 // NewEngine returns an Engine started at now that continues the firing alerts in saved: they are not sent again.
@@ -94,6 +97,10 @@ func (e *Engine) Step(now time.Time, r Rules, conds []Condition, known map[strin
 		changed := en.Title != c.Title || en.Message != c.Message || en.Severity != c.Severity
 		en.Condition, en.gone = c, time.Time{}
 		switch {
+		case e.Muted[c.Key]:
+			if !changed || !en.firing {
+				continue
+			}
 		case !en.firing && now.Sub(en.since) >= r.debounce(c.Rule):
 			en.firing, en.notified, en.notifiedSev = true, now, c.Severity
 			notes = append(notes, Note{Event: EventFiring, Condition: c, Since: en.since})
@@ -140,6 +147,14 @@ func (e *Engine) Step(now time.Time, r Rules, conds []Condition, known map[strin
 		return cmp.Or(cmp.Compare(rank(a.Severity), rank(b.Severity)), cmp.Compare(a.Key, b.Key))
 	})
 	return notes, put, del
+}
+
+// Forget stops following the condition with key without a word, as for one whose mute outlived it, and reports
+// whether it was firing (and so is saved).
+func (e *Engine) Forget(key string) bool {
+	en, ok := e.entries[key]
+	delete(e.entries, key)
+	return ok && en.firing
 }
 
 func (en *entry) saved() Saved {

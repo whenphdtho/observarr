@@ -243,6 +243,12 @@ a message when something needs attention, even while nobody has Observarr open.
   upload; the traffic budget at 80 % and 100 %; sign-in lockouts and N failed sign-ins in 15 minutes; downloads
   stuck or failed; and, off by default, requests waiting for approval. Worked out on the server, they are also the
   Overview's "Needs attention" (every rule, before any waiting), which the live stream carries.
+- **Mute:** a row of "Needs attention" can be muted for an hour, eight hours or a day
+  (`POST /api/alerts/mutes` with `{"key", "minutes": 60 | 480 | 1440}`, `DELETE /api/alerts/mutes/{key}`). A muted
+  problem stays listed, dimmed, with when its mute ends, but sends nothing and is not counted in the title, the
+  tab or the bell. The mute ends on its own at its time (a problem still there is reported then), when the problem
+  is over (no "resolved" is sent) or when it gets worse. Mutes survive a restart, at most 500 are kept, and they
+  are in no settings file.
 - **When:** the rules are checked on every change and every 30 s. A problem is sent once it has lasted its time
   (a minute for health warnings, five for storage and downloads), and again when it is over (after a minute
   without it). Optionally, alerts still firing are sent again after a few hours. Each channel takes at most

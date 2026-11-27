@@ -42,26 +42,32 @@ type Service struct {
 	rules     Rules
 	engine    *Engine
 	workers   map[int64]*worker
-	overrun   int    // Engine.Overflow last logged
-	attention []Item // what needs attention now, from the latest evaluation; nil before the first
+	overrun   int         // Engine.Overflow last logged
+	attention []Item      // what needs attention now, from the latest evaluation; nil before the first
+	conds     []Condition // the conditions of the latest evaluation, of every rule
+	mutes     map[string]*mute
+	started   time.Time
 	watchers  map[chan struct{}]bool
 }
 
 // Item is one thing that needs attention now, as the UI lists it: every condition of every rule, before any
 // debounce, whether its alert is switched on or not. Value is the figure that sums it up, if it has one. Firing
-// tells whether it is an alert firing now; Since is when the condition began, known once it fires.
+// tells whether it is an alert firing now; Since is when the condition began, known once it fires. MutedUntil is
+// set while the user has it muted: it then sends nothing and is not to be counted.
 type Item struct {
-	Key      string    `json:"key"`
-	Rule     Rule      `json:"rule"`
-	Severity Severity  `json:"severity"`
-	Service  int64     `json:"service,omitempty"`
-	Name     string    `json:"name"`
-	Title    string    `json:"title"`
-	Message  string    `json:"message"`
-	Value    string    `json:"value,omitempty"`
-	View     string    `json:"view"`
-	Firing   bool      `json:"firing"`
-	Since    time.Time `json:"since"`
+	Key      string   `json:"key"`
+	Rule     Rule     `json:"rule"`
+	Severity Severity `json:"severity"`
+	Service  int64    `json:"service,omitempty"`
+	Name     string   `json:"name"`
+	Title    string   `json:"title"`
+	Message  string   `json:"message"`
+	Value    string   `json:"value,omitempty"`
+	View     string   `json:"view"`
+	Firing   bool     `json:"firing"`
+	// MutedUntil is when its mute ends; left out when it is not muted.
+	MutedUntil time.Time `json:"mutedUntil,omitzero"`
+	Since      time.Time `json:"since"`
 }
 
 // New returns a Service; Start starts it.
@@ -75,7 +81,8 @@ func New(cfg Config) *Service {
 	if cfg.Backoff == 0 {
 		cfg.Backoff = 2 * time.Second
 	}
-	return &Service{cfg: cfg, rules: DefaultRules(), workers: map[int64]*worker{}, watchers: map[chan struct{}]bool{}}
+	return &Service{cfg: cfg, rules: DefaultRules(), workers: map[int64]*worker{}, watchers: map[chan struct{}]bool{},
+		mutes: map[string]*mute{}}
 }
 
 // savedBody is how a firing alert is kept in the store: its condition and the severity it was last sent with.
@@ -99,7 +106,11 @@ func (s *Service) Start(ctx context.Context) error {
 				NotifiedSeverity: cmp.Or(b.NotifiedSeverity, b.Severity)})
 		}
 	}
-	s.engine = NewEngine(s.cfg.Now(), saved)
+	s.started = s.cfg.Now()
+	s.engine = NewEngine(s.started, saved)
+	if err := s.loadMutes(ctx); err != nil {
+		return err
+	}
 	if err := s.liftTopics(ctx); err != nil {
 		return err
 	}
@@ -188,7 +199,13 @@ func (s *Service) evaluate(ctx context.Context) {
 	// Every rule is evaluated for the attention list; the engine gets the ones switched on.
 	all, known := Evaluate(in, r.everyRule())
 	conds := slices.DeleteFunc(slices.Clone(all), func(c Condition) bool { return !r.on(c.Rule) })
+	ended, forgotten := s.settleMutes(now, all, known)
+	s.engine.Muted = make(map[string]bool, len(s.mutes))
+	for key := range s.mutes {
+		s.engine.Muted[key] = true
+	}
 	notes, put, del := s.engine.Step(now, r, conds, known, services)
+	del = append(del, forgotten...)
 	overflow := s.engine.Overflow
 	logged := s.overrun
 	s.overrun = overflow
@@ -201,6 +218,9 @@ func (s *Service) evaluate(ctx context.Context) {
 	if err := s.save(ctx, put, del); err != nil && ctx.Err() == nil {
 		s.cfg.Log.Warn("saving the alert state failed", "err", err)
 	}
+	if err := s.cfg.Store.DeleteAlertMutes(ctx, ended...); err != nil && ctx.Err() == nil {
+		s.cfg.Log.Warn("removing ended mutes failed", "err", err)
+	}
 	for _, n := range notes {
 		s.dispatch(ctx, now, n.Rule, Message{Event: n.Event, Rule: n.Rule, Severity: n.Severity, Name: n.Name,
 			Title: n.Title, Text: n.Message, Time: now, URL: link(r.Link, n.View)})
@@ -211,6 +231,7 @@ func (s *Service) evaluate(ctx context.Context) {
 // setAttention keeps the attention list of conds, worst first, and tells the watchers when it changed. Callers
 // hold s.mu.
 func (s *Service) setAttention(conds []Condition) {
+	s.conds = conds
 	firing := map[string]Saved{}
 	for _, a := range s.engine.Firing() {
 		firing[a.Key] = a
@@ -220,6 +241,9 @@ func (s *Service) setAttention(conds []Condition) {
 		f, ok := firing[c.Key]
 		items[i] = Item{Key: c.Key, Rule: c.Rule, Severity: c.Severity, Service: c.Service, Name: c.Name,
 			Title: c.Title, Message: c.Message, Value: c.Value, View: c.View, Firing: ok, Since: f.Since}
+		if m := s.mutes[c.Key]; m != nil {
+			items[i].MutedUntil = m.until
+		}
 	}
 	slices.SortStableFunc(items, func(a, b Item) int { return cmp.Compare(rank(a.Severity), rank(b.Severity)) })
 	if s.attention != nil && slices.Equal(items, s.attention) {

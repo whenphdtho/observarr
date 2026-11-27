@@ -351,7 +351,8 @@ func collector(cfg config.Config, log *slog.Logger) (*local.Local, error) {
 }
 
 // upkeep removes expired sessions, old audit rows, login addresses older than auth.KnownFor, old daily
-// traffic totals, old history buckets and old alert log entries, now and then hourly, until ctx ends.
+// traffic totals, old history buckets, old alert log entries and ended mutes, now and then hourly, until ctx
+// ends.
 func upkeep(ctx context.Context, st *store.Store, log *slog.Logger) {
 	tick := time.NewTicker(time.Hour)
 	defer tick.Stop()
@@ -373,6 +374,9 @@ func upkeep(ctx context.Context, st *store.Store, log *slog.Logger) {
 		}
 		if err := st.PruneAlertLog(ctx); err != nil && ctx.Err() == nil {
 			log.Warn("removing old alert log entries failed", "err", err)
+		}
+		if err := st.PruneAlertMutes(ctx, now); err != nil && ctx.Err() == nil {
+			log.Warn("removing ended mutes failed", "err", err)
 		}
 		select {
 		case <-ctx.Done():
