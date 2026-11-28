@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/whenphdtho/observarr/actions/workflows/ci.yml/badge.svg)](https://github.com/whenphdtho/observarr/actions/workflows/ci.yml)
 
-<img src="docs/images/demo.webp" width="880" alt="Observarr demo: signing in to the Overview with Needs attention and live throughput, the Network view live and over 24 hours, the Apps view with a card expanded, adding Lidarr found as a Docker container, the Storage view with rclone mounts, the Security view with failed sign-ins and CrowdSec bans, the System view, and the same views on a phone">
+<img src="docs/images/demo.webp" width="880" alt="Observarr demo: signing in to the Overview, opening a Needs attention row and muting it, the Network view over 24 hours and 7 days, the Apps view with Jellyfin's streams, Storage with rclone mounts, Security with failed sign-ins and CrowdSec bans, the Alerts section, the light theme, and the same views on a phone">
 
 <sub>▶ [Watch in full quality (MP4)](docs/images/demo.mp4)</sub>
 
@@ -32,29 +32,29 @@ encrypted at rest. Works on a phone, too.
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/overview.png" alt="Overview: a Needs attention panel with two rclone cache problems, a Radarr health warning and an import problem, then live throughput, four key figures and a rail with every app and the host's figures"></td>
-    <td width="50%"><img src="docs/images/apps.png" alt="Apps view: six collapsed cards with each app's logo, state, version, a summary line and its leading download or warning; problem cards are edged in their state colour"></td>
+    <td width="50%"><img src="docs/images/overview.png" alt="Overview: the title says two problems need you; Needs attention lists a full rclone cache, an app that is not reachable, health warnings, a failed download and a sign-in lockout, above the traffic of the last 24 hours, with the apps that need you and the server's figures in the rail"></td>
+    <td width="50%"><img src="docs/images/apps.png" alt="Apps view: cards for CrowdSec, Jellyfin, Lidarr, rclone, NZBGet (paused), Overseerr / Jellyseerr, Prowlarr (not reachable) and Radarr, each with its state, version and what it is doing"></td>
   </tr>
   <tr>
-    <td><img src="docs/images/network.png" alt="Network view: download and upload figures, a chart of the traffic per container over the last five minutes, a By app table and the daily budget"></td>
+    <td><img src="docs/images/network.png" alt="Network view over 7 days: download and upload figures, traffic per app stacked in and out, the apps' share of the week, and daily totals"></td>
     <td><img src="docs/images/storage.png" alt="Storage view: disk, mount, cache and transfer figures, the disk bar, rclone mounts and caches with one cache out of space, and the transfers running now"></td>
   </tr>
   <tr>
     <td><img src="docs/images/security.png" alt="Security view: failed sign-ins by address with one address locked out, sessions, and what CrowdSec blocks by origin and scenario"></td>
-    <td><img src="docs/images/system.png" alt="System view: CPU, memory, swap and uptime, a live host activity chart, disks, network interfaces and the containers table"></td>
+    <td><img src="docs/images/system.png" alt="System view: CPU, memory, swap and uptime, a live CPU and memory chart, disks, network interfaces and the containers table"></td>
   </tr>
 </table>
 
 <p align="center">
-  <img src="docs/images/phone-overview.png" width="220" alt="Overview on a phone: the Needs attention panel above the Throughput chart, with the views in a dock at the bottom">
+  <img src="docs/images/phone-overview.png" width="220" alt="Overview on a phone: Needs attention above the traffic chart, with the views in a dock at the bottom">
   &nbsp;
   <img src="docs/images/phone-network.png" width="220" alt="Network view on a phone">
   &nbsp;
-  <img src="docs/images/phone-storage.png" width="220" alt="Storage view on a phone">
+  <img src="docs/images/phone-apps.png" width="220" alt="Apps view on a phone">
 </p>
 
-More screenshots: [Add apps](docs/images/add-apps.png) · [first start](docs/images/add-apps-found.png) ·
-[a card expanded](docs/images/apps-expanded.png) · [Network over 24 hours](docs/images/network-24h.png)
+More screenshots: [a row opened](docs/images/overview-expanded.png) · [light theme](docs/images/overview-light.png) ·
+[Jellyfin's streams](docs/images/apps-expanded.png) · [Add apps](docs/images/add-apps.png) · [Alerts](docs/images/system-alerts.png)
 
 ## Quick start
 
