@@ -28,6 +28,33 @@
   let addButtonEl;
   let gridEl = $state();
 
+  // An opened card takes a whole row; the card before it then widens to the row's end rather than leave a hole, and
+  // the cards keep the order they are read and tabbed in. columns is how many the grid fits now.
+  let columns = $state(1);
+  $effect(() => {
+    if (!gridEl) return;
+    const ro = new ResizeObserver(() => {
+      columns = getComputedStyle(gridEl).gridTemplateColumns.split(' ').length;
+    });
+    ro.observe(gridEl);
+    return () => ro.disconnect();
+  });
+  const spans = $derived.by(() => {
+    const out = {};
+    let col = 0;
+    let prev = null;
+    for (const s of services) {
+      if (expanded[s.id]) {
+        if (col > 0) out[prev] = columns - col + 1;
+        col = 0;
+      } else {
+        col = (col + 1) % columns;
+        prev = s.id;
+      }
+    }
+    return out;
+  });
+
   const allExpanded = $derived(services.length > 0 && services.every((s) => expanded[s.id]));
   const taken = $derived(services.map((s) => s.name));
 
@@ -142,7 +169,7 @@
   {:else}
     <div class="grid" bind:this={gridEl}>
       {#each services as service (service.id)}
-        <ServiceCard {service} adapter={adapterFor($adapters, service.type)} expanded={!!expanded[service.id]}
+        <ServiceCard {service} adapter={adapterFor($adapters, service.type)} expanded={!!expanded[service.id]} span={spans[service.id] ?? 1}
           ontoggle={toggle} onedit={openEdit} onremoved={focusAddButton} />
       {/each}
     </div>

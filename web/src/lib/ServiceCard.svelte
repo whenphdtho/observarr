@@ -15,7 +15,8 @@
   // type — `adapter` is just the matching entry from GET /api/adapters, looked up by the caller.
   // `onremoved` is called once the service is actually gone, so the caller can move focus somewhere
   // that outlives this card.
-  let { service, adapter, expanded = false, ontoggle, onedit, onremoved } = $props();
+  // `span` is how many grid columns the card takes, so it can fill its row up to an opened card after it.
+  let { service, adapter, expanded = false, span = 1, ontoggle, onedit, onremoved } = $props();
 
   let dialogEl;
   let opener = null;
@@ -78,6 +79,7 @@
 </script>
 
 <article class="card service" class:open={expanded} id={`service-${service.id}`} tabindex="-1"
+  style:grid-column-end={span > 1 ? `span ${span}` : null}
   aria-labelledby={`service-name-${service.id}`} use:flash={status}>
   <header>
     <span class="tile-icon" aria-hidden="true"><AppIcon {adapter} size={20} /></span>
