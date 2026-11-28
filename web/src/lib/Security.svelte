@@ -9,7 +9,7 @@
   import { serviceList } from './live.js';
   import { now } from './ticker.js';
   import { formatAge, formatCount, formatSpan, formatUntil, formatTime, plural } from './format.js';
-  import { securityServices, activeBans } from './security.js';
+  import { securityServices, blocked } from './security.js';
 
   // Security shows how Observarr itself is protected (GET /api/security: failed sign-ins, lockouts,
   // sessions, access settings) and, for every service filling the "security" shape, what it blocks.
@@ -41,7 +41,9 @@
   });
 
   const blockers = $derived(securityServices($serviceList));
-  const bans = $derived(activeBans(blockers));
+  // The same count as each app's own section below: every active decision, a ban or a milder one, by type.
+  const blocks = $derived(blocked(blockers));
+  const blockTypes = $derived(blocks.byType.map((t) => `${t.name} ${formatCount(t.count)}`).join(' · '));
   // The adapters that can fill the shape name what to connect, so nothing here names an app.
   const sources = $derived($adapters.filter((a) => a.kinds?.includes('security')));
   const failed = $derived(view?.failed ?? null);
@@ -113,8 +115,9 @@
     <Kpi label="Active sessions" value={view ? view.sessionCount : '—'}
       sub={!view ? 'Loading…' : others ? `${others} besides yours` : 'Only yours'} />
     {#if blockers.length}
-      <Kpi label="Blocked addresses" value={bans.any ? formatCount(bans.bans, bans.capped) : '—'}
-        sub={bans.any ? `by ${blockers.length === 1 ? blockers[0].name : `${blockers.length} apps`}` : 'Waiting for the first check…'} />
+      <Kpi label="Blocked addresses" value={blocks.any ? formatCount(blocks.total, blocks.capped) : '—'}
+        sub={!blocks.any ? 'Waiting for the first check…' : blocks.byType.length > 1 ? blockTypes
+          : `by ${blockers.length === 1 ? blockers[0].name : `${blockers.length} apps`}`} />
     {:else}
       <Kpi label="Last sign-in" value={lastSignIn ? lastSignIn.user : '—'}
         sub={lastSignIn ? `${formatAge(lastSignIn.at, $now)}${lastSignIn.address ? ` · ${lastSignIn.address}` : ''}` : 'None yet'} />
@@ -220,7 +223,7 @@
               <b class="num">{formatCount(data.total, data.capped)}</b>
             </div>
             <div class="fig">
-              <span class="muted">Detected here</span>
+              <span class="muted" title="Detected here and added by hand">Blocked here</span>
               <b class="num">{formatCount(data.local, data.capped)}</b>
             </div>
             <div class="fig">

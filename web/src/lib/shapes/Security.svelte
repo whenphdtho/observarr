@@ -1,17 +1,15 @@
 <script>
   import { now } from '../ticker.js';
   import { formatAge, formatCount, formatUntil } from '../format.js';
-  import { countOf } from '../security.js';
 
-  // Security renders one shape.Security reading compactly: the active bans and the latest decision
+  // Security renders one shape.Security reading compactly: the addresses blocked and the latest decision
   // this machine made. It knows nothing about which app produced it.
   let { reading } = $props();
 
   const data = $derived(reading?.data);
-  const bans = $derived(countOf(data?.byType, 'ban'));
   const last = $derived(data?.recent?.[0] ?? null);
   const age = $derived(reading ? formatAge(reading.at, $now) : '');
-  const split = $derived(data ? `${formatCount(data.local)} detected here · ${formatCount(data.community)} from blocklists` : '');
+  const split = $derived(data ? `${formatCount(data.local)} blocked here · ${formatCount(data.community)} from blocklists` : '');
 </script>
 
 <div class="security">
@@ -21,7 +19,7 @@
     <p class="row">
       <span class="label">Blocked addresses</span>
       {#if data}
-        <span class="count num">{formatCount(bans, data.capped)}</span>
+        <span class="count num">{formatCount(data.total, data.capped)}</span>
       {/if}
       <span class="muted age">{age}</span>
     </p>
