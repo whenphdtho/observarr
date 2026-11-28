@@ -33,7 +33,7 @@
     {#if controls}<div class="controls">{@render controls()}</div>{/if}
   </div>
   <!-- A shut body is out of reach of the keyboard and of screen readers, not only out of sight. -->
-  <div class="fold" class:open id={`${id}-body`} inert={!open}>
+  <div class="reveal-rows" class:open id={`${id}-body`} inert={!open}>
     <div><div class="body">{@render children()}</div></div>
   </div>
 </section>

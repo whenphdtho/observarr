@@ -203,7 +203,7 @@
                   {#if row.value}<span class="value num {row.tone}">{row.value}</span>{/if}
                   <span class="turn" class:up={isOpen} aria-hidden="true"><Icon name="chevron-down" size={16} /></span>
                 </button>
-                <div class="fold" class:open={isOpen} id={`${uid}-more-${n}`} inert={!isOpen}>
+                <div class="reveal-rows" class:open={isOpen} id={`${uid}-more-${n}`} inert={!isOpen}>
                   <div>
                     <div class="more-body">
                       <ul class="items">

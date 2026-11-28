@@ -377,9 +377,9 @@ dialog .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap:
 
 /* A panel that folds (Fold.svelte) and anything else that opens in place: the body's row grows from nothing to
    its own height, so the height eases without being measured. */
-.fold { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--dur-base) var(--ease-out); }
-.fold.open { grid-template-rows: 1fr; }
-.fold > * { overflow: hidden; min-height: 0; }
+.reveal-rows { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--dur-base) var(--ease-out); }
+.reveal-rows.open { grid-template-rows: 1fr; }
+.reveal-rows > * { overflow: hidden; min-height: 0; }
 /* The chevron of a thing that opens: down when open, turned aside when shut. */
 .turn { flex: none; display: grid; color: var(--muted); transition: transform var(--dur-base) var(--ease-out); }
 
