@@ -278,10 +278,7 @@ func TestAttentionListsEveryRule(t *testing.T) {
 	e := newEnv(t)
 	rules := quick()
 	rules.Enabled[RuleHealth] = false
-	e.start(rules)
-	if e.alert.Attention() != nil {
-		t.Fatal("an attention list before the first evaluation")
-	}
+	e.start(rules) // starting evaluates once in the background, so the list may already be there
 	watch, stop := e.alert.WatchAttention()
 	defer stop()
 	e.down(1)
