@@ -215,7 +215,8 @@ For an app with its own API shape:
 - **Probe(security)** reads `GET /v1/decisions`, every active decision. A community blocklist can hold tens of
   thousands of entries, so the adapter uses `adapter.StreamJSONLimit` with a 48 MiB limit instead of the usual
   4 MiB, and `adapter.DecodeArray` hands it one decision at a time: each is counted, only the newest local ones
-  (origins other than `CAPI` and `lists`) are kept, every breakdown tracks at most 256 distinct names, and
+  (origins other than `CAPI` and `lists`) are kept, every breakdown tracks at most 256 distinct names, each
+  origin is given in plain words ("Community blocklist", "Subscribed lists", "Added by hand", "Detected here"), and
   every kept text is clipped. If the answer is still over the limit, the counts so far are reported with
   `Capped` set rather than failing the probe.
 - The security kind is polled once a minute (`cmd/observarr`: `poller.Config.Intervals`), not every 10 s.
@@ -350,3 +351,87 @@ point, state (`mounted`, `active`, or `unmounted` for apps that keep configured 
 and limit, cached files, uploads in progress and queued, errored files and out-of-space — plus the transfer
 speed, totals and at most `shape.MaxTransfers` (20) transfers in progress; `Total` and `ActiveTransfers` keep
 the real counts. The Storage view and the `Mounts` widget render it.
+
+## SABnzbd and NZBGet: two downloaders in one package
+
+`internal/adapters/usenet` holds two adapters, `sabnzbd` and `nzbget`, that report the same things the same way:
+`health` and `queue`. The field names of both APIs are checked against the apps' source and recorded in each
+file's comment.
+
+- **SABnzbd** (`GET /api?mode=…&output=json&apikey=…`) takes its key as a query parameter, and net/http's
+  errors repeat the request URL. Every call goes through `sabGet`, which takes the query out of any `*url.Error`
+  before the error goes anywhere; a test fails if the key shows up in an error. The calls are fixed values
+  (`mode=version`, `queue`, `history&failed_only=1`, `warnings`); none carries a `name`, which would turn a mode
+  into an action.
+- **NZBGet** speaks JSON-RPC over POST at `/jsonrpc`, through `adapter.PostJSON` with an allow-list of the
+  methods it calls (`version`, `status`, `listgroups`, `history`). Its secret is `user:password` for basic auth,
+  read by `adapter.BasicAuth`, the same as rclone's. Its history has no limit, so the adapter reads it as a
+  stream and stops at the first item older than a day (or after 200 items).
+- **The queue shape** carries two optional fields for an app that downloads the whole queue itself: `speed`
+  (bytes/s) and `paused`. Both are left out when zero or false, so an \*arr queue looks as before; the `Queue`
+  widget shows them only when set, and the Overview's Downloads panel adds up every reported speed.
+- **Identity:** a warning carries an `id` ("disk", "failed", a check's name) that stays the same while its text
+  changes, and a queue item the app's own `id` of it. Alerts and mutes are keyed by these, never by a warning's
+  place in the list, so one that ends does not hand its key to its neighbour.
+- **Titles:** a warning may carry a `title`, a few plain words that follow the app's name in "Needs attention"
+  and in alerts ("SABnzbd: 2 downloads failed"); the \*arr adapter names the health checks it knows by their
+  check name ("Radarr: automatic search is off"). Without one, the first clause of the message serves.
+- **Health** notes a paused downloader (as information: it is a state, not a problem) and warns of less than
+  1 GiB free for downloads, the downloads that failed in the last day (with the newest one's name and reason)
+  and, for SABnzbd, the warnings it logged in the last day.
+- **Discovery:** both recognise their Docker images and read their config folder (`sabnzbd.ini`: `api_key`,
+  `port`, `url_base`; `nzbget.conf`: `ControlUsername`, `ControlPassword`, `ControlPort`) through
+  `adapter.ReadConfigFile`, and both answer a network scan without a key: SABnzbd's `mode=version` needs none,
+  and NZBGet names itself in the `Server` header of every answer, a refusal included.
+
+## Jellyfin: streams
+
+`internal/adapters/jellyfin` reads Jellyfin's REST API with an API key. It fills `health` and `streams`;
+deployment is in [deploy.md](deploy.md#connect-jellyfin).
+
+- **Calls.** `GET /System/Info/Public` (no key) recognises Jellyfin by its `ProductName` and is the network
+  scan's fingerprint; `GET /System/Info` checks the key and gives the version and the server's own state (a
+  pending restart or a shutdown becomes a warning); `GET /Sessions?activeWithinSeconds=960` lists the sessions.
+  Field names are checked against Jellyfin's source and recorded in the package comment.
+- **The key** goes in `Authorization: MediaBrowser Token="<key>"`, the form Jellyfin keeps; the `X-Emby-Token`
+  header is deprecated and off by default from Jellyfin 12. A key with anything but letters, digits and dashes is
+  refused before a request is built, so it cannot break out of the quotes.
+- **Play method.** Jellyfin reports a remux, and a stream whose audio alone is converted, as `Transcode`; with
+  `TranscodingInfo.IsVideoDirect` that is a direct stream, as Jellyfin's own dashboard shows it. Transcode
+  reasons (a flags enum the server writes as an array of names) become plain words, e.g.
+  `ContainerBitrateExceedsLimit` is "bitrate too high".
+- **Privacy.** A session carries the client's address (`RemoteEndPoint`); the adapter has no field for it, so it
+  is never read, kept or sent to the browser. User names are kept.
+- **Emby** is not covered: its public system info has no product name to recognise it by, and it authenticates
+  differently. It would need an adapter of its own, tested against a real server.
+
+The `streams` shape (`shape.Streams`) counts every session playing something — in all, paused, transcoding —
+and sums the bitrate, and lists at most `shape.MaxStreams` (50), sorted by user and title. Each stream has the
+user, client and device, a title ("Series S01E02 · Episode", "Film (2008)"), paused or not, progress, the play
+method (`direct`, `directstream`, `transcode`), at most `shape.MaxStreamReasons` (8) reasons, the codecs of the
+file and what the server converts them to, and the bitrate in bits/s. The poller reads it every 10 s while
+someone watches, like a queue. The `Streams` widget, the Overview's "Now playing" section, the service card and
+the Network view render it. A transcode is not a warning: the adapter has nothing that says it is a problem.
+
+## Overseerr and Jellyseerr: one adapter, several apps
+
+`internal/adapters/seerr` reads Overseerr, Jellyseerr and Seerr, which share one API under `/api/v1`. It fills
+`health` and `requests`; deployment is in [deploy.md](deploy.md#connect-overseerr-or-jellyseerr).
+
+- **Which app answers** is data, not a second adapter: `shape.Requests.App` is "Seerr" from version 3 on,
+  "Jellyseerr" when the public settings carry `mediaServerType` (Overseerr has none), and "Overseerr" otherwise.
+  The UI shows it as it shows any other text.
+- **Detect** reads `GET /api/v1/status` (no key; `version`, `commitTag` and `restartRequired` must all be there)
+  and then `GET /api/v1/request/count` with the key in `X-Api-Key`, so a wrong key is `ErrUnauthorized`.
+  `Fingerprint` uses the status alone.
+- **Titles** are not part of a request: the adapter looks them up from `/api/v1/movie/{tmdbId}` or
+  `/api/v1/tv/{tmdbId}`, at most `shape.MaxRequests` (10) per reading and two at a time, and remembers up to 512
+  of them.
+- **Requesters** are taken from `displayName`, falling back to the user names; the app falls back to the e-mail
+  address, so any name holding an `@` is dropped. The e-mail field is never decoded.
+
+The `requests` shape (`shape.Requests`) holds the counts by state (`total`, `pending`, `approved`, `processing`,
+`available`, `declined`, `failed`), at most `shape.MaxRequests` newest requests — each with `title`, `type`
+(`movie` or `series`), `requestedBy`, `state` (`pending`, `approved`, `processing`, `partially available`,
+`available`, `completed`, `declined`, `failed`) and `at` — and `openIssues` when the app counts issues. The
+`Requests` widget renders it.

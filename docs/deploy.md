@@ -20,15 +20,19 @@ anything.
 ## Compose example
 
 This also lives at [`deploy/docker-compose.yml`](../deploy/docker-compose.yml) — copy it and adjust the data
-disk(s) and (if you use it) the app config mounts. No image is published yet, so it builds Observarr from the
-repo root itself (`build: ..`, since `deploy/` is one level down); run `docker compose -f
-deploy/docker-compose.yml build` once, or let `up` build it on first use.
+disk(s) and (if you use it) the app config mounts. It runs the published image; to build from source instead,
+swap in the commented `build: ..` lines (`deploy/` is one level below the repo root). Which tag to use and how
+to upgrade: [Releases and versions](#releases-and-versions).
 
 ```yaml
 services:
   observarr:
-    build: ..
-    image: observarr:local
+    # :0 follows the newest 0.x release. To pin one exact build instead, use its digest from the release
+    # notes: ghcr.io/whenphdtho/observarr@sha256:<digest> (see "Releases and versions" in ../docs/deploy.md).
+    image: ghcr.io/whenphdtho/observarr:0
+    # To build from source instead, replace the line above with these two (`up -d --build` rebuilds):
+    # build: ..
+    # image: observarr:local
     restart: unless-stopped
     # Hardening that costs nothing here: Observarr never writes outside /data (a volume, unaffected
     # by read_only) and needs no Linux capability or privilege escalation.
@@ -101,6 +105,46 @@ networks:
     internal: true   # Docker refuses this network any route to the outside world, published ports included
 ```
 
+## Releases and versions
+
+Each release is a `vX.Y.Z` tag. It publishes a multi-arch image (linux/amd64 and linux/arm64) to
+`ghcr.io/whenphdtho/observarr`, signed with cosign and carrying SBOM and provenance attestations, plus a GitHub
+release with static binaries (linux/amd64, linux/arm64, darwin/arm64) and a `SHA256SUMS` file.
+
+| Tag pushed | Image tags |
+|---|---|
+| `v1.4.2` | `1.4.2`, `1.4`, `1`, `latest` |
+| `v1.5.0-rc.1` (prerelease) | `1.5.0-rc.1` only |
+
+`1.4` follows patch releases, `1` follows minor ones too, and `latest` follows everything that is not a
+prerelease. While the version is 0.x, a minor release may change behaviour, so `:0` moves faster than a later
+`:1` will; pin `0.Y` if you want only fixes.
+
+**Upgrading.** Pull and recreate the container:
+
+```sh
+docker compose -f deploy/docker-compose.yml pull
+docker compose -f deploy/docker-compose.yml up -d
+```
+
+When a new version changes the database schema, Observarr first copies the database to
+`<data>/backups/observarr-<time>-pre-migrate-<N>.db` (the newest 5 are kept) and only then migrates, each step
+in one transaction. Going back to an older version afterwards needs that copy: an older Observarr refuses a
+database newer than it knows. Stop the container, replace `observarr.db` with the backup (and remove
+`observarr.db-wal` and `observarr.db-shm`), then start the older image. Keep `secret.key` with any copy you
+take; see [Recovery](configuration.md#recovery).
+
+**Pinning by digest.** A tag can move; a digest cannot. Each release's notes list the image digest, and
+`docker buildx imagetools inspect ghcr.io/whenphdtho/observarr:1.4.2` shows it too. Use it as
+`image: ghcr.io/whenphdtho/observarr@sha256:<digest>` (you can keep the tag in a comment beside it for
+readability). Check that an image came from this repository's release workflow with:
+
+```sh
+cosign verify ghcr.io/whenphdtho/observarr:<tag> \
+  --certificate-identity-regexp 'https://github.com/whenphdtho/observarr/.github/workflows/release.yml@refs/tags/v.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
 ## cgroup v1
 
 Container CPU, memory and block I/O need cgroup v2 (the unified hierarchy almost every current distribution
@@ -133,8 +177,14 @@ guessing at them. Check with `stat -fc %T /sys/fs/cgroup` on the host: `cgroup2f
   traffic between containers, which never leaves the host, so the apps together can briefly add up to more
   than the host's total.
 - **Daily totals** are counted from midnight in the container's time zone: set `TZ` (e.g. `TZ=Europe/Berlin`),
-  otherwise days begin at midnight UTC. They are written once a minute and kept for 35 days; the five-minute
-  and one-day charts are kept in memory and start empty after a restart.
+  otherwise days begin at midnight UTC. They are written once a minute and kept for 35 days.
+- **History:** every minute the host's traffic, each app's traffic and the host's CPU and memory are written
+  to the database, and added up into hours and local days (same `TZ`). The day chart reads the last day back
+  after a restart; the week and month charts use hours, the year chart days. A stretch when Observarr was not
+  running stays a gap, and a change against the period before is shown only when at least 80% of that period
+  was recorded. The five-minute chart is live only and starts empty after a restart. If the database is slow,
+  up to two hours of minutes wait in memory and the oldest are dropped beyond that; a minute that fails to be
+  written five times in a row is dropped too (both logged once).
 - **Budget:** `OBSERVARR_TRAFFIC_BUDGET=1400GB/day` or `=20TB/month` (decimal units: 1 GB = 10^9 bytes)
   counts down and up together, the way most providers do; a monthly budget adds up the calendar month's days.
 - **Units:** rates are in Mbit/s and totals in GB/TB, as providers count; memory and disks stay in binary
@@ -227,6 +277,27 @@ CrowdSec's alerts (the events behind each decision, with source country and AS) 
 which can also write to the LAPI. Observarr does not ask for them, so alerts are out of scope. The LAPI does not
 tell a bouncer its version, so the card shows none.
 
+## Connect Overseerr or Jellyseerr
+
+Overseerr, Jellyseerr and Seerr (the two merged into it with version 3) share one API, and one adapter reads
+all three. Its card names the app that answers, shows its requests by state (waiting, approved, processing,
+available, declined, failed), the ten newest requests with their title, type, requester and state, and the
+issues users reported that are still open. Failed requests also show up in Needs attention; requests waiting
+for approval are noted below it, as good to know.
+
+1. Copy the API key from **Settings → General → API Key**.
+2. Give Observarr network access to the app (port 5055 by default), e.g. `http://jellyseerr:5055` on a shared
+   Docker network.
+3. In Observarr, **Apps → Add apps**: a running `sctx/overseerr`, `lscr.io/linuxserver/overseerr`,
+   `hotio/overseerr`, `fallenbagel/jellyseerr` or `ghcr.io/seerr-team/seerr` container is found on its own;
+   otherwise **Add manually**, pick Overseerr / Jellyseerr, enter the URL and the key, **Test**, then **Add**.
+
+What Observarr reads, all with GET and about once a minute while someone is watching (the health check every
+30 seconds): the status, request counts, the ten newest requests and the open issues. The app's API key can
+also change things; Observarr never does. Requests carry no titles of their own, so Observarr asks the app for
+each title once (at most two at a time) and remembers it. Requesters are shown by their display name only;
+when the app's display name for a user is their e-mail address, the requester stays blank.
+
 ## Security notes
 
 - **The socket proxy only ever answers GET requests.** Every other endpoint is refused because its own
@@ -279,3 +350,42 @@ tell a bouncer its version, so the card shows none.
   Linux capability or ability to gain new privileges.
 - Every host and cgroup mount above is read-only (`:ro`); nothing here needs `privileged: true` or extra
   capabilities of its own.
+
+## Connect SABnzbd and NZBGet
+
+Observarr shows a downloader's queue with its speed, whether it is paused, and the downloads that failed in the
+last day. It only reads; it never pauses, deletes or adds anything.
+
+- **SABnzbd:** Apps → Add apps → Add manually → SABnzbd, URL `http://sabnzbd:8080` (add the URL base if you set
+  one, e.g. `http://sabnzbd:8080/sabnzbd`), and the API key from Config → General → Security. The key travels in
+  the URL's query string, as SABnzbd requires; Observarr never logs it or shows it in an error. Use `http://`
+  only on a network you trust, or HTTPS.
+- **NZBGet:** Apps → Add apps → Add manually → NZBGet, URL `http://nzbget:6789`, and the credentials as
+  `user:password` from Settings → Security (`ControlUsername`/`ControlPassword`). A restricted user
+  (`RestrictedUsername`) is enough and cannot change settings. Leave them blank only if no password is set.
+
+Both are found as Docker containers (`sabnzbd/sabnzbd`, `lscr.io/linuxserver/sabnzbd`, `hotio/sabnzbd`,
+`lscr.io/linuxserver/nzbget`, `nzbgetcom/nzbget`) and by a network scan on their default ports. With their config
+folders mounted (see [Adding your apps](configuration.md#adding-your-apps)), the key or credentials are offered
+too.
+
+## Connect Jellyfin
+
+Observarr shows who is watching what on Jellyfin, how — direct play, direct stream or transcode, with
+Jellyfin's reasons for converting — and at what bitrate, on the Overview ("Now playing"), on the Jellyfin card
+and next to Jellyfin's traffic in the Network view.
+
+1. **Create an API key:** in Jellyfin, Dashboard → API Keys → **+**, name it `Observarr`. Deleting it there
+   revokes it.
+2. **Give Observarr network access** to Jellyfin's HTTP port (8096 by default). In Compose, share a network and
+   use the container name, e.g. `http://jellyfin:8096`. Docker discovery recognises the `jellyfin/jellyfin`,
+   `lscr.io/linuxserver/jellyfin` and `hotio/jellyfin` images, and the network scan finds Jellyfin on port 8096.
+   Behind a reverse proxy with a base path, include it: `https://media.example.org/jellyfin`.
+3. **Add it:** Apps → Add apps → Add manually → Jellyfin, the URL and the key, **Test**, then **Add**.
+
+What Observarr does with the key: it reads `GET /System/Info` (version, pending restart) and
+`GET /Sessions` (what plays now, every 10 s while someone watches, every 2 minutes otherwise) and nothing else.
+An API key is an administrator's key in Jellyfin; Observarr only ever reads with it, and keeps it sealed like
+any other. The clients' IP addresses that Jellyfin reports with each session are never read or stored.
+
+Emby is not supported.

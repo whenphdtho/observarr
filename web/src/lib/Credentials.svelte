@@ -1,6 +1,7 @@
 <script>
-  import Mark from './Mark.svelte';
-  import { api } from './api.js';
+  import BrandMark from './BrandMark.svelte';
+  import { tick } from 'svelte';
+  import { api, OFFLINE } from './api.js';
 
   // mode: 'setup' | 'login'. notice, when set, is shown above the fields (used to tell the user
   // why they landed back here, e.g. their session ended) — the caller clears it once no longer
@@ -14,6 +15,7 @@
   const setup = $derived(mode === 'setup');
 
   let nameEl;
+  let passwordEl;
   // Autofocus the user name field whenever this form appears or switches between setup and login
   // (mode is the only prop that changes which form is shown), not just on first mount.
   $effect(() => {
@@ -38,13 +40,23 @@
     } finally {
       busy = false;
     }
+    // The button was off while the request ran and lost the keyboard with it: after a refusal the keyboard is
+    // on the password, ready to be typed again.
+    if (error) {
+      await tick();
+      passwordEl?.focus();
+      passwordEl?.select();
+    }
   }
 </script>
 
+<svelte:window ononline={() => { if (error === OFFLINE) error = ''; }} />
+
 <main>
-  <form class="card" onsubmit={submit}>
+  <!-- An error is about what was sent: once the fields change, or the server is back, it no longer holds. -->
+  <form class="card" onsubmit={submit} oninput={() => { error = ''; }}>
     <div class="brand">
-      <Mark size={40} />
+      <BrandMark size={40} />
       <h1>Observarr</h1>
     </div>
     <p class="lede">{setup ? 'Create the admin account.' : 'Sign in to continue.'}</p>
@@ -64,7 +76,7 @@
     {/if}
     <label>
       Password
-      <input type="password" bind:value={password} required minlength={setup ? 12 : 1} maxlength="1024"
+      <input type="password" bind:this={passwordEl} bind:value={password} required minlength={setup ? 12 : 1} maxlength="1024"
         autocomplete={setup ? 'new-password' : 'current-password'} />
       {#if setup}<span class="muted hint">At least 12 characters</span>{/if}
     </label>
@@ -77,17 +89,16 @@
   main { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 16px; }
   form {
     width: min(392px, 100%); display: grid; gap: 16px; padding: 30px 28px 28px; box-shadow: var(--lift);
-    animation: arrive 260ms var(--ease);
+    animation: arrive var(--dur-slow) var(--ease-out);
   }
   @keyframes arrive { from { opacity: 0; transform: translateY(8px); } }
   .brand { display: flex; align-items: center; gap: 14px; margin-bottom: 2px; }
-  h1 { font-size: var(--t-h1); font-weight: 680; letter-spacing: -0.025em; }
-  .lede { color: var(--text2); font-size: var(--t-md); margin-top: -6px; }
+  .lede { color: var(--text2); font-size: var(--t-body); margin-top: -6px; }
   @media (max-width: 420px) {
     form { padding: 24px 20px 22px; }
   }
-  label { display: grid; gap: 6px; font-size: var(--t-base); color: var(--text2); }
-  .hint { font-size: var(--t-sm); }
-  .notice { font-size: var(--t-base); }
+  label { display: grid; gap: 6px; font-size: var(--t-body); color: var(--text2); }
+  .hint { font-size: var(--t-small); }
+  .notice { font-size: var(--t-body); }
   button { margin-top: 4px; padding: 9px 14px; }
 </style>

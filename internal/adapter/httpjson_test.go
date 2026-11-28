@@ -1,7 +1,10 @@
 package adapter
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -121,6 +124,64 @@ func TestGetJSONBodyTooLarge(t *testing.T) {
 	var out map[string]any
 	if err := GetJSON(context.Background(), tgt, "/big", "", &out); err == nil {
 		t.Fatal("GetJSON with 5 MiB body: want error, got nil")
+	}
+}
+
+// TestBodyLimitAppliesAfterDecompression sends 16 MiB of JSON that compresses to well under the 4 MiB limit: the
+// limit counts what the app's answer unpacks to, not what crossed the network.
+func TestBodyLimitAppliesAfterDecompression(t *testing.T) {
+	var packed bytes.Buffer
+	zw := gzip.NewWriter(&packed)
+	zw.Write([]byte("["))
+	zw.Write(bytes.Repeat([]byte(" "), 16<<20))
+	zw.Write([]byte("]"))
+	zw.Close()
+	if packed.Len() >= maxBodyBytes {
+		t.Fatalf("packed answer is %d bytes", packed.Len())
+	}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			t.Error("the client does not ask for gzip")
+		}
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Write(packed.Bytes())
+	}))
+	defer ts.Close()
+
+	base, _ := url.Parse(ts.URL)
+	var out []any
+	err := GetJSON(context.Background(), Target{BaseURL: base, HTTP: NewHTTPClient()}, "/", "", &out)
+	if !errors.Is(err, ErrTooLarge) {
+		t.Fatalf("GetJSON = %v, want ErrTooLarge", err)
+	}
+}
+
+// TestReadingStopsWhenTheDeadlinePasses ends the context once the answer is being read: reading stops there, even
+// though the rest of the answer is already in memory and would unpack without touching the network.
+func TestReadingStopsWhenTheDeadlinePasses(t *testing.T) {
+	var packed bytes.Buffer
+	zw := gzip.NewWriter(&packed)
+	zw.Write([]byte("[" + strings.Repeat(" ", 1<<20) + "1]"))
+	zw.Close()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Write(packed.Bytes())
+	}))
+	defer ts.Close()
+
+	base, _ := url.Parse(ts.URL)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	err := StreamJSON(ctx, Target{BaseURL: base, HTTP: NewHTTPClient()}, "/", "", func(d *json.Decoder) error {
+		if _, err := d.Token(); err != nil {
+			return err
+		}
+		cancel()
+		_, err := d.Token()
+		return err
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("StreamJSON = %v, want the cancellation", err)
 	}
 }
 
@@ -482,6 +543,11 @@ func TestDialRefusesLinkLocal(t *testing.T) {
 		"100.100.100.200:80":          true, // Alibaba Cloud metadata
 		"100.100.100.201:80":          false,
 		"[::ffff:100.100.100.200]:80": true,
+		"[64:ff9b::a9fe:a9fe]:80":     true, // NAT64 of 169.254.169.254
+		"[64:ff9b::6464:64c8]:80":     true, // NAT64 of 100.100.100.200
+		"[64:ff9b::c000:201]:80":      false,
+		"[2002:a9fe:a9fe::1]:80":      true, // 6to4 of 169.254.169.254
+		"[2002:c000:201::1]:80":       false,
 	} {
 		err := refuseLinkLocal("tcp", addr, nil)
 		if refused && !errors.Is(err, errRefusedAddress) {

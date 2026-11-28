@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -73,13 +74,20 @@ const maxPostBytes = 64 << 10
 // StatusError: following it would send the body and credentials to a path the adapter did not choose.
 func PostJSON(ctx context.Context, t Target, path string, body []byte, authorize func(*http.Request),
 	read func(*json.Decoder) error) error {
+	return PostJSONLimit(ctx, t, path, body, authorize, maxBodyBytes, read)
+}
+
+// PostJSONLimit is PostJSON with an answer limit of limit bytes (at most MaxStreamBytes) instead of 4 MiB, under
+// the terms of StreamJSONLimit: read must keep a bounded amount of what it decodes.
+func PostJSONLimit(ctx context.Context, t Target, path string, body []byte, authorize func(*http.Request),
+	limit int64, read func(*json.Decoder) error) error {
 	if len(body) > maxPostBytes {
 		return errors.New("adapter: request body too large")
 	}
 	noRedirect := *t.HTTP
 	noRedirect.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	t.HTTP = &noRedirect
-	return doJSON(ctx, t, http.MethodPost, path, body, maxBodyBytes, authorize, read)
+	return doJSON(ctx, t, http.MethodPost, path, body, min(max(limit, 1), MaxStreamBytes), authorize, read)
 }
 
 // doJSON sends one request to base+path, with body (if not nil) as JSON, and hands the answer, of at most limit
@@ -126,7 +134,7 @@ func doJSON(ctx context.Context, t Target, method, path string, body []byte, lim
 		return fmt.Errorf("adapter: %s: %w", reqURL.Path, StatusError(resp.StatusCode))
 	}
 
-	answer := &bodyReader{r: http.MaxBytesReader(nil, resp.Body, limit)}
+	answer := &bodyReader{ctx: ctx, r: http.MaxBytesReader(nil, resp.Body, limit)}
 	if err := read(json.NewDecoder(answer)); err != nil {
 		var tooLarge *http.MaxBytesError
 		switch {
@@ -143,13 +151,19 @@ func doJSON(ctx context.Context, t Target, method, path string, body []byte, lim
 }
 
 // bodyReader keeps the first error other than io.EOF that reading the body returned, so StreamJSON can tell a failed
-// read from malformed JSON.
+// read from malformed JSON. It stops at ctx's end even while what it reads comes from memory, such as a compressed
+// answer that arrived whole and only unpacks slowly.
 type bodyReader struct {
+	ctx context.Context
 	r   io.Reader
 	err error
 }
 
 func (b *bodyReader) Read(p []byte) (int, error) {
+	if err := b.ctx.Err(); err != nil {
+		b.err = cmp.Or(b.err, err)
+		return 0, err
+	}
 	n, err := b.r.Read(p)
 	if err != nil && err != io.EOF && b.err == nil {
 		b.err = err
@@ -260,10 +274,35 @@ func refuseLinkLocal(_, address string, _ syscall.RawConn) error {
 	if err != nil {
 		return fmt.Errorf("adapter: unexpected dial address %q: %w", address, err)
 	}
-	if a := ap.Addr().Unmap().WithZone(""); a.IsLinkLocalUnicast() || slices.Contains(metadataAddrs, a) {
+	a := ap.Addr().Unmap().WithZone("")
+	if v4, ok := embeddedIPv4(a); ok {
+		a = v4
+	}
+	if a.IsLinkLocalUnicast() || slices.Contains(metadataAddrs, a) {
 		return errRefusedAddress
 	}
 	return nil
+}
+
+// Prefixes whose addresses carry an IPv4 address that the network delivers to: NAT64 (RFC 6052) holds it in its
+// last 32 bits, 6to4 (RFC 3056) in the 32 bits after 2002::/16.
+var (
+	nat64  = netip.MustParsePrefix("64:ff9b::/96")
+	sixTo4 = netip.MustParsePrefix("2002::/16")
+)
+
+// embeddedIPv4 returns the IPv4 address a NAT64 or 6to4 address leads to.
+func embeddedIPv4(a netip.Addr) (netip.Addr, bool) {
+	b := a.As16()
+	switch {
+	case !a.Is6():
+		return netip.Addr{}, false
+	case nat64.Contains(a):
+		return netip.AddrFrom4([4]byte(b[12:16])), true
+	case sixTo4.Contains(a):
+		return netip.AddrFrom4([4]byte(b[2:6])), true
+	}
+	return netip.Addr{}, false
 }
 
 // ErrCrossHostRedirect is what NewHTTPClient's client returns (wrapped in a *url.Error) when a

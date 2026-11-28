@@ -23,39 +23,85 @@ type Service struct {
 // the id it was sealed for, and a failing seal leaves no row behind. It returns ErrExists if
 // svc.Name is already taken (names are unique case-insensitively).
 func (s *Store) CreateService(ctx context.Context, svc Service, seal func(id int64) ([]byte, error)) (Service, error) {
-	now := time.Now().Unix()
 	var created Service
 	err := s.inTx(ctx, func(tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx,
-			"INSERT INTO services (type, name, base_url, api_key, container, created_at, updated_at) VALUES (?, ?, ?, NULL, ?, ?, ?)",
-			svc.Type, svc.Name, svc.BaseURL, svc.Container, now, now)
-		if err != nil {
-			if isUniqueViolation(err) {
-				return ErrExists
-			}
-			return err
-		}
-		id, err := res.LastInsertId()
-		if err != nil {
-			return err
-		}
-
-		sealed, err := seal(id)
-		if err != nil {
-			return fmt.Errorf("seal service key: %w", err)
-		}
-		if _, err := tx.ExecContext(ctx, "UPDATE services SET api_key = ? WHERE id = ?", sealed, id); err != nil {
-			return err
-		}
-
-		created = Service{ID: id, Type: svc.Type, Name: svc.Name, BaseURL: svc.BaseURL, SealedKey: sealed,
-			Container: svc.Container}
-		return nil
+		var err error
+		created, err = createService(ctx, tx, svc, seal)
+		return err
 	})
 	if err != nil {
 		return Service{}, err
 	}
 	return created, nil
+}
+
+// ImportServices adds svcs, each sealed as CreateService does (seal gets the index in svcs and the new row id),
+// records dismissed as Dismiss does and, when alerts is not nil, imports its channels and rules, all in one
+// transaction: on any error nothing changes. With replace, every saved service is removed first, and every saved
+// alert channel when alerts is not nil. It returns the added services, in the order of svcs, or ErrExists if a
+// name is taken.
+func (s *Store) ImportServices(ctx context.Context, replace bool, svcs []Service, dismissed []string,
+	seal func(i int, id int64) ([]byte, error), alerts *AlertImport) ([]Service, error) {
+	var created []Service
+	err := s.inTx(ctx, func(tx *sql.Tx) error {
+		if alerts != nil {
+			if _, err := importAlerts(ctx, tx, replace, *alerts); err != nil {
+				return err
+			}
+		}
+		if replace {
+			if _, err := tx.ExecContext(ctx, "DELETE FROM services"); err != nil {
+				return err
+			}
+		}
+		created = make([]Service, 0, len(svcs))
+		for i, svc := range svcs {
+			c, err := createService(ctx, tx, svc, func(id int64) ([]byte, error) { return seal(i, id) })
+			if err != nil {
+				return err
+			}
+			created = append(created, c)
+		}
+		now := time.Now().Unix()
+		for _, key := range dismissed {
+			if _, err := tx.ExecContext(ctx,
+				"INSERT INTO dismissed (key, created_at) VALUES (?, ?) ON CONFLICT (key) DO NOTHING", key, now); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return created, nil
+}
+
+// createService inserts svc in tx and seals its key for the new row id; see CreateService.
+func createService(ctx context.Context, tx *sql.Tx, svc Service, seal func(id int64) ([]byte, error)) (Service, error) {
+	now := time.Now().Unix()
+	res, err := tx.ExecContext(ctx,
+		"INSERT INTO services (type, name, base_url, api_key, container, created_at, updated_at) VALUES (?, ?, ?, NULL, ?, ?, ?)",
+		svc.Type, svc.Name, svc.BaseURL, svc.Container, now, now)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return Service{}, ErrExists
+		}
+		return Service{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return Service{}, err
+	}
+	sealed, err := seal(id)
+	if err != nil {
+		return Service{}, fmt.Errorf("seal service key: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE services SET api_key = ? WHERE id = ?", sealed, id); err != nil {
+		return Service{}, err
+	}
+	return Service{ID: id, Type: svc.Type, Name: svc.Name, BaseURL: svc.BaseURL, SealedKey: sealed,
+		Container: svc.Container}, nil
 }
 
 // Services returns every service, ordered by name. It never returns a nil slice.

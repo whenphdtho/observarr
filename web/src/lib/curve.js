@@ -4,12 +4,36 @@
 // the curve never overshoots between two points. Each segment's Bézier control points sit at one
 // third and two thirds of the segment's own width, so the path never runs backwards in time
 // however unevenly the samples are spaced. It returns an SVG path ("M… C…"), or '' for fewer
-// than two points.
+// than two points. A pair of points is a straight segment.
 export function monotonePath(pts) {
   const n = pts.length;
   if (n < 2) return '';
   const f = (v) => v.toFixed(1);
-  if (n === 2) return `M${f(pts[0][0])},${f(pts[0][1])}L${f(pts[1][0])},${f(pts[1][1])}`;
+  let d = `M${f(pts[0][0])},${f(pts[0][1])}`;
+  for (const [c1, c2, p] of segments(pts)) d += `C${f(c1[0])},${f(c1[1])} ${f(c2[0])},${f(c2[1])} ${f(p[0])},${f(p[1])}`;
+  return d;
+}
+
+// monotoneBack is the same curve walked from the last point to the first, without the move to its start:
+// it closes a band whose upper edge monotonePath drew left to right ("…L last" + monotoneBack(lower)).
+export function monotoneBack(pts) {
+  const n = pts.length;
+  if (n < 2) return '';
+  const f = (v) => v.toFixed(1);
+  const segs = segments(pts);
+  let d = '';
+  for (let i = segs.length - 1; i >= 0; i--) {
+    const [c1, c2] = segs[i];
+    const p = pts[i];
+    d += `C${f(c2[0])},${f(c2[1])} ${f(c1[0])},${f(c1[1])} ${f(p[0])},${f(p[1])}`;
+  }
+  return d;
+}
+
+// segments returns, for each pair of neighbouring points, the cubic's two control points and its end.
+function segments(pts) {
+  const n = pts.length;
+  if (n === 2) return [[lerp(pts[0], pts[1], 1 / 3), lerp(pts[0], pts[1], 2 / 3), pts[1]]];
 
   const h = [];
   const s = [];
@@ -33,14 +57,18 @@ export function monotonePath(pts) {
   t[0] = endTangent(h[0], h[1], s[0], s[1]);
   t[n - 1] = endTangent(h[n - 2], h[n - 3], s[n - 2], s[n - 3]);
 
-  let d = `M${f(pts[0][0])},${f(pts[0][1])}`;
+  const out = [];
   for (let i = 0; i < n - 1; i++) {
     const [x0, y0] = pts[i];
     const [x1, y1] = pts[i + 1];
     const dx = h[i] / 3;
-    d += `C${f(x0 + dx)},${f(y0 + t[i] * dx)} ${f(x1 - dx)},${f(y1 - t[i + 1] * dx)} ${f(x1)},${f(y1)}`;
+    out.push([[x0 + dx, y0 + t[i] * dx], [x1 - dx, y1 - t[i + 1] * dx], [x1, y1]]);
   }
-  return d;
+  return out;
+}
+
+function lerp(a, b, k) {
+  return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
 }
 
 // endTangent is the one-sided three-point estimate for an end point, limited the same way as the

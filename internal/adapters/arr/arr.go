@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -151,6 +152,29 @@ func levelFor(checkType string) shape.Level {
 	}
 }
 
+// checkTitles names the health checks these apps share, by the check's name as the app gives it (its "source"),
+// in a few plain words that follow the app's name. The app's own message stays the detail; a check not listed
+// here is named by its message.
+var checkTitles = map[string]string{
+	"IndexerSearchCheck":             "automatic search is off",
+	"IndexerRssCheck":                "RSS sync is off",
+	"IndexerStatusCheck":             "indexers are failing",
+	"IndexerLongTermStatusCheck":     "indexers have been failing for hours",
+	"DownloadClientCheck":            "no download client is set up",
+	"DownloadClientStatusCheck":      "the download client is failing",
+	"ImportMechanismCheck":           "completed downloads are not handled",
+	"RootFolderCheck":                "a root folder is missing",
+	"RemotePathMappingCheck":         "a remote path mapping is wrong",
+	"MountCheck":                     "a media folder is read-only",
+	"UpdateCheck":                    "an update is waiting",
+	"ProxyCheck":                     "the proxy is failing",
+	"ApplicationStatusCheck":         "apps cannot be synced",
+	"ApplicationLongTermStatusCheck": "apps have not synced for hours",
+	"NotificationStatusCheck":        "notifications are failing",
+	"ImportListStatusCheck":          "import lists are failing",
+	"SystemTimeCheck":                "the system clock is off",
+}
+
 func (a arrAdapter) probeHealth(ctx context.Context, t adapter.Target) (any, error) {
 	status, latency, err := a.fetchStatus(ctx, t)
 	if err != nil {
@@ -164,6 +188,8 @@ func (a arrAdapter) probeHealth(ctx context.Context, t adapter.Target) (any, err
 				Level:   levelFor(c.Type),
 				Message: shape.Clip(c.Message),
 				Source:  shape.Clip(c.Source),
+				Title:   checkTitles[c.Source],
+				ID:      shape.Clip(c.Source),
 			})
 		})
 		return err
@@ -188,6 +214,7 @@ type queueStatusMessage struct {
 // (not int64) because some apps report them with a fractional part; a value like "size": 100.0
 // must not fail the whole queue.
 type queueRecord struct {
+	ID                    json.Number          `json:"id"`
 	Title                 string               `json:"title"`
 	Status                string               `json:"status"`
 	Size                  float64              `json:"size"`
@@ -218,14 +245,24 @@ func mapQueueItem(r queueRecord) shape.QueueItem {
 	}
 
 	return shape.QueueItem{
+		ID:        shape.Clip(r.ID.String()),
 		Title:     shape.Clip(r.Title),
 		Status:    shape.Clip(strings.ToLower(r.Status)),
 		Progress:  progress,
-		SizeBytes: int64(r.Size),
-		LeftBytes: int64(r.SizeLeft),
+		SizeBytes: byteCount(r.Size),
+		LeftBytes: byteCount(r.SizeLeft),
 		ETA:       shape.Clip(r.TimeLeft),
 		Problem:   shape.Clip(problem),
 	}
+}
+
+// byteCount is a size an app reported, as bytes: a negative one is 0, and one beyond int64 is its largest value
+// (converting it as it is would be undefined).
+func byteCount(f float64) int64 {
+	if f >= math.MaxInt64 {
+		return math.MaxInt64
+	}
+	return int64(max(f, 0))
 }
 
 // clampUnit confines p to [0, 1]: an app can report sizeleft outside [0, size] (a negative

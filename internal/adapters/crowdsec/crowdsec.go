@@ -142,6 +142,21 @@ func community(origin string) bool {
 	return o == "capi" || o == "lists" || strings.HasPrefix(o, "lists:")
 }
 
+// originLabel says in plain words where a decision came from; an origin it does not know is given as it is.
+func originLabel(origin string) string {
+	switch o := strings.ToLower(strings.TrimSpace(origin)); {
+	case o == "capi":
+		return "Community blocklist"
+	case o == "lists" || strings.HasPrefix(o, "lists:"):
+		return "Subscribed lists"
+	case o == "cscli":
+		return "Added by hand"
+	case o == "crowdsec":
+		return "Detected here"
+	}
+	return origin
+}
+
 // counter counts names, tracking at most maxNames distinct ones.
 type counter map[string]int
 
@@ -186,7 +201,7 @@ func newSummary() *summary {
 func (s *summary) add(d decision) {
 	s.total++
 	s.types.add(strings.ToLower(d.Type))
-	s.origins.add(d.Origin)
+	s.origins.add(originLabel(d.Origin))
 	s.scopes.add(d.Scope)
 	if community(d.Origin) {
 		s.community++
@@ -226,7 +241,7 @@ func (s *summary) result(now time.Time, capped bool) shape.Security {
 			Value:    d.Value,
 			Scope:    d.Scope,
 			Type:     strings.ToLower(d.Type),
-			Origin:   d.Origin,
+			Origin:   originLabel(d.Origin),
 			Scenario: d.Scenario,
 			Until:    until(d, now),
 		})

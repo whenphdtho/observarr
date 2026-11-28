@@ -1,177 +1,157 @@
 <script>
+  import { flip } from 'svelte/animate';
   import AppIcon from './AppIcon.svelte';
   import Skeleton from './Skeleton.svelte';
-  import Icon from './icons/Icon.svelte';
   import { adapters, adapterFor, snapshot } from './data.js';
-  import { serviceStatus, serviceLine } from './status.js';
-  import { formatBytes, formatPct, formatTotal, formatPart } from './format.js';
-  import { mountServices, mountSummary } from './storage.js';
-  import { securityServices, activeBans, formatCount } from './security.js';
-  import { synced } from './live.js';
+  import { serviceLine } from './status.js';
+  import { formatPct, formatPart, formatSize } from './format.js';
+  import { diskParts, percentOf } from './storage.js';
+  import { synced, attention } from './live.js';
+  import { recall, remember } from './prefs.js';
+  import { arrive, leave, flash, smoothHeight, FLIP } from './motion.js';
 
-  // Rail is every service at a glance plus a short system summary and today's traffic. It sits in the right column on
-  // wide screens and inside the Overview on narrower ones. onjump(id) shows a service's card.
+  // Rail is the apps column: by default only the apps that need someone, worst first, and on request every app,
+  // with what each is doing; below them the server in four lines. It sits in the right column on wide screens and
+  // inside the Overview on narrower ones, and never folds away. Whether it shows all apps is remembered in this
+  // browser. onjump(id) shows an app's card.
   let { services, onjump } = $props();
   const uid = $props.id();
+
+  let all = $state(recall('apps.all', false));
+  function toggle() {
+    all = !all;
+    remember('apps.all', all);
+  }
+
+  const ORDER = { fail: 0, warn: 1, idle: 2, unknown: 2, ok: 3 };
+  const apps = $derived(services.map((svc) => ({ svc, ...serviceLine(svc, $attention) }))
+    .sort((a, b) => ORDER[a.tone] - ORDER[b.tone] || a.svc.name.localeCompare(b.svc.name)));
+  const needy = $derived(apps.filter((a) => a.tone === 'fail' || a.tone === 'warn'));
+  const list = $derived(all ? apps : needy);
 
   const host = $derived($snapshot?.host ?? null);
   const containers = $derived($snapshot?.containers ?? []);
   const running = $derived(containers.filter((c) => c.state === 'running').length);
-  const disk = $derived(host?.disks?.[0] ?? null);
-  const memPct = $derived(host && host.memTotal > 0 ? Math.round((host.memUsed / host.memTotal) * 100) : 0);
-  const diskLow = $derived(!!disk && disk.avail < (disk.total - disk.free + disk.avail) * 0.1);
-  const online = $derived(services.filter((s) => s.up).length);
   const traffic = $derived($snapshot?.traffic ?? null);
-  const budget = $derived(traffic?.budget ?? null);
-  // One line each for mounts and bans, only once a service fills those shapes.
-  const mounts = $derived(mountSummary(mountServices(services)));
-  const blockers = $derived(securityServices(services));
-  const bans = $derived(activeBans(blockers));
+  // With a budget, the traffic counts against it: today's for a daily one, the month's for a monthly one.
+  const budget = $derived(traffic?.budget?.limitBytes > 0 ? traffic.budget : null);
+  const budgetPct = $derived(budget ? percentOf(budget.usedBytes, budget.limitBytes) : 0);
+  // The fullest disk is the one worth a line.
+  const disk = $derived((host?.disks ?? []).map((d) => ({ path: d.path, ...diskParts(d) })).sort((a, b) => b.pct - a.pct)[0] ?? null);
+  const memPct = $derived(host ? percentOf(host.memUsed, host.memTotal) : 0);
 </script>
 
 <section class="rail-section" aria-labelledby={`${uid}-apps`}>
-  <h2 class="cap" id={`${uid}-apps`}>
-    Apps
-    {#if services.length}<em>{online === services.length ? 'all online' : `${online} of ${services.length} online`}</em>{/if}
-  </h2>
+  <h2 id={`${uid}-apps`}>{$synced && services.length === 0 ? 'Apps' : all ? 'All apps' : 'Need you'}</h2>
   {#if !$synced}
-    <Skeleton kind="rows" count={4} label="Loading the apps…" />
+    <Skeleton kind="rows" count={3} label="Loading the apps…" />
   {:else if services.length === 0}
-    <p class="muted none">No services to show.</p>
+    <p class="none">None here yet.</p>
   {:else}
-    <ul class="apps">
-      {#each services as svc (svc.id)}
-        {@const status = serviceStatus(svc)}
-        {@const line = serviceLine(svc)}
-        {@const lineText = [line.text, line.detail].filter(Boolean).join(' · ')}
-        <li>
-          <button type="button" class="app row-link {status === 'fail' || status === 'warn' ? status : ''}" onclick={() => onjump(svc.id)} aria-label={`${svc.name}: ${lineText}`}>
-            <span class="tile-icon" aria-hidden="true">
-              <AppIcon adapter={adapterFor($adapters, svc.type)} size={18} />
-              <span class="status-dot {status}"></span>
-            </span>
-            <span class="text">
-              <span class="name ellipsis" title={svc.name}>{svc.name}</span>
-              <span class="line ellipsis" title={lineText}>
-                {line.text}{#if line.detail}{' · '}<span class={line.tone}>{line.detail}</span>{/if}
-              </span>
-            </span>
-            <span class="chev" aria-hidden="true"><Icon name="chevron-right" size={15} /></span>
-          </button>
-        </li>
-      {/each}
-    </ul>
+    <div use:smoothHeight>
+      <div>
+        {#if list.length === 0}
+          <p class="none settle"><span class="dot ok" aria-hidden="true"></span>No app needs you.</p>
+        {/if}
+        <ul class="apps">
+          {#each list as { svc, text, tone } (svc.id)}
+            <li in:arrive out:leave animate:flip={FLIP}>
+              <button type="button" class="app row-link" onclick={() => onjump(svc.id)} title={`${svc.name}: ${text}`} use:flash={tone}>
+                <span class="tile-icon" aria-hidden="true">
+                  <AppIcon adapter={adapterFor($adapters, svc.type)} size={19} />
+                  <span class="status-dot {tone}"></span>
+                </span>
+                <span class="text">
+                  <span class="name ellipsis">{svc.name}</span>
+                  <span class="line ellipsis {tone}">{text}</span>
+                </span>
+              </button>
+            </li>
+          {/each}
+        </ul>
+      </div>
+    </div>
+    {#if needy.length < apps.length}
+      <button type="button" class="more" aria-expanded={all} onclick={toggle}>
+        {all ? 'Show only apps that need you' : `Show all ${apps.length} apps`}
+      </button>
+    {/if}
   {/if}
 </section>
 
-<section class="rail-section" aria-labelledby={`${uid}-system`}>
-  <h2 class="cap" id={`${uid}-system`}>System</h2>
-  <ul class="sys">
-    {#if containers.length}
-      <li><a class="srow row-link" href="#/system">
-        <span class="dot" class:warn={running < containers.length}></span>
-        <span class="ellipsis">Containers</span><b class="num" class:warn-text={running < containers.length}>{running}/{containers.length}</b>
-      </a></li>
-    {/if}
-    {#if host}
-      <li><a class="srow row-link" href="#/system">
-        <span class="dot" class:warn={host.cpuPercent >= 90}></span><span class="ellipsis">Host CPU</span>
-        <b class="num" class:warn-text={host.cpuPercent >= 90}>{formatPct(host.cpuPercent)}</b>
-      </a></li>
-      <li><a class="srow row-link" href="#/system">
-        <span class="dot" class:warn={memPct >= 90}></span><span class="ellipsis">Memory used</span>
-        <b class="num" class:warn-text={memPct >= 90}>{formatBytes(host.memUsed)}</b>
-      </a></li>
-      {#if disk}
-        <li><a class="srow row-link" href="#/system" title={disk.path}>
-          <span class="dot" class:warn={diskLow}></span><span class="ellipsis">Disk free · {disk.path}</span>
-          <b class="num" class:warn-text={diskLow}>{formatBytes(disk.avail)}</b>
+{#if host || containers.length || traffic}
+  <section class="rail-section" aria-labelledby={`${uid}-server`}>
+    <h2 id={`${uid}-server`}>Server</h2>
+    <ul class="server">
+      {#if host}
+        <li><a class="fact row-link" href="#/system">
+          <span class="label">Processor</span><b class="num" class:warn-text={host.cpuPercent >= 90}>{formatPct(host.cpuPercent)}</b>
+          <span class="bar" class:warn={host.cpuPercent >= 90} aria-hidden="true"><i style:width={`${Math.min(100, host.cpuPercent)}%`}></i></span>
+        </a></li>
+        <li><a class="fact row-link" href="#/system">
+          <span class="label">Memory</span><b class="num" class:warn-text={memPct >= 90}>{formatPart(host.memUsed, host.memTotal)}</b>
+          <span class="bar" class:warn={memPct >= 90} aria-hidden="true"><i style:width={`${memPct}%`}></i></span>
+        </a></li>
+        {#if disk}
+          <li><a class="fact row-link" href="#/storage" title={`${disk.path}: ${formatSize(disk.avail)} free`}>
+            <span class="label ellipsis">Disk {disk.path}</span><b class="num" class:warn-text={disk.pct >= 90}>{disk.pct}%</b>
+            <span class="bar" class:warn={disk.pct >= 90} aria-hidden="true"><i style:width={`${disk.pct}%`}></i></span>
+          </a></li>
+        {/if}
+      {/if}
+      {#if containers.length}
+        <li><a class="fact row-link" href="#/system">
+          <span class="label">Containers</span><b class="num" class:warn-text={running < containers.length}>{running} of {containers.length}</b>
+          <span class="bar" class:warn={running < containers.length} aria-hidden="true"><i style:width={`${percentOf(running, containers.length)}%`}></i></span>
         </a></li>
       {/if}
-    {/if}
-    {#if mounts.readings > 0}
-      <li><a class="srow row-link" href="#/storage">
-        <span class="dot" class:warn={mounts.healthy < mounts.listed}></span><span class="ellipsis">Mounts healthy</span>
-        <b class="num" class:warn-text={mounts.healthy < mounts.listed}>{mounts.healthy}/{mounts.listed}{#if mounts.total > mounts.listed}
-          <em>+{mounts.total - mounts.listed} not listed</em>{/if}</b>
-      </a></li>
-    {/if}
-    {#if bans.any}
-      <li><a class="srow row-link" href="#/security">
-        <span class="dot"></span><span class="ellipsis">Active bans</span>
-        <b class="num">{formatCount(bans.bans, bans.capped)}</b>
-      </a></li>
-    {/if}
-    {#if !host && !containers.length}
-      <li><a class="srow row-link" href="#/system"><span class="dot"></span><span class="ellipsis">No host figures yet</span></a></li>
-    {/if}
-  </ul>
-
-  {#if traffic}
-    {@const total = traffic.todayRx + traffic.todayTx}
-    <a class="budget row-link" href="#/network">
       {#if budget}
-        {@const pct = Math.round((budget.usedBytes / budget.limitBytes) * 100)}
-        <span class="row1">
-          <span>{budget.period === 'day' ? 'Traffic today' : 'Traffic this month'}</span>
-          <b class="num">{formatPart(budget.usedBytes, budget.limitBytes)}</b>
-        </span>
-        <span class="bar" class:warn={pct >= 80 && pct < 100} class:fail={pct >= 100}><i style:width={`${Math.min(100, pct)}%`}></i></span>
-        <span class="muted small">{pct}% of the {budget.period === 'day' ? 'daily' : 'monthly'} budget</span>
-      {:else}
-        <span class="row1"><span>Traffic today</span><b class="num">{formatTotal(total)}</b></span>
-        <span class="muted small num">↓ {formatTotal(traffic.todayRx)} · ↑ {formatTotal(traffic.todayTx)}</span>
+        <li><a class="fact row-link" href="#/network" title={`${budgetPct}% of the ${budget.period === 'month' ? 'monthly' : 'daily'} budget`}>
+          <span class="label">{budget.period === 'month' ? 'Traffic this month' : 'Traffic today'}</span>
+          <b class="num" class:warn-text={budgetPct >= 80 && budgetPct < 100} class:fail-text={budgetPct >= 100}>{formatPart(budget.usedBytes, budget.limitBytes)}</b>
+          <span class="bar" class:warn={budgetPct >= 80 && budgetPct < 100} class:fail={budgetPct >= 100} aria-hidden="true"><i style:width={`${budgetPct}%`}></i></span>
+        </a></li>
+      {:else if traffic}
+        <li><a class="fact row-link" href="#/network">
+          <span class="label">Traffic today</span><b class="num">{formatSize(traffic.todayRx + traffic.todayTx)}</b>
+        </a></li>
       {/if}
-    </a>
-  {/if}
-</section>
+    </ul>
+  </section>
+{/if}
 
 <style>
-  .rail-section + .rail-section { margin-top: 24px; }
-  .cap {
-    display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px;
-    font-size: var(--t-base); font-weight: 600;
-  }
-  .cap em { font-style: normal; color: var(--muted); font-weight: 400; font-size: var(--t-sm); white-space: nowrap; }
-  .none { font-size: var(--t-base); }
+  .rail-section + .rail-section { margin-top: 26px; }
+  h2 { margin: 0 6px 10px; font-size: 16px; }
   ul { list-style: none; margin: 0; padding: 0; }
+  .none { display: flex; align-items: center; gap: 9px; padding: 8px 6px; font-size: var(--t-body); color: var(--muted); }
+  .apps { display: grid; gap: 4px; }
   .app {
-    width: calc(100% + 16px); margin: 0 -8px; padding: 6px 8px; justify-content: flex-start; gap: 12px;
-    background: transparent; border: 0; border-radius: var(--r); color: var(--text); font-weight: 400;
-    font-size: var(--t-base); text-align: left;
+    width: 100%; padding: 7px 6px; justify-content: flex-start; gap: 12px; min-height: 0;
+    background: transparent; border: 0; border-radius: var(--r-md); color: var(--text); font-weight: 400; text-align: left;
   }
-  .app:hover:not(:disabled) { background: var(--surface2); }
-  /* A service with a problem keeps a faint wash of its state colour, so it is found without reading. */
-  .app.fail { background: var(--fail-wash); }
-  .app.warn { background: var(--warn-wash); }
-  .app.fail:hover:not(:disabled) { background: rgba(236, 108, 125, 0.14); }
-  .app.warn:hover:not(:disabled) { background: rgba(227, 166, 80, 0.13); }
+  .app:hover:not(:disabled) { background: var(--hover); }
   .app:focus-visible { outline-offset: 0; }
-  .apps { display: grid; gap: 2px; }
-  .app .tile-icon { width: 32px; height: 32px; }
-  .text { display: grid; min-width: 0; flex: 1; line-height: 1.35; }
-  .name { font-weight: 550; }
-  .line { font-size: var(--t-sm); color: var(--muted); }
-  .line .warn { color: var(--warn); }
-  .line .fail { color: var(--fail); }
-
-  .srow {
-    display: flex; align-items: center; gap: 10px; padding: 6px 8px; margin: 0 -8px; border-radius: var(--r);
-    font-size: var(--t-base); color: var(--text2); text-decoration: none; min-width: 0;
+  .app .tile-icon { border-radius: 11px; }
+  .text { display: grid; min-width: 0; flex: 1; line-height: 1.4; }
+  .name { font-weight: 600; }
+  .line { font-size: var(--t-small); color: var(--muted); }
+  .line.warn { color: var(--warn-ink); }
+  .line.fail { color: var(--fail-ink); }
+  .more {
+    margin-top: 8px; width: 100%; justify-content: flex-start; padding: 8px; border: 0; border-radius: var(--r);
+    background: transparent; color: var(--accent-text); font-weight: 500;
   }
-  .srow:hover { color: var(--text); }
-  .srow:focus-visible, .budget:focus-visible { outline-offset: 0; }
-  .srow .ellipsis { flex: 1; }
-  .srow b { color: var(--text); font-weight: 550; white-space: nowrap; }
-  .srow b.warn-text { color: var(--warn); }
-  .srow b em { font-style: normal; color: var(--muted); font-weight: 400; font-size: var(--t-sm); }
+  .more:hover:not(:disabled) { background: var(--hover); border: 0; color: var(--accent-text-hi); }
 
-  .budget {
-    margin: 10px -8px 0; display: grid; gap: 6px; padding: 8px; border-radius: var(--r);
-    color: var(--text2); text-decoration: none; font-size: var(--t-base);
+  .server { display: grid; gap: 2px; }
+  .fact {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; align-items: baseline; padding: 7px 6px 9px;
+    border-radius: var(--r); color: var(--text2); text-decoration: none; font-size: var(--t-body);
   }
-  .budget:hover { color: var(--text); }
-  .row1 { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-  .row1 b { color: var(--text); font-weight: 550; white-space: nowrap; }
-  .small { font-size: var(--t-sm); }
+  .fact b { color: var(--text); font-weight: 600; white-space: nowrap; }
+  .fact b.warn-text { color: var(--warn-ink); }
+  .fact b.fail-text { color: var(--fail-ink); }
+  .fact .bar { grid-column: 1 / -1; }
+  .fact:focus-visible { outline-offset: 0; }
 </style>

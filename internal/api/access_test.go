@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"observarr/internal/adapter"
 	"observarr/internal/auth"
@@ -249,6 +251,50 @@ func TestHealthReportsAFailingDatabase(t *testing.T) {
 	}
 }
 
+// TestLockedDatabaseKeepsServingReads holds the database's write lock from outside, as another process could: the
+// health check reports it degraded, changes fail, and everything that only reads keeps working.
+func TestLockedDatabaseKeepsServingReads(t *testing.T) {
+	t.Parallel() // each write waits out the busy timeout
+	e := newServicesEnv(t)
+	e.create("App")
+	other, err := sql.Open("sqlite", "file:"+filepath.Join(e.dir, "o.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	lock, err := other.Conn(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Close()
+	if _, err := lock.ExecContext(context.Background(), "BEGIN IMMEDIATE"); err != nil {
+		t.Fatal(err)
+	}
+	e.srv.healthAt = time.Time{} // the next health check probes again
+
+	if code, data, _ := e.do("GET", "/api/health", "", nil); code != 503 || data["status"] != "degraded" {
+		t.Fatalf("health while locked = %d %v, want 503 degraded", code, data)
+	}
+	if code, _, _ := e.do("GET", "/api/security", "", nil); code != 200 { // read from the database
+		t.Fatalf("security while locked = %d", code)
+	}
+	if code, _, _ := e.do("GET", "/api/session", "", nil); code != 200 {
+		t.Fatalf("session while locked = %d", code)
+	}
+	if code, _ := e.send("POST", "/api/services", fmt.Sprintf(`{"type":"fake","name":"B","url":%q,"apiKey":%q}`,
+		e.appURL+"/copy/5", testKey)); code < 500 {
+		t.Fatalf("adding a service while locked = %d, want a server error", code)
+	}
+
+	if _, err := lock.ExecContext(context.Background(), "ROLLBACK"); err != nil {
+		t.Fatal(err)
+	}
+	e.srv.healthAt = time.Time{}
+	if code, _, _ := e.do("GET", "/api/health", "", nil); code != 200 {
+		t.Fatalf("health after the lock was released = %d", code)
+	}
+}
+
 func TestReadOnlyDatabaseIs503(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root ignores file permission bits")
@@ -286,13 +332,38 @@ func TestFoundKeyGoesOnlyWhereFound(t *testing.T) {
 		"http://evil.example:8989":       false,
 		"not a url":                      true, // refused by validation instead
 	} {
-		if got := foundKeyMayGo(raw, found); got != want {
-			t.Errorf("foundKeyMayGo(%q) = %v, want %v", raw, got, want)
+		if got := foundKeyRefusal(raw, found) == ""; got != want {
+			t.Errorf("found key to %q allowed = %v, want %v", raw, got, want)
 		}
 	}
-	hostless := adapter.Candidate{BaseURL: &url.URL{Scheme: "http", Host: ":8989"}}
-	if !foundKeyMayGo("http://anything.lan:1", hostless) {
-		t.Error("a key found without a host must go where the user says")
+	// A key found in a config folder: the config names the port, the user the host. It goes to that port only,
+	// on this server or its own network, never to a public address.
+	hostless := adapter.Candidate{BaseURL: &url.URL{Scheme: "http", Host: ":8989"}, Name: "Sonarr", Container: "sonarr-main"}
+	for raw, want := range map[string]string{
+		"http://127.0.0.1:8989":                 "",
+		"http://localhost:8989/sonarr":          "",
+		"http://[::1]:8989":                     "",
+		"http://192.168.1.20:8989":              "",
+		"http://10.0.0.5:8989":                  "",
+		"http://[fd00::5]:8989":                 "",
+		"http://sonarr:8989":                    "", // a container's name
+		"http://sonarr-main:8989":               "",
+		"http://nas:8989":                       "",
+		"http://127.0.0.1:8990":                 "port",
+		"http://127.0.0.1":                      "port",
+		"http://192.168.1.20:52135":             "port",
+		"http://203.0.113.9:8989":               "public",
+		"http://[2001:db8::1]:8989":             "public",
+		"http://evil.example:8989":              "public",
+		"http://sonarr.evil.example:8989":       "public",
+		"http://192.168.1.20.evil.example:8989": "public",
+		"http://[::ffff:203.0.113.9]:8989":      "public",
+		"not a url":                             "", // refused by validation instead
+	} {
+		got := foundKeyRefusal(raw, hostless)
+		if (want == "") != (got == "") || !strings.Contains(got, want) {
+			t.Errorf("found key to %q: %q, want a refusal naming %q", raw, got, want)
+		}
 	}
 	if origin(&url.URL{Scheme: "https", Host: "a.lan"}) != origin(&url.URL{Scheme: "https", Host: "A.lan:443"}) {
 		t.Error("the default port must not make a different origin")

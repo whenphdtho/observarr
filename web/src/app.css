@@ -4,194 +4,416 @@
   font-weight: 100 900;
   font-display: swap;
 }
+/* Sora sets the page titles, the headings and the wordmark: Latin only, weights 600 to 700. */
+@font-face {
+  font-family: 'Sora';
+  src: url('./assets/fonts/sora.woff2') format('woff2');
+  font-weight: 600 700;
+  font-display: swap;
+}
+/* Until Sora arrives, Arial Bold scaled to its widths and heights holds the headings' size and line. */
+@font-face {
+  font-family: 'Sora Fallback';
+  src: local('Arial Bold'), local('Arial-BoldMT'), local('Arial');
+  font-weight: 600 700;
+  size-adjust: 107.3%;
+  ascent-override: 90.4%;
+  descent-override: 27%;
+  line-gap-override: 0%;
+}
 
+/* Tokens that do not change with the theme: shape, type, motion and the brand. */
 :root {
-  color-scheme: dark;
-  /* Neutrals: one violet-tinted family. --rail is the side columns, --surface the few boxed
-     units (app cards, the figure strip, dialogs), --surface2/3 raised controls and tracks. */
-  --bg: #100f18;
-  --rail: #13121c;
-  --surface: #181723;
-  --surface2: #1f1e2c;
-  --surface3: #292738;
-  --border: #2a2839;
-  --border2: #34313f;
-  /* Edge of a secondary button: at least 3:1 against the page so its shape is seen, not guessed. */
-  --btn-edge: #4a4759;
-  --btn-edge-hi: #5d5a6e;
-  /* Form fields keep a stronger edge than --border2: they need >= 3:1 against the page. */
-  --field-border: #66637a;
-  --text: #ecebf3;
-  --text2: #aeabbf;
-  --muted: #9592a8;
-  --dim: #5f5c70; /* decorative only (icons, idle dots, separators), never text */
-  /* One accent: the primary action, the current view, focus and selection. */
-  --accent: #ef7b55;
-  --accent-hi: #f48f6d;
-  --accent-ink: #1d0f0a;
-  --accent-text: #f39a7c;
-  /* Problem rows: a faint wash of the state colour behind the row, the dot and words carry the state. */
-  --fail-wash: rgba(236, 108, 125, 0.08);
-  --warn-wash: rgba(227, 166, 80, 0.05);
-  --fail-edge: rgba(236, 108, 125, 0.4);
-  --warn-edge: rgba(227, 166, 80, 0.34);
-  /* Data series and state. Each state colour keeps at least 4.5:1 on --bg and --surface. */
-  --down: #45c4b0;
-  --up: #9c8cf0;
-  --ok: #4fc48b;
-  --warn: #e3a650;
-  --fail: #ec6c7d;
-  /* Progress and share bars: neutral, so colour is left for warnings. */
-  --bar: #8b889d;
-  --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  /* Two radii: boxes (app cards, dialogs, the figure strip) and controls. */
-  --r-lg: 8px;
-  --r: 6px;
-  /* Type scale: axis and dock labels, meta, body, emphasis, section, page title, lead figures. */
-  --t-xs: 11px;
-  --t-sm: 12px;
-  --t-base: 13px;
-  --t-md: 14px;
-  --t-lg: 16px;
-  --t-xl: 20px;
-  --t-2xl: 28px;
-  --t-h1: 24px;
-  /* Depth, used sparingly: the one boxed panel of a view and dialogs. */
-  --lift: 0 1px 0 rgba(255, 255, 255, 0.025) inset, 0 10px 28px -16px rgba(0, 0, 0, 0.75);
-  font: 14px/1.5 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  /* Tabular figures everywhere: live values must not jitter as they change. */
-  font-feature-settings: 'cv11', 'ss01', 'tnum';
-  font-variant-numeric: tabular-nums;
+  /* Motion: three durations and three curves, shared with lib/motion.js, which reads them from here. Fast is
+     feedback (hover, press, focus, a tooltip following the pointer); base is a change of state (a fold, a fade, a
+     colour, a bar); slow is something travelling (rows moving, the current-view pill, a chart changing range).
+     Glow is the one long fade: a highlight that settles back once. */
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 360ms;
+  --dur-glow: 1400ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1); /* standard: arrivals and state changes */
+  --ease-emph: cubic-bezier(0.2, 0, 0, 1); /* emphasised: things that travel, picking up then settling */
+  --ease-exit: cubic-bezier(0.32, 0, 0.67, 0); /* leaving: quick, gathering speed */
+  /* Radii: panels, rows inside a panel, controls and icon tiles, small marks, and pills (segmented options). */
+  --r-lg: 18px;
+  --r-md: 12px;
+  --r: 10px;
+  --r-sm: 5px;
+  --r-pill: 999px;
+  /* Room inside a panel. */
+  --pad: 20px 22px;
+  /* Brand: the mark keeps its dark tile and its own colours in both themes, with a hairline to hold its edge. */
+  --brand-tile: #14153a;
+  --brand-ink: #ffffff;
+  --brand-edge: rgba(255, 255, 255, 0.07);
+  --brand-a: #8b6cf6;
+  --brand-b: #3d8bff;
+  --brand-glint: #2be3e6;
+  /* Type. Sora sets the page title, the section and card headings and the wordmark; Inter sets the
+     rest, every figure included. Sentence case throughout, no spaced capitals. */
+  --font-display: 'Sora', 'Sora Fallback', ui-sans-serif, system-ui, sans-serif;
+  --font-body: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --t-display: 28px; /* h1: the page title */
+  --t-h2: 17px; /* section and card headings, dialog titles, the wordmark */
+  --t-h3: 15px; /* headings inside a section, app names, a row's title */
+  --t-body: 14px; /* text, controls, tables */
+  --t-small: 13px; /* meta, keys, hints, column heads */
+  --t-micro: 12px; /* axis and dock labels: the floor for any text */
+  --t-figure-lg: 28px; /* lead figures */
+  --t-figure: 21px; /* key figures */
+  --t-figure-sm: 16px; /* figures in a list of facts */
+  --w-body: 400;
+  --w-label: 500;
+  --w-strong: 600; /* Inter emphasis and figures */
+  --w-heading: 600;
+  --w-display: 650;
+  --lh-display: 1.2;
+  --lh-heading: 1.3;
+  --lh-body: 1.45;
+  --track-display: -0.025em;
+  --track-heading: -0.01em;
+  --track-figure: -0.015em;
+  font: var(--w-body) var(--t-body) / var(--lh-body) var(--font-body);
+  /* Words keep the font's own spacing: tabular figures also widen the hyphen ("Sign - in"), so they are asked
+     for only where numbers stand (.num, table cells, figures, charts), never for running text. */
+  font-feature-settings: 'cv11';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   scrollbar-width: thin;
-  scrollbar-color: var(--border2) transparent;
+  scrollbar-color: var(--scroll) transparent;
+}
+
+/* Colours. public/theme.js sets data-theme before the first paint, from the stored choice or the system's
+   (lib/theme.js keeps it current); without it the page is dark. Both themes fill the same roles. */
+:root, :root[data-theme='dark'] {
+  color-scheme: dark;
+  /* Neutrals: one deep indigo family. --bg is the page, --rail the side columns, --surface the panels on the
+     page (cards, the figure strip, dialogs), each held by a 1px outline in --border; --surface2/3 are raised
+     controls, --hover a row under the pointer, --tile the square behind an app's icon, --track the ground of a
+     bar. */
+  --bg: #0d0e22;
+  --rail: #111232;
+  --surface: #171938;
+  --surface2: #20234a;
+  --surface3: #2a2e5c;
+  --hover: #1d2048;
+  --tile: #23264f;
+  --tile-ink: #e4e6fb;
+  --track: #262a52;
+  --border: #262a52;
+  --border2: #323668;
+  /* Edge of a secondary button: at least 3:1 against the page and the panels, so its shape is seen. */
+  --btn-edge: #62679c;
+  --btn-edge-hi: #7479b0;
+  /* Form fields: a ground of their own and a stronger edge than --border2, at least 3:1 against the page
+     and the panels. */
+  --field: #0d0e22;
+  --field-border: #6e73aa;
+  --field-border-hi: #8287bd;
+  /* Text: the first, the second (details, summaries) and the third (meta, axis labels); each at least 7:1 on
+     the page, the columns and the panels. */
+  --text: #eef0ff;
+  --text2: #c6c9ea;
+  --muted: #bcc0e4;
+  --dim: #50548a; /* decorative only (icons, separators), never text */
+  /* One accent, blue: the primary action, the current view and range, focus and selection.
+     --accent draws lines, rings and icons; --accent-fill is a filled control with --accent-ink on it
+     (4.9:1); --accent-text is a link on the page or a panel. */
+  --accent: #3d8bff;
+  --accent-fill: #2a6ae6;
+  --accent-fill-hi: #2f70ec;
+  --accent-ink: #ffffff;
+  --accent-text: #9cc0ff;
+  --accent-text-hi: #c2d8ff;
+  --accent-wash: rgba(61, 139, 255, 0.28);
+  /* Data: one hue, blue, in three strengths, and a quiet neutral for the rest. A chart tells its series apart by
+     strength, so no colour is left to mean anything but data. Each keeps at least 3:1 against the panels and the
+     tooltip; charts lay them over each other as translucent fills. */
+  --series-1: #3d8bff;
+  --series-2: #6f9dff;
+  --series-3: #a8c4ff;
+  --series-other: #6e73aa;
+  --down: var(--series-1);
+  --up: var(--series-3);
+  --cpu: var(--series-1);
+  --mem: var(--series-3);
+  --grid: #262a52;
+  /* Opacity of the fills under the lines: an area (top and bottom of its fade), a mirrored band, a spark. */
+  --area-hi: 0.24;
+  --area-lo: 0.14;
+  --band-hi: 0.55;
+  --band-lo: 0.3;
+  --spark-hi: 0.3;
+  /* State: a set of its own, used for state only: a marker, a dot, a value. --ok, --warn and --fail draw the
+     marks; the -ink ones set words, a step softer. --idle is a thing waiting or paused: nothing wrong. Each
+     keeps at least 4.5:1 on the page and panels (--idle 3:1, it only draws dots). */
+  --ok: #4ad295;
+  --warn: #f2b45e;
+  --fail: #f7768a;
+  --warn-ink: #f2c48a;
+  --fail-ink: #f7a1af;
+  --idle: #6e73aa;
+  /* A flash is the brief light of a state that just changed (lib/motion.js flash); nothing stays tinted. */
+  --fail-flash: rgba(247, 118, 138, 0.28);
+  --warn-flash: rgba(242, 180, 94, 0.22);
+  --ok-flash: rgba(74, 210, 149, 0.16);
+  /* The outline of the panel that lists what needs attention, a shade towards its worst state. */
+  --fail-edge: #3a2f4c;
+  --warn-edge: #3a3547;
+  --warn-line: rgba(242, 180, 94, 0.38);
+  /* Progress and share bars: plain and thin, in the data colour; grey when what they show is paused. */
+  --bar: var(--series-1);
+  --bar-idle: #6e73aa;
+  /* Chart tooltips, the dialog backdrop, the scrollbar thumb. */
+  --tip: #2a2e5c;
+  --tip-edge: #353a6e;
+  --scrim: rgba(6, 7, 20, 0.66);
+  --scroll: #323668;
+  /* Depth: panels sit a little above the page; dialogs and tooltips further. */
+  --lift: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 14px 30px -20px rgba(3, 4, 18, 0.9);
+  --float: 0 14px 34px -12px rgba(3, 4, 18, 0.85);
+}
+
+/* Light: a cool, faintly indigo ground, white panels held by hairlines and soft shadows, dark indigo
+   text. The data and state colours keep their hues, deepened to hold the same contrast on white. */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #eef0f7;
+  --rail: #f6f7fb;
+  --surface: #ffffff;
+  --surface2: #e6e9f4;
+  --surface3: #dadeee;
+  --hover: #eef1fa;
+  --tile: #e9ecf6;
+  --tile-ink: #2b2f58;
+  --track: #e3e6f2;
+  --border: #d5d9ea;
+  --border2: #c4c9e0;
+  --btn-edge: #8287ad;
+  --btn-edge-hi: #6d729c;
+  --field: #ffffff;
+  --field-border: #7e83a9;
+  --field-border-hi: #666b95;
+  --text: #15173a;
+  --text2: #3d4168;
+  --muted: #565b84;
+  --dim: #a3a7c7;
+  --accent: #2a6ae6;
+  --accent-fill: #2563de;
+  --accent-fill-hi: #1d55c6;
+  --accent-ink: #ffffff;
+  --accent-text: #1f5bd1;
+  --accent-text-hi: #163f9c;
+  --accent-wash: rgba(42, 106, 230, 0.2);
+  --series-1: #2a6ae6;
+  --series-2: #123a8c;
+  --series-3: #5a86e8;
+  --series-other: #858aaf;
+  --grid: #e4e7f1;
+  --area-hi: 0.16;
+  --area-lo: 0.08;
+  --band-hi: 0.4;
+  --band-lo: 0.2;
+  --spark-hi: 0.18;
+  --ok: #11784b;
+  --warn: #a35f00;
+  --fail: #c0283f;
+  --warn-ink: #8a4e00;
+  --fail-ink: #b3223a;
+  --idle: #7f84ab;
+  --fail-flash: rgba(192, 40, 63, 0.16);
+  --warn-flash: rgba(214, 132, 20, 0.2);
+  --ok-flash: rgba(17, 120, 75, 0.12);
+  --fail-edge: #e6c3cb;
+  --warn-edge: #e2cfae;
+  --warn-line: rgba(176, 102, 0, 0.42);
+  --bar: var(--series-1);
+  --bar-idle: #9499bd;
+  --tip: #ffffff;
+  --tip-edge: #c9cee3;
+  --scrim: rgba(21, 23, 58, 0.4);
+  --scroll: #bfc4dc;
+  --lift: 0 1px 2px rgba(21, 23, 58, 0.05), 0 10px 26px -18px rgba(21, 23, 58, 0.22);
+  --float: 0 2px 6px rgba(21, 23, 58, 0.06), 0 16px 36px -14px rgba(21, 23, 58, 0.3);
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); caret-color: var(--accent); }
-::selection { background: rgba(239, 123, 85, 0.3); color: var(--text); }
+::selection { background: var(--accent-wash); color: var(--text); }
 h1, h2, h3, p { margin: 0; }
+h1, h2, h3 {
+  font-family: var(--font-display); font-weight: var(--w-heading); line-height: var(--lh-heading); text-wrap: balance;
+}
+h1 { font-size: var(--t-display); font-weight: var(--w-display); line-height: var(--lh-display); letter-spacing: var(--track-display); }
+h2 { font-size: var(--t-h2); letter-spacing: var(--track-heading); }
+h3 { font-size: var(--t-h3); }
+/* Counts and units inside a heading are figures: Inter, at the heading's size or their own. */
+:is(h1, h2, h3) :is(em, small, .unit, .num, .meta) { font-family: var(--font-body); letter-spacing: 0; }
+/* Numbers that change or line up keep one width per digit: figures, numeric table cells, chart labels. */
+.num, .data td.r, svg text { font-variant-numeric: tabular-nums; }
+p { text-wrap: pretty; }
 /* Disclosure summaries look like the controls they are. */
 summary { cursor: pointer; color: var(--text2); width: fit-content; border-radius: 4px; }
 summary:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
 
 /* Buttons: primary (accent) by default, .quiet for everything secondary, .ibtn for icon-only. */
 button {
-  font: inherit; font-size: var(--t-base); font-weight: 550; display: inline-flex; align-items: center; justify-content: center;
-  gap: 7px; padding: 6px 12px; border-radius: var(--r); cursor: pointer; white-space: nowrap;
-  color: var(--accent-ink); background: var(--accent); border: 1px solid var(--accent);
-  transition: background 140ms var(--ease), border-color 140ms var(--ease), color 140ms var(--ease),
-    filter 100ms var(--ease), box-shadow 140ms var(--ease);
+  font: inherit; font-size: var(--t-body); font-weight: 600; display: inline-flex; align-items: center; justify-content: center;
+  gap: 7px; min-height: 34px; padding: 5px 14px; border-radius: var(--r); cursor: pointer; white-space: nowrap;
+  color: var(--accent-ink); background: var(--accent-fill); border: 1px solid var(--accent-fill);
+  transition-property: background-color, border-color, color, filter, box-shadow, transform;
+  transition-duration: var(--dur-fast); transition-timing-function: var(--ease-out);
 }
-button:hover:not(:disabled) { background: var(--accent-hi); border-color: var(--accent-hi); }
-/* Pressed: a short dip in brightness, on every button whatever its fill. */
-button:active:not(:disabled) { filter: brightness(0.88); }
+button:hover:not(:disabled) { background: var(--accent-fill-hi); border-color: var(--accent-fill-hi); }
+/* Pressed: a short dip in brightness and a slight give, on every button whatever its fill. A whole row that is a
+   button only dims: shrinking a wide row would look like it moved. */
+button:active:not(:disabled) { filter: brightness(0.88); transform: scale(0.97); }
+button.row-link:active:not(:disabled) { transform: none; }
 button:disabled { opacity: 0.55; cursor: default; }
 /* Secondary buttons keep a fill and an edge of their own, so they read as buttons, not as text. */
-button.quiet { color: var(--text); background: var(--surface2); border-color: var(--btn-edge); }
+button.quiet { color: var(--text); background: var(--surface2); border-color: var(--btn-edge); font-weight: 500; }
 button.quiet:hover:not(:disabled) { background: var(--surface3); border-color: var(--btn-edge-hi); }
 button.ibtn {
-  width: 32px; height: 32px; padding: 0; flex: none;
+  width: 34px; height: 34px; min-height: 0; padding: 0; flex: none;
   color: var(--text2); background: transparent; border-color: var(--border);
 }
 button.ibtn:hover:not(:disabled) { color: var(--text); background: var(--surface2); border-color: var(--border2); }
 
+/* A link that is the action of its place (open the app, go to the view) looks like the button beside it. */
+a.button {
+  display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 5px 14px; border-radius: var(--r);
+  font-size: var(--t-body); font-weight: 600; text-decoration: none; white-space: nowrap;
+  color: var(--accent-ink); background: var(--accent-fill); border: 1px solid var(--accent-fill);
+}
+a.button:hover { color: var(--accent-ink); background: var(--accent-fill-hi); border-color: var(--accent-fill-hi); }
+a.button:active { filter: brightness(0.88); transform: scale(0.97); }
+a.button.quiet { color: var(--text); background: var(--surface2); border-color: var(--btn-edge); font-weight: 500; }
+a.button.quiet:hover { background: var(--surface3); border-color: var(--btn-edge-hi); }
+
 input, select, textarea {
-  font: inherit; font-size: var(--t-base); color: var(--text); background: var(--bg); border: 1px solid var(--field-border);
+  font: inherit; font-size: var(--t-body); color: var(--text); background: var(--field); border: 1px solid var(--field-border);
   border-radius: var(--r); padding: 7px 10px; width: 100%;
 }
 input[type='checkbox'] { width: 16px; height: 16px; accent-color: var(--accent); }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; animation: ring-in var(--dur-fast) var(--ease-out); }
+/* The focus ring draws in: from a soft, wider ring to the crisp one. */
+@keyframes ring-in { from { outline-color: transparent; outline-width: 5px; } }
 /* Links, inputs and summaries change state as quickly as buttons do. */
-a, summary, input, select, textarea { transition: color 140ms var(--ease), background-color 140ms var(--ease), border-color 140ms var(--ease); }
-input:hover:not(:focus):not(:disabled), select:hover:not(:focus):not(:disabled), textarea:hover:not(:focus):not(:disabled) { border-color: #7a778e; }
+a, summary, input, select, textarea {
+  transition-property: color, background-color, border-color, box-shadow;
+  transition-duration: var(--dur-fast); transition-timing-function: var(--ease-out);
+}
+input:hover:not(:focus):not(:disabled), select:hover:not(:focus):not(:disabled), textarea:hover:not(:focus):not(:disabled) { border-color: var(--field-border-hi); }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 a { color: var(--accent-text); text-underline-offset: 3px; text-decoration-thickness: 1px; }
-a:hover { color: var(--accent-hi); }
+a:hover { color: var(--accent-text-hi); }
 /* A link that leads to another view: accent words and a chevron, underlined on hover. */
 .go {
-  display: inline-flex; align-items: center; gap: 2px; color: var(--accent-text); font-size: var(--t-sm); font-weight: 550;
+  display: inline-flex; align-items: center; gap: 2px; color: var(--accent-text); font-size: var(--t-small); font-weight: 500;
   text-decoration: none; white-space: nowrap; border-radius: 4px;
 }
-.go:hover { color: var(--accent-hi); text-decoration: underline; }
-.go .icon { transition: transform 140ms var(--ease); }
+.go:hover { color: var(--accent-text-hi); text-decoration: underline; }
+.go .icon { transition: transform var(--dur-fast) var(--ease-out); }
 .go:hover .icon { transform: translateX(2px); }
 /* A whole row that is a link or button: a wash on hover, a chevron that brightens. */
-.row-link { cursor: pointer; transition: background 140ms var(--ease); }
-.row-link:hover { background: var(--surface2); }
-.row-link .chev { color: var(--muted); flex: none; display: grid; transition: color 140ms var(--ease), transform 140ms var(--ease); }
+.row-link { cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out); }
+.row-link:hover { background: var(--hover); }
+.row-link .chev { color: var(--muted); flex: none; display: grid; transition: color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out); }
 .row-link:hover .chev, .row-link:focus-visible .chev { color: var(--text); transform: translateX(2px); }
 
 dialog {
-  background: var(--rail); color: var(--text); border: 1px solid var(--border2); border-radius: var(--r-lg);
-  padding: 20px; width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto;
-  box-shadow: 0 16px 40px -16px rgba(0, 0, 0, 0.7);
+  background: var(--surface); color: var(--text); border: 1px solid var(--border2); border-radius: var(--r-lg);
+  padding: 22px; width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto;
+  box-shadow: var(--float);
 }
-dialog[open] { animation: dialog-in 180ms var(--ease); }
-dialog[open]::backdrop { animation: backdrop-in 180ms var(--ease); }
+dialog[open] { animation: dialog-in var(--dur-base) var(--ease-out); }
+dialog[open]::backdrop { animation: settle var(--dur-base) var(--ease-out); }
 @keyframes dialog-in { from { opacity: 0; transform: translateY(6px) scale(0.985); } }
-@keyframes backdrop-in { from { opacity: 0; } }
-dialog::backdrop { background: rgba(8, 7, 14, 0.6); }
-dialog h2 { font-size: var(--t-lg); font-weight: 600; }
-dialog label { display: grid; gap: 6px; font-size: var(--t-base); color: var(--text2); }
+dialog::backdrop { background: var(--scrim); }
+dialog h2 { font-size: var(--t-h2); }
+dialog label { display: grid; gap: 6px; font-size: var(--t-body); color: var(--text2); }
 dialog .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 
 /* Shared pieces used by several views. */
 .muted { color: var(--muted); }
-.num { font-variant-numeric: tabular-nums; }
 /* A live label or value stays on one line; the full text is in its title. */
 .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 /* Error and warning text is never truncated: a long unbreakable token wraps inside its box. */
-.error { color: var(--fail); overflow-wrap: anywhere; }
-/* Colour on a word only where it needs attention. */
-.warn-text { color: var(--warn); }
-.fail-text { color: var(--fail); }
+.error { color: var(--fail-ink); overflow-wrap: anywhere; }
+/* Colour on a word only where it says a state that needs attention. */
+.warn-text { color: var(--warn-ink); }
+.fail-text { color: var(--fail-ink); }
+/* The first thing a keyboard reaches: past the views, straight to the content. */
+.skip {
+  position: fixed; z-index: 100; top: 8px; left: 8px; padding: 9px 14px; border-radius: var(--r);
+  background: var(--accent-fill); color: var(--accent-ink); font-weight: 600; text-decoration: none;
+  transform: translateY(-200%);
+}
+.skip:focus { transform: none; color: var(--accent-ink); }
 .visually-hidden {
   position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
 }
 /* A box for an object that is a unit of its own: an app, the sign-in form. */
 .card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
-  padding: 16px 18px; min-width: 0;
+  padding: 16px 18px; min-width: 0; box-shadow: var(--lift);
 }
-/* A section of a view: set apart by a hairline above and the space around it, not by a box. */
-.section { min-width: 0; padding-top: 18px; border-top: 1px solid var(--border); }
-.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; min-width: 0; }
+/* A section of a view: a soft panel, a shade lighter than the page. */
+.section {
+  min-width: 0; padding: var(--pad); background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg); box-shadow: var(--lift);
+}
+/* Phones: text a step larger, to read at arm's length, and fields at 16px so the page does not zoom on focus. */
+@media (max-width: 720px) {
+  :root { --pad: 16px 16px; --t-body: 15px; --t-small: 13px; --t-h3: 15px; --t-display: 19px; }
+  input, select, textarea { font-size: 16px; }
+}
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 16px; min-width: 0; }
 .card-head h2 {
-  font-size: var(--t-lg); font-weight: 620; letter-spacing: -0.012em; display: flex; align-items: center; gap: 8px; min-width: 0;
+  display: flex; align-items: center; gap: 8px; min-width: 0;
 }
 /* Right-aligned note in a section head: a count, a unit, a time span. */
-.card-head .meta { font-size: var(--t-sm); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-head .meta { font-size: var(--t-small); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* A row of key figures (Kpi.svelte): one strip split by hairlines, four across, two on narrower
-   layouts, one on the smallest. The 1px gap lets the strip's border colour show as the dividers. */
+/* A panel that folds (Fold.svelte) and anything else that opens in place: the body's row grows from nothing to
+   its own height, so the height eases without being measured. */
+.reveal-rows { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--dur-base) var(--ease-out); }
+.reveal-rows.open { grid-template-rows: 1fr; }
+.reveal-rows > * { overflow: hidden; min-height: 0; }
+/* The chevron of a thing that opens: down when open, turned aside when shut. */
+.turn { flex: none; display: grid; color: var(--muted); transition: transform var(--dur-base) var(--ease-out); }
+
+/* A row of key figures (Kpi.svelte): one panel split by hairlines, four across, two on narrower
+   layouts, one on the smallest. The 1px gap lets the panel's border colour show as the dividers. */
 .kpis {
   display: grid; gap: 1px; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: hidden;
-  background: var(--border); border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--border); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--lift);
 }
-/* A section that arrives once its data does fades in rather than popping. */
-.empty { animation: settle 220ms var(--ease); }
+/* Content that arrives once its data does (in place of a skeleton, or an empty state) fades in rather than
+   popping. */
+.empty, .settle { animation: settle var(--dur-base) var(--ease-out); }
 @keyframes settle { from { opacity: 0; } }
 @container (max-width: 820px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 359px) { .kpis { grid-template-columns: minmax(0, 1fr); } }
 
-/* Segmented control: a group of aria-pressed buttons, one of them on. */
+/* Segmented control: a group of aria-pressed buttons, the one that is on a filled blue pill. */
 .seg {
-  display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--r); flex: none;
-  background: var(--surface); border: 1px solid var(--border2);
+  display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--r-pill); flex: none; max-width: 100%;
+  background: var(--bg); border: 1px solid var(--border);
 }
 .seg button {
-  padding: 3px 10px; border-radius: 4px; font-weight: 500; font-size: var(--t-sm); color: var(--text2);
-  background: transparent; border: 0;
+  padding: 4px 12px; border-radius: var(--r-pill); font-weight: 400; font-size: var(--t-small); color: var(--text2);
+  background: transparent; border: 0; min-height: 30px;
 }
 .seg button:hover:not(:disabled) { background: var(--surface2); border: 0; color: var(--text); }
-.seg button[aria-pressed='true'] { background: var(--surface3); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35); }
-.seg button[aria-pressed='true']:hover:not(:disabled) { background: var(--surface3); }
+.seg button[aria-pressed='true'] { background: var(--accent-fill); color: var(--accent-ink); font-weight: 600; }
+.seg button[aria-pressed='true']:hover:not(:disabled) { background: var(--accent-fill-hi); }
+.seg button:focus-visible { outline-offset: 1px; }
 
 /* Something to set up or know: the notices of the host and container sources. */
 .banner {
   display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: var(--r-lg);
-  border: 1px solid rgba(227, 166, 80, 0.35); color: var(--text2); font-size: var(--t-base);
+  border: 1px solid var(--warn-line); background: var(--surface); color: var(--text2); font-size: var(--t-body);
 }
 .banner > .icon { color: var(--warn); margin-top: 1px; }
 .banner-text { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
@@ -201,15 +423,15 @@ dialog .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap:
 }
 
 /* No figures yet, or none to show. */
-.waiting { color: var(--muted); font-size: var(--t-base); }
+.waiting { color: var(--muted); font-size: var(--t-body); }
 
 /* Data tables: a quiet header, numbers right-aligned in tabular figures. On narrow layouts each
    row becomes a block whose cells name their column (data-label), split from the next by a hairline. */
 .table-wrap { margin: 0 -8px; overflow-x: auto; }
-table.data { width: 100%; border-collapse: collapse; font-size: var(--t-base); }
+table.data { width: 100%; border-collapse: collapse; font-size: var(--t-body); }
 .data th, .data td { padding: 8px; text-align: left; border-bottom: 1px solid var(--border); min-width: 0; }
 .data tbody tr:last-child td { border-bottom: 0; }
-.data th { white-space: nowrap; color: var(--muted); font-weight: 500; font-size: var(--t-sm); padding-top: 2px; }
+.data th { white-space: nowrap; color: var(--muted); font-weight: 500; font-size: var(--t-small); padding-top: 2px; }
 .data .r { text-align: right; }
 .data td.r { white-space: nowrap; }
 .data th button {
@@ -229,42 +451,54 @@ table.data { width: 100%; border-collapse: collapse; font-size: var(--t-base); }
   }
   .data tbody tr:last-child { border-bottom: 0; }
   .data td { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 2px 0; border: 0; }
-  .data td::before { content: attr(data-label); color: var(--muted); font-size: var(--t-sm); flex-shrink: 0; }
+  .data td::before { content: attr(data-label); color: var(--muted); font-size: var(--t-small); flex-shrink: 0; }
   .data td.lead { display: grid; justify-content: stretch; grid-column: 1 / -1; font-weight: 600; }
   .data td.r { text-align: left; }
   .data td.lead::before { display: none; }
 }
 
-/* Colour key of a chart series. */
+/* Colour key of a segment of a bar: a small square. */
 .sw { width: 8px; height: 8px; border-radius: 2px; flex: none; display: inline-block; }
+/* Colour key of a chart series: a small square in the series colour (style:color sets it). */
+.ring { width: 10px; height: 10px; border-radius: 3px; flex: none; display: inline-block; background: currentColor; }
+.ring.blank { background: transparent; }
+/* A key below a chart: markers and names in one wrapping row. */
+.keys { display: flex; flex-wrap: wrap; gap: 6px 18px; list-style: none; margin: 0; padding: 0; font-size: var(--t-small); color: var(--text2); }
+.keys li { display: inline-flex; align-items: center; gap: 7px; min-width: 0; white-space: nowrap; }
 
 
-/* Icon tile: a square holding an app's icon, optionally with a status dot in its corner. */
+/* Icon tile: a neutral square holding an app's icon, optionally with a status dot in its corner. The tile never
+   takes a state's colour: the dot and the words do. */
 .tile-icon {
   width: 36px; height: 36px; border-radius: var(--r); display: grid; place-items: center; flex: none;
-  position: relative; background: var(--surface2); color: var(--text2);
+  position: relative; background: var(--tile); color: var(--tile-ink);
 }
 .status-dot {
-  position: absolute; right: -3px; bottom: -3px; width: 10px; height: 10px; border-radius: 50%;
-  border: 2px solid var(--rail); background: var(--dim);
+  position: absolute; right: -3px; bottom: -3px; width: 11px; height: 11px; border-radius: 50%;
+  box-shadow: 0 0 0 2.5px var(--dot-ground, var(--rail)); background: var(--idle);
 }
 /* A status dot before plain text: the word says the state, the dot repeats it at a glance. */
-.dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--dim); }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--idle); }
 .status-dot.ok, .dot.ok { background: var(--ok); }
 .status-dot.warn, .dot.warn { background: var(--warn); }
 .status-dot.fail, .dot.fail { background: var(--fail); }
+/* The mark at the front of a row that needs attention: 4px of its state's colour. */
+.marker { width: 4px; height: 24px; border-radius: 2px; flex: none; background: var(--idle); }
+.marker.warn { background: var(--warn); }
+.marker.fail { background: var(--fail); }
 .state-word { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 
 /* Thin progress bar. What it shows is always also given as text next to it. */
-.bar { height: 4px; border-radius: 2px; background: var(--surface3); overflow: hidden; }
-.bar > i { display: block; height: 100%; border-radius: 2px; background: var(--bar); transition: width 200ms var(--ease); }
+.bar { display: block; height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; }
+.bar > i { display: block; height: 100%; border-radius: 2px; background: var(--bar); transition: width var(--dur-slow) var(--ease-out); }
+.bar.idle > i { background: var(--bar-idle); }
 .bar.warn > i { background: var(--warn); }
 .bar.fail > i { background: var(--fail); }
 
 /* Small facts after a title, split by middle dots: "Downloading · 1.6 GiB left · 00:00:53". The
    row keeps one line; each fact gives way with an ellipsis. */
 .facts {
-  display: flex; gap: 0 6px; min-width: 0; font-size: var(--t-sm); color: var(--muted); white-space: nowrap; overflow: hidden;
+  display: flex; gap: 0 6px; min-width: 0; font-size: var(--t-small); color: var(--muted); white-space: nowrap; overflow: hidden;
 }
 .facts > * { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .facts > * + *::before { content: '·'; margin-right: 6px; color: var(--muted); }
@@ -274,10 +508,20 @@ table.data { width: 100%; border-collapse: collapse; font-size: var(--t-base); }
   color: var(--muted); display: grid; justify-items: center; gap: 4px;
 }
 .empty .icon { color: var(--dim); margin-bottom: 4px; }
-.empty b { color: var(--text); font-size: var(--t-md); font-weight: 620; letter-spacing: -0.01em; }
+.empty b { color: var(--text); font-size: var(--t-h3); font-weight: var(--w-strong); }
 .empty button { margin-top: 10px; }
-.empty > span { max-width: 60ch; font-size: var(--t-base); overflow-wrap: anywhere; }
+.empty > span { max-width: 60ch; font-size: var(--t-body); overflow-wrap: anywhere; }
 .empty .links { display: flex; gap: 6px 16px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
+
+/* Busy: a small ring that turns while a task the user started runs (a scan, a check); it stops with the task. */
+.spinner {
+  width: 14px; height: 14px; border-radius: 50%; flex: none; display: inline-block;
+  border: 2px solid var(--field-border); border-top-color: var(--accent); animation: spin 800ms linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* The theme switch crossfades the whole page once (lib/theme.js), instead of every colour snapping on its own. */
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: var(--dur-base); animation-timing-function: var(--ease-out); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }

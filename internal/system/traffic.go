@@ -19,8 +19,8 @@ const (
 	maxTracked  = 200            // containers tracked at most; the traffic of others only counts for the host
 	trackedFor  = 24 * time.Hour // a container not seen this long is no longer tracked
 	maxGap      = time.Hour      // counters read further apart are not compared (suspended host, clock jump)
-	maxPoints   = 300            // values per series at most in a TrafficView
 	maxPending  = 10_000         // day totals kept at most while the database takes no writes
+	maxQueued   = 120            // minutes kept at most for the history while the database takes no writes
 	hostScope   = "host"
 	ctrScope    = "container:" // followed by the container's name
 )
@@ -44,7 +44,7 @@ type netCounters struct {
 
 // flow is one scope's traffic: the host's physical interfaces together, or one container's own network.
 type flow struct {
-	minutes [minuteSlots]pair[float32] // average rates, aligned with Traffic.minuteAt
+	minutes [minuteSlots]pair[float32] // average rates; the minute m at slot(m), see Traffic.minuteAt
 	live    [liveSlots]pair[float32]   // rates, aligned with Traffic.liveAt
 	open    pair[float64]              // bytes in the open minute
 	today   pair[uint64]               // bytes in today's closed minutes
@@ -60,15 +60,21 @@ type flow struct {
 
 // Traffic keeps the network traffic of the host and of each container with a network of its own: the latest
 // readings (five minutes at 2 s), a day of 1-minute averages, today's totals and peak, and the daily totals it
-// hands to a TrafficStore. Its memory is bounded: fixed-size rings for at most maxTracked containers.
+// hands to a TrafficStore. It also keeps a day of the host's 1-minute CPU and memory averages, and hands each
+// closed minute to a HistoryStore. Its memory is bounded: fixed-size rings for at most maxTracked containers,
+// and at most maxQueued minutes waiting to be written.
 type Traffic struct {
-	mu       sync.Mutex
-	loc      *time.Location // days begin at midnight here
-	period   string         // budget period, "day" or "month"; "" = no budget
-	limit    uint64
-	flows    map[string]*flow // by scope; always holds the host
+	mu     sync.Mutex
+	loc    *time.Location // days begin at midnight here
+	period string         // budget period, "day" or "month"; "" = no budget
+	limit  uint64
+	flows  map[string]*flow // by scope; always holds the host
+	// The rings hold the minute m (since epoch) at slot(m) when minuteAt there is m. A minute nobody watched
+	// (Observarr was not running, or the readings around it were too far apart to trust) is not held.
 	minuteAt [minuteSlots]int64
-	nextMin  int
+	hostAt   [minuteSlots]int64 // likewise for cpu and mem, which only minutes with a host reading have
+	cpu      [minuteSlots]float32
+	mem      [minuteSlots]uint64
 	liveAt   [liveSlots]int64 // ms since epoch
 	nextLive int
 	last     time.Time                  // latest reading
@@ -77,6 +83,15 @@ type Traffic struct {
 	month    uint64                     // host bytes of the month's days before day
 	peak     pair[float32]              // the host's highest rates in a reading of day (since the start, on the first day)
 	pending  map[[2]string]pair[uint64] // bytes by day and scope, not yet written
+
+	seen       bool    // a reading was taken in the open minute
+	openCPU    float64 // sum of the open minute's host CPU readings
+	openMem    float64 // and of its memory readings
+	openHost   int     // how many host readings that is
+	keep       bool    // closed minutes are queued for a HistoryStore
+	lastQueued int64   // the latest minute queued (or restored); none at or before it is queued again
+	queue      []store.HistoryMinute
+	headFails  int // failed writes in a row of the queue's first minute
 }
 
 // TrafficSummary is the host's traffic today in bytes, its highest rates today in bytes per second (of one
@@ -100,9 +115,25 @@ type Budget struct {
 type TrafficView struct {
 	TrafficSummary
 	Range      string             `json:"range"`
+	Step       int64              `json:"step"`  // seconds between times: nominal for "5m", whose times are the readings
 	Times      []int64            `json:"times"` // ms since epoch, one per series value
 	Host       FlowView           `json:"host"`
 	Containers []ContainerTraffic `json:"containers"` // most traffic today first
+	Previous   *Totals            `json:"previous"`   // the host's bytes in the period as long before the range; nil = unknown
+	Daily      []DayTotal         `json:"daily"`      // the host's bytes on the last 30 local days, today last
+}
+
+// Totals are bytes down (In) and up (Out).
+type Totals struct {
+	In  uint64 `json:"in"`
+	Out uint64 `json:"out"`
+}
+
+// DayTotal is the host's bytes on one local day; nil when that day is not known.
+type DayTotal struct {
+	Day string  `json:"day"` // YYYY-MM-DD
+	In  *uint64 `json:"in"`
+	Out *uint64 `json:"out"`
 }
 
 // FlowView is one scope's latest rates and its series over the range.
@@ -114,17 +145,8 @@ type FlowView struct {
 
 // Series holds one rate per TrafficView.Times.
 type Series struct {
-	Rx []float64 `json:"rx"`
-	Tx []float64 `json:"tx"`
-}
-
-// ContainerTraffic is one container's traffic. Service names the service linked to it, if any.
-type ContainerTraffic struct {
-	Name    string `json:"name"`
-	Service string `json:"service"`
-	FlowView
-	TodayRx uint64 `json:"todayRx"`
-	TodayTx uint64 `json:"todayTx"`
+	Rx Values `json:"rx"`
+	Tx Values `json:"tx"`
 }
 
 // NewTraffic returns an empty Traffic whose days begin at midnight in loc, with a budget of limit bytes per
@@ -138,6 +160,9 @@ func NewTraffic(loc *time.Location, period string, limit uint64) *Traffic {
 }
 
 func minuteOf(t time.Time) int64 { return t.Unix() / 60 }
+
+// slot is where the rings hold the minute m.
+func slot(m int64) int { return int(m % minuteSlots) }
 
 // load adds today's totals, and the host's bytes of this month's earlier days, from st.
 func (t *Traffic) load(ctx context.Context, st TrafficStore, now time.Time) error {
@@ -158,17 +183,27 @@ func (t *Traffic) load(ctx context.Context, st TrafficStore, now time.Time) erro
 	}
 	t.month = month
 	for _, r := range rows {
-		f := t.flows[r.Scope]
+		f := t.track(r.Scope, now)
 		if f == nil {
-			if !strings.HasPrefix(r.Scope, ctrScope) || len(t.flows) > maxTracked {
-				continue
-			}
-			f = &flow{seen: now}
-			t.flows[r.Scope] = f
+			continue
 		}
 		f.today = pair[uint64]{f.today[0] + r.Rx, f.today[1] + r.Tx}
 	}
 	return nil
+}
+
+// track returns scope's flow, adding it as seen at seen if there is none yet and room for it; nil for a scope
+// that is neither the host nor a container.
+func (t *Traffic) track(scope string, seen time.Time) *flow {
+	f := t.flows[scope]
+	if f == nil {
+		if !strings.HasPrefix(scope, ctrScope) || len(t.flows) > maxTracked {
+			return nil
+		}
+		f = &flow{seen: seen}
+		t.flows[scope] = f
+	}
+	return f
 }
 
 // startDay makes day the current one: today's totals start at zero, and the month's earlier days are counted
@@ -190,6 +225,7 @@ func (t *Traffic) startDay(day string) {
 // openMinute makes m the minute being collected, starting a new day when m is in another one.
 func (t *Traffic) openMinute(m int64) {
 	t.open = m
+	t.seen, t.openCPU, t.openMem, t.openHost = false, 0, 0, 0
 	if day := time.Unix(m*60, 0).In(t.loc).Format(time.DateOnly); day != t.day {
 		t.startDay(day)
 	}
@@ -244,17 +280,20 @@ func (t *Traffic) observe(now time.Time, ifs []collect.NetIf, ctrs []netCounters
 		f.read(now, c.pid, map[string]pair[uint64]{"": {c.rx, c.tx}})
 	}
 
-	// Spread the bytes read over the minutes they cover, closing each minute that ended.
+	// Spread the bytes read over the minutes they cover, closing each minute that ended. A minute without a
+	// reading of its own was watched when the readings around it are close enough to trust.
 	cur := minuteOf(now)
 	if t.open == 0 || cur < t.open { // the first reading, or the clock went back
 		t.openMinute(cur)
 	}
+	bridged := !t.last.IsZero() && now.After(t.last) && now.Sub(t.last) <= maxGap
 	for t.open < cur {
 		t.spread(now)
-		t.closeMinute()
+		t.closeMinute(t.seen || bridged)
 		t.openMinute(max(t.open+1, cur-minuteSlots)) // after a long gap only the last day's minutes matter
 	}
 	t.spread(now)
+	t.seen = true
 
 	ms := now.UnixMilli()
 	t.liveAt[t.nextLive] = ms
@@ -273,6 +312,18 @@ func (t *Traffic) observe(now time.Time, ifs []collect.NetIf, ctrs []netCounters
 	}
 	t.nextLive = (t.nextLive + 1) % liveSlots
 	t.last = now
+}
+
+// addHost adds a host reading, CPU use in percent and memory used in bytes, to the open minute's averages.
+// Call it after observe for the same reading.
+func (t *Traffic) addHost(cpu float64, mem uint64) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.open != 0 {
+		t.openCPU += cpu
+		t.openMem += float64(mem)
+		t.openHost++
+	}
 }
 
 // spread adds to each flow's open minute its share of the bytes read: the part of the reading's interval
@@ -308,11 +359,45 @@ func (t *Traffic) spread(now time.Time) {
 	}
 }
 
-// closeMinute records the open minute's averages and adds its bytes to today's totals and to those waiting
-// to be written.
-func (t *Traffic) closeMinute() {
-	i := t.nextMin
-	t.minuteAt[i] = t.open
+// openRecord is the open minute as the history keeps it: its bytes so far and its host averages.
+func (t *Traffic) openRecord() store.HistoryMinute {
+	m := t.open * 60
+	rec := store.HistoryMinute{Minute: m, Hour: hourStart(m, t.loc), Day: dayStart(m, t.loc)}
+	if t.openHost > 0 {
+		n := float64(t.openHost)
+		rec.Host = &store.HostAvg{CPU: float64(float32(t.openCPU / n)), Mem: uint64(math.Round(t.openMem / n))}
+	}
+	for key, f := range t.flows {
+		b := pair[uint64]{uint64(math.Round(f.open[0])), uint64(math.Round(f.open[1]))}
+		if key == hostScope || b != (pair[uint64]{}) {
+			rec.Traffic = append(rec.Traffic, store.SourceBytes{Source: key, Rx: b[0], Tx: b[1]})
+		}
+	}
+	return rec
+}
+
+// queueOpen queues the open minute for the history unless a minute at or after it was queued already (the
+// clock went back): a minute is handed to the history once.
+func (t *Traffic) queueOpen() {
+	if t.keep && t.open > t.lastQueued {
+		t.enqueue(t.openRecord())
+		t.lastQueued = t.open
+	}
+}
+
+// closeMinute records the open minute's averages if it was watched, adds its bytes to today's totals and to
+// those waiting to be written, and queues it for the history.
+func (t *Traffic) closeMinute(watched bool) {
+	m, i := t.open, slot(t.open)
+	t.minuteAt[i], t.hostAt[i] = 0, 0
+	if watched {
+		t.queueOpen()
+		t.minuteAt[i] = m
+		if t.openHost > 0 {
+			n := float64(t.openHost)
+			t.hostAt[i], t.cpu[i], t.mem[i] = m, float32(t.openCPU/n), uint64(math.Round(t.openMem/n))
+		}
+	}
 	for key, f := range t.flows {
 		f.minutes[i] = pair[float32]{float32(f.open[0] / 60), float32(f.open[1] / 60)}
 		b := pair[uint64]{uint64(math.Round(f.open[0])), uint64(math.Round(f.open[1]))}
@@ -326,7 +411,16 @@ func (t *Traffic) closeMinute() {
 			t.pending[k] = pair[uint64]{p[0] + b[0], p[1] + b[1]}
 		}
 	}
-	t.nextMin = (i + 1) % minuteSlots
+}
+
+// flushOpen queues the open minute, as far as it was counted, for the history; on shutdown, so the history
+// holds what the daily totals do.
+func (t *Traffic) flushOpen() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.open != 0 && t.seen {
+		t.queueOpen()
+	}
 }
 
 // persist writes the totals waiting to be written to st. Totals that fail to be written wait for the next
@@ -384,74 +478,142 @@ func (t *Traffic) summary() TrafficSummary {
 	return s
 }
 
-// View returns the traffic over the last five minutes (rng "5m", every reading) or the last day (any other
-// rng, 1-minute averages, downsampled to at most maxPoints values).
-func (t *Traffic) View(rng string) TrafficView {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	v := TrafficView{TrafficSummary: t.summary(), Range: rng, Times: []int64{}, Containers: []ContainerTraffic{}}
+// lastClosed is the latest closed minute: the one before the open minute, or before now's before the first
+// reading.
+func (t *Traffic) lastClosed(now time.Time) int64 {
+	if t.open != 0 {
+		return t.open - 1
+	}
+	return minuteOf(now) - 1
+}
 
-	// The slots in the range, oldest first.
-	var slots []int
-	if rng == "5m" {
+// View returns the traffic over the last five minutes (rng "5m", every reading) or the last day (any other
+// rng: the 1440 minutes up to the latest closed one before now, a gap where a minute was not watched). It shows
+// at most maxSeries containers, those with the most traffic in the range. The series are copied under the
+// lock and built after it.
+func (t *Traffic) View(rng string, now time.Time) TrafficView {
+	t.mu.Lock()
+	v := TrafficView{TrafficSummary: t.summary(), Range: rng, Step: int64(watchedEvery / time.Second),
+		Times: []int64{}, Containers: []ContainerTraffic{}}
+	live := rng == "5m"
+	var idx []int // per time, the ring slot; -1 for a minute not watched
+	if live {
 		cut := t.last.Add(-historyWindow).UnixMilli()
 		for n := range liveSlots {
 			if i := (t.nextLive + n) % liveSlots; t.liveAt[i] > cut {
-				slots = append(slots, i)
+				idx = append(idx, i)
 				v.Times = append(v.Times, t.liveAt[i])
 			}
 		}
 	} else {
-		v.Range = "24h"
-		cut := minuteOf(t.last) - minuteSlots
-		for n := range minuteSlots {
-			if i := (t.nextMin + n) % minuteSlots; t.minuteAt[i] > cut && t.minuteAt[i] > 0 {
-				slots = append(slots, i)
+		v.Range, v.Step = "24h", 60
+		last := t.lastClosed(now)
+		for m := last - minuteSlots + 1; m <= last; m++ {
+			i := slot(m)
+			if t.minuteAt[i] != m {
+				i = -1
 			}
+			idx = append(idx, i)
+			v.Times = append(v.Times, m*60_000)
 		}
 	}
-	group := max(1, (len(slots)+maxPoints-1)/maxPoints)
-	if rng != "5m" {
-		for g := 0; g < len(slots); g += group {
-			v.Times = append(v.Times, t.minuteAt[slots[g]]*60_000)
+	ring := func(f *flow) []pair[float32] {
+		if live {
+			return f.live[:]
+		}
+		return f.minutes[:]
+	}
+	// The containers with the most traffic in the range.
+	totals := map[string]float64{}
+	var names []string
+	for key, f := range t.flows {
+		if strings.HasPrefix(key, ctrScope) {
+			r, sum := ring(f), 0.0
+			for _, i := range idx {
+				if i >= 0 {
+					sum += float64(r[i][0]) + float64(r[i][1])
+				}
+			}
+			totals[key] = sum
+			names = append(names, key)
 		}
 	}
-	latest := (t.nextLive + liveSlots - 1) % liveSlots
-	view := func(f *flow) FlowView {
-		fv := FlowView{}
-		if t.liveAt[latest] == t.last.UnixMilli() {
-			fv.Rx, fv.Tx = float64(f.live[latest][0]), float64(f.live[latest][1])
-		}
-		ring := f.minutes[:]
-		if rng == "5m" {
-			ring = f.live[:]
-		}
-		s, nonzero := &Series{Rx: []float64{}, Tx: []float64{}}, false
-		for g := 0; g < len(slots); g += group {
-			var sum pair[float64]
-			n := min(group, len(slots)-g)
-			for _, i := range slots[g : g+n] {
-				sum[0] += float64(ring[i][0])
-				sum[1] += float64(ring[i][1])
+	slices.SortFunc(names, func(a, b string) int { return cmp.Or(cmp.Compare(totals[b], totals[a]), cmp.Compare(a, b)) })
+	names = names[:min(len(names), maxSeries)]
+
+	type taken struct {
+		name   string
+		rx, tx float64
+		today  pair[uint64]
+		vals   []pair[float32]
+	}
+	gap := float32(math.NaN())
+	take := func(key string) taken {
+		f := t.flows[key]
+		tk := taken{name: strings.TrimPrefix(key, ctrScope), vals: make([]pair[float32], len(idx)),
+			today: pair[uint64]{f.today[0] + uint64(f.open[0]), f.today[1] + uint64(f.open[1])}}
+		tk.rx, tk.tx = t.liveRates(f)
+		r := ring(f)
+		for n, i := range idx {
+			if i < 0 {
+				tk.vals[n] = pair[float32]{gap, gap}
+			} else {
+				tk.vals[n] = r[i]
 			}
-			rx, tx := math.Round(sum[0]/float64(n)), math.Round(sum[1]/float64(n))
-			s.Rx, s.Tx = append(s.Rx, rx), append(s.Tx, tx)
-			nonzero = nonzero || rx > 0 || tx > 0
 		}
-		if nonzero {
+		return tk
+	}
+	host := take(hostScope)
+	ctrs := make([]taken, len(names))
+	for i, key := range names {
+		ctrs[i] = take(key)
+	}
+	t.mu.Unlock()
+
+	view := func(tk taken) FlowView {
+		fv := FlowView{Rx: tk.rx, Tx: tk.tx}
+		s := &Series{Rx: make(Values, len(tk.vals)), Tx: make(Values, len(tk.vals))}
+		for n, p := range tk.vals {
+			s.Rx[n], s.Tx[n] = float64(p[0]), float64(p[1])
+			if !live {
+				s.Rx[n], s.Tx[n] = math.Round(s.Rx[n]), math.Round(s.Tx[n]) // NaN stays NaN
+			}
+		}
+		if s.moves() {
 			fv.Series = s
 		}
 		return fv
 	}
-	v.Host = view(t.flows[hostScope])
-	for key, f := range t.flows {
-		if name, ok := strings.CutPrefix(key, ctrScope); ok {
-			v.Containers = append(v.Containers, ContainerTraffic{Name: name, FlowView: view(f),
-				TodayRx: f.today[0] + uint64(f.open[0]), TodayTx: f.today[1] + uint64(f.open[1])})
+	v.Host = view(host)
+	for _, tk := range ctrs {
+		v.Containers = append(v.Containers, ContainerTraffic{Name: tk.name, FlowView: view(tk),
+			TodayRx: tk.today[0], TodayTx: tk.today[1]})
+	}
+	sortContainers(v.Containers)
+	return v
+}
+
+// moves reports whether s has any traffic.
+func (s *Series) moves() bool {
+	for i := range s.Rx {
+		if s.Rx[i] > 0 || s.Tx[i] > 0 { // false for NaN
+			return true
 		}
 	}
-	slices.SortFunc(v.Containers, func(a, b ContainerTraffic) int {
+	return false
+}
+
+func sortContainers(cs []ContainerTraffic) {
+	slices.SortFunc(cs, func(a, b ContainerTraffic) int {
 		return cmp.Or(cmp.Compare(b.TodayRx+b.TodayTx, a.TodayRx+a.TodayTx), cmp.Compare(a.Name, b.Name))
 	})
-	return v
+}
+
+// ContainerTraffic is one container's traffic. Service names the service linked to it, if any.
+type ContainerTraffic struct {
+	Name    string `json:"name"`
+	Service string `json:"service"`
+	FlowView
+	TodayRx uint64 `json:"todayRx"`
+	TodayTx uint64 `json:"todayTx"`
 }

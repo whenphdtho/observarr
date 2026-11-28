@@ -1,7 +1,8 @@
-import { containerStatusClass } from './format.js';
+import { streamsOf, streamText } from './streams.js';
+import { formatCount, plural, sentence } from './format.js';
 
-// Summaries of a service's readings shared by the apps rail, the Overview and the cards. They
-// only read the generic shapes (health, queue), never anything app-specific.
+// Summaries of a service's readings shared by the apps rail, the Overview and the cards. They only read the
+// generic shapes (health, queue, streams, …) and the server's attention list, never anything app-specific.
 
 function warnings(svc) {
   return svc.readings?.health?.data?.warnings ?? [];
@@ -15,42 +16,78 @@ export function downloading(svc) {
   return queueItems(svc).filter((it) => it.status === 'downloading').length;
 }
 
-// serviceStatus is the service's overall state as a status class: "unknown" before the first
-// health check, "fail" when down, "warn" when up with warnings or a stuck queue item, else "ok".
-export function serviceStatus(svc) {
-  const health = svc.readings?.health;
-  if (!health) return 'unknown';
+// queuePaused tells whether a downloader has its whole queue paused: a state, not a problem.
+export function queuePaused(svc) {
+  return !!svc.readings?.queue?.data?.paused;
+}
+
+// tone maps a severity of the attention list to a status class: "fail", "warn", or "" for info.
+export function tone(severity) {
+  return severity === 'critical' ? 'fail' : severity === 'warning' ? 'warn' : '';
+}
+
+// worst is the items of the attention list about service id that carry its worst tone, with that tone:
+// { tone: "fail" | "warn" | "", items }.
+function worst(id, items) {
+  const mine = (items ?? []).filter((it) => it.service === id);
+  for (const t of ['fail', 'warn']) {
+    const hit = mine.filter((it) => tone(it.severity) === t);
+    if (hit.length) return { tone: t, items: hit };
+  }
+  return { tone: '', items: [] };
+}
+
+// serviceStatus is the service's overall state as a status class: "unknown" before the first health check (or the
+// first attention list), "fail" when it is not reachable, else the worst of what needs attention about it ("fail"
+// or "warn"), else "ok". The severities are the server's, the same the Overview, the bell and the alerts use.
+export function serviceStatus(svc, items) {
+  if (!svc.readings?.health) return 'unknown';
   if (!svc.up) return 'fail';
-  if (warnings(svc).some((w) => w.level !== 'info') || queueItems(svc).some((it) => it.problem)) return 'warn';
-  return 'ok';
+  if (!items) return 'unknown'; // what it reports is not weighed yet
+  return worst(svc.id, items).tone || 'ok';
 }
 
-// serviceLine is the one-line state shown under a service's name: { text, detail, tone }, where
-// detail is the part worth highlighting in the tone's colour.
-export function serviceLine(svc) {
-  const health = svc.readings?.health;
-  if (!health) return { text: 'Checking…', detail: '', tone: '' };
-  if (!svc.up) return { text: 'Down', detail: health.error || '', tone: 'fail' };
-  // A warning or a stuck download is why the status dot is amber, so it is named before the downloads.
-  const w = warnings(svc).filter((x) => x.level !== 'info').length;
-  if (w > 0) return { text: 'Up', detail: `${w} warning${w === 1 ? '' : 's'}`, tone: 'warn' };
-  const stuck = queueItems(svc).filter((it) => it.problem).length;
-  if (stuck > 0) return { text: 'Up', detail: `${stuck} download${stuck === 1 ? '' : 's'} stuck`, tone: 'warn' };
+// serviceLine is the one state shown under a service's name, and the colour of its dot: { text, tone }, tone
+// one of "fail", "warn", "idle" (waiting or paused: nothing wrong, nothing moving), "ok" or "unknown". What needs
+// someone comes first, then what it waits for, then what it does.
+export function serviceLine(svc, items) {
+  if (!svc.readings?.health) return { text: 'Checking…', tone: 'unknown' };
+  if (!svc.up) return { text: 'Not reachable', tone: 'fail' };
+  if (!items) return { text: 'Checking…', tone: 'unknown' };
+  const w = worst(svc.id, items);
+  if (w.tone) {
+    // One short problem is said in its own words; several, or a long one, are counted.
+    const only = w.items.length === 1 ? w.items[0] : null;
+    const stuck = w.items.every((it) => it.rule === 'downloads');
+    const text = stuck ? `${plural(w.items.length, 'download')} stuck` :
+      only && only.message.length <= 24 ? sentence(only.message) :
+        plural(w.items.length, w.tone === 'fail' ? 'problem' : 'warning');
+    return { text, tone: w.tone };
+  }
+  if (queuePaused(svc)) return { text: 'Paused', tone: 'idle' };
+  const pending = svc.readings?.requests?.data?.counts?.pending ?? 0;
+  if (pending > 0) return { text: `${pending} waiting`, tone: 'idle' };
+  const playing = streamsOf(svc);
+  if (playing?.total > 0) return { text: `${playing.total} playing`, tone: 'ok' };
   const n = downloading(svc);
-  if (n > 0) return { text: 'Up', detail: `${n} downloading`, tone: 'ok' };
-  const version = health.data?.version;
-  return { text: 'Up', detail: version ? `v${version}` : '', tone: '' };
+  if (n > 0) return { text: `${n} downloading`, tone: 'ok' };
+  const blocked = svc.readings?.security?.data;
+  if (blocked) return { text: `${formatCount(blocked.total, blocked.capped)} blocked`, tone: 'ok' };
+  return { text: 'Fine', tone: 'ok' };
 }
 
-// cardSummary is what a collapsed service card shows: one summary line ({ text, tone }) and one
-// lead row — the first queue item, else the first warning, else a placeholder — so every
-// collapsed card has the same rows whatever the service reports. A service that is down gets a
-// short summary and its error, said once, in the lead row.
-export function cardSummary(svc) {
+// cardSummary is what a collapsed service card shows: one summary line ({ text, tone }) and one lead row (the
+// first queue item, else the first stream, else the first warning, else a placeholder), so every collapsed card
+// has the same rows whatever the service reports. A paused queue leads its summary with "Paused" and is no
+// warning. A service that is not reachable gets a short summary and its error, said once, in the lead row.
+// attention is the attention list.
+export function cardSummary(svc, attention) {
   const health = svc.readings?.health;
   const queue = svc.readings?.queue;
   const hasQueue = (svc.kinds ?? []).includes('queue');
+  const hasStreams = (svc.kinds ?? []).includes('streams');
   const items = queueItems(svc);
+  const streams = streamsOf(svc);
   const warns = warnings(svc).filter((w) => w.level !== 'info');
 
   let summary;
@@ -60,65 +97,29 @@ export function cardSummary(svc) {
     const parts = [];
     const n = downloading(svc);
     const waiting = items.length - n;
+    if (queuePaused(svc)) parts.push('Paused');
     if (n > 0) parts.push(`${n} downloading`);
     if (waiting > 0) parts.push(`${waiting} queued`);
-    if (warns.length > 0) parts.push(`${warns.length} warning${warns.length === 1 ? '' : 's'}`);
-    if (parts.length) summary = { text: parts.join(' · '), tone: warns.length || items.some((it) => it.problem) ? 'warn' : '' };
-    else summary = { text: hasQueue ? 'No downloads' : 'No warnings', tone: '' };
+    if (streams?.total > 0) parts.push(streamText(streams));
+    // An error the app reports is a problem, as the Overview and the apps column call it.
+    const errors = warns.filter((w) => w.level === 'error').length;
+    if (errors > 0) parts.push(plural(errors, 'problem'));
+    if (warns.length > errors) parts.push(plural(warns.length - errors, 'warning'));
+    if (parts.length) summary = { text: parts.join(' · '), tone: worst(svc.id, attention).tone };
+    else summary = { text: hasQueue ? 'No downloads' : hasStreams ? 'Nothing playing' : 'No warnings', tone: '' };
   }
 
   let lead;
-  if (health && !svc.up) lead = { kind: 'note', text: health.error || 'Not answering', tone: 'fail' };
+  if (health && !svc.up) lead = { kind: 'note', text: health.error || 'It does not answer', tone: 'fail' };
   else if (items.length > 0) lead = { kind: 'item', item: items[0] };
-  else if (warns.length > 0) lead = { kind: 'warning', warning: warns[0] };
+  else if (streams?.streams.length > 0) lead = { kind: 'item', item: streams.streams[0] };
+  else if (warns.length > 0) lead = { kind: 'warning', warning: warns.find((w) => w.level === 'error') ?? warns[0] };
   else if (hasQueue && queue?.error) lead = { kind: 'note', text: queue.error, tone: 'fail' };
   else if (hasQueue) lead = { kind: 'note', text: 'Queue is empty', tone: '' };
+  else if (hasStreams && svc.readings?.streams?.error) lead = { kind: 'note', text: svc.readings.streams.error, tone: 'fail' };
   else if (health?.data) lead = { kind: 'note', text: `Answers in ${health.data.latencyMs} ms`, tone: '' };
   else lead = { kind: 'note', text: 'Nothing to report', tone: '' };
   return { summary, lead };
-}
-
-// warningHref is the view that shows the details behind a service's health warnings.
-function warningHref(svc) {
-  const kinds = svc.kinds ?? [];
-  if (kinds.includes('mounts')) return '#/storage';
-  if (kinds.includes('security')) return '#/security';
-  return '#/apps';
-}
-
-// attention lists what needs a look, worst first: services down, health warnings and errors,
-// stuck queue items, and containers that are unhealthy, restarting or dead. Each entry is
-// { key, tone, title, detail, href }, plus service (its id) when the entry is about one service.
-export function attention(services, containers) {
-  const out = [];
-  for (const svc of services) {
-    const health = svc.readings?.health;
-    if (health && !svc.up) {
-      out.push({ key: `down-${svc.id}`, tone: 'fail', title: `${svc.name} is down`, detail: health.error || '', href: '#/apps', service: svc.id });
-    }
-    const warnHref = warningHref(svc);
-    for (const [i, w] of warnings(svc).entries()) {
-      if (w.level === 'info') continue;
-      out.push({
-        key: `warn-${svc.id}-${i}`, tone: w.level === 'error' ? 'fail' : 'warn', title: svc.name,
-        detail: w.source ? `${w.source}: ${w.message}` : w.message, href: warnHref, service: svc.id,
-      });
-    }
-    for (const [i, it] of queueItems(svc).entries()) {
-      if (!it.problem) continue;
-      out.push({ key: `queue-${svc.id}-${i}`, tone: 'warn', title: `${svc.name}: ${it.title}`, detail: it.problem, href: '#/apps', service: svc.id });
-    }
-  }
-  for (const c of containers) {
-    const bad = c.health === 'unhealthy' || c.state === 'restarting' || c.state === 'dead';
-    if (!bad) continue;
-    out.push({
-      key: `ctr-${c.id}`, tone: containerStatusClass(c.state, c.health), title: `Container ${c.name}`,
-      detail: c.health === 'unhealthy' ? 'unhealthy' : c.state, href: '#/system',
-    });
-  }
-  const rank = { fail: 0, warn: 1 };
-  return out.sort((a, b) => (rank[a.tone] ?? 2) - (rank[b.tone] ?? 2));
 }
 
 // matches reports whether text contains the search query, ignoring case; an empty query matches.

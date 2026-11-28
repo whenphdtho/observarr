@@ -123,6 +123,14 @@ func newAppServer(t *testing.T) *httptest.Server {
 		}
 		fmt.Fprint(w, `{"app":"fake","version":"2.0"}`)
 	})
+	// The same app again under a path of its own: one address is added once.
+	mux.HandleFunc("GET /copy/{n}/status", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Api-Key") != testKey {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		fmt.Fprint(w, `{"app":"fake","version":"2.0"}`)
+	})
 	mux.HandleFunc("GET /open/status", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprint(w, `{"app":"fake","version":"2.1"}`)
 	})
@@ -152,6 +160,7 @@ type servicesEnv struct {
 	appURL  string
 	appPort int // both fakes' DefaultPort, so a network scan of 127.0.0.1 finds the app server
 	box     *secret.Box
+	created int // services added by create
 }
 
 // newServicesEnv starts a server with two fake adapters, a real store, box, hub and fast poller, and a
@@ -223,10 +232,17 @@ func (e *servicesEnv) send(method, path, body string) (int, map[string]any) {
 }
 
 // create adds a fake service and returns its id.
+// create adds the fake app under name: the first at the app's address, each further one at a path of its own, as
+// one address is added once.
 func (e *servicesEnv) create(name string) int64 {
 	e.t.Helper()
+	url := e.appURL
+	if e.created > 0 {
+		url += "/copy/" + strconv.Itoa(e.created)
+	}
+	e.created++
 	code, data := e.send("POST", "/api/services", fmt.Sprintf(`{"type":"fake","name":%q,"url":%q,"apiKey":%q}`,
-		name, e.appURL, testKey))
+		name, url, testKey))
 	if code != 201 {
 		e.t.Fatalf("create %s = %d %v", name, code, data)
 	}
@@ -384,12 +400,72 @@ func TestDuplicateNameConflicts(t *testing.T) {
 	e := newServicesEnv(t)
 	e.create("Sonarr")
 	second := e.create("Radarr")
-	if code, _ := e.send("POST", "/api/services", fmt.Sprintf(`{"type":"fake","name":"SONARR","url":%q,"apiKey":%q}`,
-		e.appURL, testKey)); code != 409 {
-		t.Fatalf("duplicate create = %d, want 409", code)
+	if code, data := e.send("POST", "/api/services", fmt.Sprintf(`{"type":"fake","name":"SONARR","url":%q,"apiKey":%q}`,
+		e.appURL+"/copy/7", testKey)); code != 409 || data["error"] != "a service with this name already exists" {
+		t.Fatalf("duplicate create = %d %v, want 409", code, data)
 	}
 	if code, _ := e.send("PATCH", e.path(second), `{"name":"sonarr"}`); code != 409 {
 		t.Fatalf("rename to a taken name = %d, want 409", code)
+	}
+}
+
+// One app at one address is watched once: a second service of the same type there would show and report
+// everything twice.
+func TestSameAppAtTheSameAddressIsRefused(t *testing.T) {
+	e := newServicesEnv(t)
+	e.create("First")
+	add := func(name, url string) (int, map[string]any) {
+		return e.send("POST", "/api/services", fmt.Sprintf(`{"type":"fake","name":%q,"url":%q,"apiKey":%q}`, name, url, testKey))
+	}
+	host := strings.TrimPrefix(e.appURL, "http://127.0.0.1")
+	for _, same := range []string{e.appURL, e.appURL + "/", "http://127.0.0.1" + host} {
+		if code, data := add("Again", same); code != 409 || data["error"] != `this app is already added as "First"` {
+			t.Errorf("the same app at %s = %d %v", same, code, data)
+		}
+	}
+	// Another path is another app, and another type at the address is too.
+	code, data := add("Second", e.appURL+"/copy/3")
+	if code != 201 {
+		t.Fatalf("the app at another path = %d %v", code, data)
+	}
+	if code, data := e.send("POST", "/api/services", fmt.Sprintf(`{"type":"keyless","name":"Open","url":%q}`, e.appURL+"/open")); code != 201 {
+		t.Fatalf("another type = %d %v", code, data)
+	}
+	// Moving a service onto another one's address is refused as well; keeping its own is not.
+	second := e.path(int64(data["id"].(float64)))
+	if code, data := e.send("PATCH", second, fmt.Sprintf(`{"url":%q,"apiKey":%q}`, e.appURL, testKey)); code != 409 {
+		t.Fatalf("moving onto a taken address = %d %v", code, data)
+	}
+	if code, data := e.send("PATCH", second, `{"name":"Renamed"}`); code != 200 {
+		t.Fatalf("renaming = %d %v", code, data)
+	}
+}
+
+func TestServiceNameTakesNoControlCharacters(t *testing.T) {
+	e := newServicesEnv(t)
+	for _, name := range []string{"a\x00b", "a\nb", "tab\tbed", "bell\ab", "del\x7fb", "ne\u0085l"} {
+		body, _ := json.Marshal(map[string]string{"type": "fake", "name": name, "url": e.appURL, "apiKey": testKey})
+		code, data := e.send("POST", "/api/services", string(body))
+		if code != 400 || data["error"] != "name: no line breaks or other control characters" {
+			t.Errorf("name %q = %d %v", name, code, data)
+		}
+	}
+	id := e.create("Fine name · with dots")
+	if code, _ := e.send("PATCH", e.path(id), `{"name":"line\nbreak"}`); code != 400 {
+		t.Errorf("renaming to a name with a line break = %d", code)
+	}
+}
+
+// An app that refuses a request made without any key did not reject one: the answer says what to enter.
+func TestMissingKeyIsNotARejectedKey(t *testing.T) {
+	e := newServicesEnv(t)
+	if code, data := e.send("POST", "/api/services/test", fmt.Sprintf(`{"type":"keyless","url":%q}`, e.appURL)); code != 422 ||
+		data["error"] != "the app asks for a key: enter its token" {
+		t.Fatalf("no key where one is asked for = %d %v", code, data)
+	}
+	if code, data := e.send("POST", "/api/services/test", fmt.Sprintf(`{"type":"fake","url":%q,"apiKey":"wrong"}`, e.appURL)); code != 422 ||
+		data["error"] != adapter.ErrUnauthorized.Error() {
+		t.Fatalf("a wrong key = %d %v", code, data)
 	}
 }
 

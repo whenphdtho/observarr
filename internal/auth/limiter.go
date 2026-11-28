@@ -95,6 +95,26 @@ func (l *Limiter) Reset(ctx context.Context, addr string) error {
 	return l.store.RememberLogin(ctx, addr, at)
 }
 
+// Release gives back the latest attempt reserved for addr when it ended without a guess being checked (the
+// client went away while waiting, or the input was refused): it no longer counts against addr or the
+// server-wide budget.
+func (l *Limiter) Release(addr string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	a := l.attempts[addr]
+	if len(a) == 0 {
+		return
+	}
+	if len(a) == 1 {
+		delete(l.attempts, addr)
+	} else {
+		l.attempts[addr] = a[:len(a)-1]
+	}
+	if l.global > 0 {
+		l.global--
+	}
+}
+
 // AddrState is what the Limiter holds about one address: its attempts within LockoutWindow (successful logins
 // clear them) and, when it is locked out, for how long still.
 type AddrState struct {

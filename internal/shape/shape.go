@@ -28,6 +28,12 @@ type Warning struct {
 	Level   Level  `json:"level"`
 	Message string `json:"message"`
 	Source  string `json:"source,omitempty"` // the app's check name, if any
+	// Title names the problem in a few plain words that follow the app's name ("automatic search is off"), where
+	// the adapter knows the check; left out otherwise, and the message's first words serve.
+	Title string `json:"title,omitempty"`
+	// ID tells this warning from the app's others for as long as the problem lasts, whatever its text says then
+	// ("disk", "failed", a check's name). Left out for a line the app wrote itself, which is its own identity.
+	ID string `json:"id,omitempty"`
 }
 
 // Health is filled by every adapter.
@@ -39,6 +45,7 @@ type Health struct {
 
 // QueueItem is one download/import in progress.
 type QueueItem struct {
+	ID        string  `json:"id,omitempty"` // the app's own id of the item, if it has one: two may share a title
 	Title     string  `json:"title"`
 	Status    string  `json:"status"`   // app's status, lower case (downloading, queued, completed, …)
 	Progress  float64 `json:"progress"` // 0..1
@@ -52,6 +59,11 @@ type QueueItem struct {
 type Queue struct {
 	Total int         `json:"total"` // items in the app's queue (may exceed len(Items))
 	Items []QueueItem `json:"items"` // at most MaxQueueItems; adapters must set []QueueItem{}, not nil, so it marshals as [] not null
+	// Speed and Paused are for apps that download the whole queue themselves (a downloader, not an app that hands
+	// its downloads to one): the download speed now, in bytes/s, and whether downloading is paused. Left out when
+	// zero or false, as from an app that does not report them.
+	Speed  int64 `json:"speed,omitempty"`
+	Paused bool  `json:"paused,omitempty"`
 }
 
 // MaxQueueItems bounds the items kept per queue, MaxWarnings the warnings kept per health reading.
@@ -108,7 +120,7 @@ type SecurityDecision struct {
 	Value    string    `json:"value"`          // the address, range or other value, as given
 	Scope    string    `json:"scope"`          // what Value is: an IP, a range, a country, …
 	Type     string    `json:"type"`           // ban, captcha, …
-	Origin   string    `json:"origin"`         // where the decision came from
+	Origin   string    `json:"origin"`         // where the decision came from, in plain words
 	Scenario string    `json:"scenario"`       // the behaviour that triggered it
 	Until    time.Time `json:"until,omitzero"` // when it ends; zero (left out) if the app did not say
 }
@@ -189,3 +201,97 @@ const (
 	MaxMounts    = 20
 	MaxTransfers = 20
 )
+
+// KindStreams is filled by media servers: what is being played right now, how, and what it costs the server.
+const KindStreams Kind = "streams"
+
+// How a stream is played.
+const (
+	PlayDirect       = "direct"       // the client plays the file as it is
+	PlayDirectStream = "directstream" // the server repackages it, and may convert the audio, but sends the video as it is
+	PlayTranscode    = "transcode"    // the server converts the video
+)
+
+// Stream is one session playing something.
+type Stream struct {
+	User     string  `json:"user"`             // the account, as the app names it
+	Client   string  `json:"client"`           // the app it plays in, e.g. a web or TV client
+	Device   string  `json:"device,omitempty"` // the device it plays on, as the app names it
+	Title    string  `json:"title"`            // e.g. "Series S01E02 · Episode" or "Film (2008)"
+	Paused   bool    `json:"paused"`
+	Progress float64 `json:"progress"` // 0..1; 0 when the length is unknown
+	Method   string  `json:"method"`   // PlayDirect, PlayDirectStream or PlayTranscode; "" if the app does not say
+	// Reasons say in plain words why the server converts anything (e.g. "audio codec not supported"); never nil.
+	Reasons []string `json:"reasons"`
+	// VideoCodec and AudioCodec are the codecs of the file; ToVideoCodec and ToAudioCodec what the server converts
+	// them to, empty while a stream is sent as it is.
+	VideoCodec   string `json:"videoCodec,omitempty"`
+	AudioCodec   string `json:"audioCodec,omitempty"`
+	ToVideoCodec string `json:"toVideoCodec,omitempty"`
+	ToAudioCodec string `json:"toAudioCodec,omitempty"`
+	Bitrate      int64  `json:"bitrate"` // bits/s sent to the client; 0 if unknown
+}
+
+// Streams is filled by apps that play media to clients. The counts cover every stream, the list the first ones.
+// It never holds a client's network address.
+type Streams struct {
+	Total      int      `json:"total"`      // sessions playing something, paused ones included
+	Paused     int      `json:"paused"`     // of them, paused
+	Transcodes int      `json:"transcodes"` // of them, with the video converted (PlayTranscode)
+	Bitrate    int64    `json:"bitrate"`    // bits/s of all streams whose bitrate is known
+	Streams    []Stream `json:"streams"`    // at most MaxStreams; [] not nil
+}
+
+// MaxStreams bounds the streams kept per reading, MaxStreamReasons the reasons kept per stream.
+const (
+	MaxStreams       = 50
+	MaxStreamReasons = 8
+)
+
+// KindRequests is filled by apps that take media requests from their users.
+const KindRequests Kind = "requests"
+
+// Request states, from waiting to done.
+const (
+	RequestPending    = "pending"             // waiting for approval
+	RequestApproved   = "approved"            // approved, not yet being fetched
+	RequestProcessing = "processing"          // being fetched
+	RequestPartial    = "partially available" // some of it can be watched
+	RequestAvailable  = "available"           // it can be watched
+	RequestCompleted  = "completed"           // done, though no longer reported as available
+	RequestDeclined   = "declined"
+	RequestFailed     = "failed" // handing it on to the app that fetches it failed
+)
+
+// RequestCounts counts an app's requests by state, over all time, as the app counts them: the states can overlap
+// (an available request may also count as approved), so they need not add up to Total.
+type RequestCounts struct {
+	Total      int `json:"total"`
+	Pending    int `json:"pending"`
+	Approved   int `json:"approved"`
+	Processing int `json:"processing"`
+	Available  int `json:"available"`
+	Declined   int `json:"declined"`
+	Failed     int `json:"failed"`
+}
+
+// MediaRequest is one request for a movie or a series.
+type MediaRequest struct {
+	Title       string    `json:"title"`
+	Type        string    `json:"type"`        // "movie" or "series"
+	RequestedBy string    `json:"requestedBy"` // the user's display name; never an e-mail address
+	State       string    `json:"state"`       // one of the Request states
+	At          time.Time `json:"at,omitzero"` // when it was made; zero (left out) if the app did not say
+}
+
+// Requests sums up the media requests an app takes.
+type Requests struct {
+	// App names the app that answers, for an adapter that serves several apps sharing one API; "" otherwise.
+	App        string         `json:"app,omitempty"`
+	Counts     RequestCounts  `json:"counts"`
+	Latest     []MediaRequest `json:"latest"`               // newest first, at most MaxRequests; [] not nil
+	OpenIssues *int           `json:"openIssues,omitempty"` // problems users reported that are still open; nil if unknown
+}
+
+// MaxRequests bounds Requests.Latest.
+const MaxRequests = 10

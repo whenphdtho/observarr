@@ -6,7 +6,10 @@ import (
 	"observarr/internal/adapter"
 	"observarr/internal/adapters/arr"
 	"observarr/internal/adapters/crowdsec"
+	"observarr/internal/adapters/jellyfin"
 	"observarr/internal/adapters/rclone"
+	"observarr/internal/adapters/seerr"
+	"observarr/internal/adapters/usenet"
 )
 
 // Register adds every known adapter to r. Add new adapters here; this list is the whole catalog.
@@ -16,4 +19,8 @@ func Register(r *adapter.Registry) {
 	}
 	r.Register(crowdsec.New())
 	r.Register(rclone.New())
+	r.Register(usenet.NewSABnzbd())
+	r.Register(usenet.NewNZBGet())
+	r.Register(jellyfin.New())
+	r.Register(seerr.New())
 }

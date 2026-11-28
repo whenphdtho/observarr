@@ -134,4 +134,11 @@ func TestStreamJSONLimit(t *testing.T) {
 	if err := StreamJSONLimit(context.Background(), tgt, "/x", "", 1<<40, count); err != nil {
 		t.Fatalf("a limit above MaxStreamBytes is cut to it, not refused: %v", err)
 	}
+	if err := PostJSON(context.Background(), tgt, "/x", []byte(`{}`), nil, count); !errors.Is(err, ErrTooLarge) {
+		t.Fatalf("PostJSON on 6 MiB: err = %v, want ErrTooLarge", err)
+	}
+	if err := PostJSONLimit(context.Background(), tgt, "/x", []byte(`{}`), nil, 8<<20, count); err != nil ||
+		n != (len(body)-2)/3+1 {
+		t.Fatalf("PostJSONLimit(8 MiB) on 6 MiB: n = %d, err = %v", n, err)
+	}
 }

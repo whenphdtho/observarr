@@ -55,3 +55,32 @@ func TestWrongApp(t *testing.T) {
 		}
 	}
 }
+
+func TestBareCauseKeepsNoText(t *testing.T) {
+	const secret = "apikey=0123456789abcdef"
+	timeout := &net.OpError{Op: "dial", Err: &net.DNSError{Err: secret, IsTimeout: true}}
+	for _, c := range []struct {
+		err   error
+		want  error
+		timed bool
+	}{
+		{fmt.Errorf("%s: %w", secret, context.DeadlineExceeded), context.DeadlineExceeded, true},
+		{fmt.Errorf("%s: %w", secret, context.Canceled), context.Canceled, false},
+		{fmt.Errorf("%s: %w", secret, ErrCrossHostRedirect), ErrCrossHostRedirect, false},
+		{fmt.Errorf("%s: %w", secret, errRefusedAddress), errRefusedAddress, false},
+		{timeout, nil, true},
+		{fmt.Errorf("failed to parse Location header %q: invalid URL escape", "/%zz?"+secret), errNoAnswer, false},
+	} {
+		got := BareCause(c.err)
+		if strings.Contains(got.Error(), secret) || c.want != nil && got != c.want {
+			t.Errorf("BareCause(%v) = %v, want %v", c.err, got, c.want)
+		}
+		ue := &url.Error{Op: "Get", URL: "http://sab:8080/api", Err: got}
+		if ue.Timeout() != c.timed {
+			t.Errorf("BareCause(%v) in a *url.Error: Timeout() = %v, want %v", c.err, ue.Timeout(), c.timed)
+		}
+		if phrase, _ := Describe(ue); phrase == "" {
+			t.Errorf("Describe of BareCause(%v) says nothing", c.err)
+		}
+	}
+}

@@ -1,7 +1,14 @@
 name: ci
 on:
   push:
+    branches: ['**']   # tags are checked by release.yml, which calls this workflow
   pull_request:
+  workflow_call:
+    inputs:
+      skip-image:
+        description: Skip the container image build (the caller builds it itself)
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -29,4 +36,5 @@ jobs:
       - name: Known vulnerabilities in dependencies
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 ./...
       - name: Container image builds
+        if: ${{ !inputs.skip-image }}
         run: docker build -t observarr:ci .

@@ -70,6 +70,27 @@ func (s *Store) TrafficSum(ctx context.Context, scope, from, to string) (uint64,
 	return uint64(max(n, 0)), err
 }
 
+// TrafficDays returns scope's daily totals on the days from from up to but not including to, by day.
+func (s *Store) TrafficDays(ctx context.Context, scope, from, to string) (map[string]TrafficRow, error) {
+	rows, err := s.db.QueryContext(ctx,
+		"SELECT day, rx, tx FROM traffic_daily WHERE scope = ? AND day >= ? AND day < ?", scope, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]TrafficRow{}
+	for rows.Next() {
+		r := TrafficRow{Scope: scope}
+		var rx, tx int64
+		if err := rows.Scan(&r.Day, &rx, &tx); err != nil {
+			return nil, err
+		}
+		r.Rx, r.Tx = uint64(max(rx, 0)), uint64(max(tx, 0))
+		out[r.Day] = r
+	}
+	return out, rows.Err()
+}
+
 // PruneTraffic removes the totals of days more than TrafficKeepDays before now's day (in now's time zone).
 func (s *Store) PruneTraffic(ctx context.Context, now time.Time) error {
 	_, err := s.db.ExecContext(ctx, "DELETE FROM traffic_daily WHERE day < ?",

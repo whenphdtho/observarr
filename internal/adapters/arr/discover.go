@@ -270,10 +270,6 @@ func definitionByAppName(implementation string) (Definition, bool) {
 	return Definition{}, false
 }
 
-// maxConfigBytes bounds config.xml, which is a handful of short elements; 1 MiB is generous
-// headroom while still refusing to parse an unbounded file.
-const maxConfigBytes = 1 << 20
-
 // configXML is the subset of a *arr config.xml every family member shares.
 type configXML struct {
 	XMLName      xml.Name `xml:"Config"`
@@ -293,35 +289,14 @@ type configXML struct {
 // equality, and when it matches, the InstanceName (not the generic app name) becomes the
 // candidate's display Name, since the user chose it to tell their instances apart.
 func (a arrAdapter) ReadConfig(name string, dir fs.FS) (adapter.Candidate, bool, error) {
-	// The app can swap config.xml for anything at any moment, so what was opened is checked, not
-	// the name beforehand: dir (an adapter.ConfigDir) neither follows a symbolic link, which could
-	// lead to any file in the container, nor waits on a FIFO or device, and Stat on the open file
-	// then refuses all but a regular file.
-	f, err := dir.Open("config.xml")
+	body, err := adapter.ReadConfigFile(dir, "config.xml")
 	if errors.Is(err, fs.ErrNotExist) {
 		return adapter.Candidate{}, false, nil
 	}
 	if err != nil {
-		return adapter.Candidate{}, false, err // names config.xml already, e.g. "config.xml is a symbolic link, not read"
-	}
-	defer f.Close()
-	info, err := f.Stat()
-	if err != nil {
-		return adapter.Candidate{}, false, fmt.Errorf("arr: stat config.xml: %w", err)
-	}
-	if !info.Mode().IsRegular() {
-		return adapter.Candidate{}, false, errors.New("arr: config.xml is not a regular file")
-	}
-	if info.Size() > maxConfigBytes {
-		return adapter.Candidate{}, false, fmt.Errorf("arr: config.xml exceeds %d bytes", maxConfigBytes)
-	}
-
-	body, err := io.ReadAll(io.LimitReader(f, maxConfigBytes+1))
-	if err != nil {
-		return adapter.Candidate{}, false, fmt.Errorf("arr: read config.xml: %w", err)
-	}
-	if len(body) > maxConfigBytes {
-		return adapter.Candidate{}, false, fmt.Errorf("arr: config.xml exceeds %d bytes", maxConfigBytes)
+		// Shown to the user after the folder's name; it names config.xml already, e.g. "config.xml is not a
+		// regular file", "config.xml exceeds 1048576 bytes" or "config.xml is a symbolic link, not read".
+		return adapter.Candidate{}, false, err
 	}
 
 	var cfg configXML

@@ -26,6 +26,13 @@ func (s *Server) ui() http.Handler {
 		}
 		name := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 		if name != "" && name != "index.html" {
+			// The views live in the address's fragment, so the page has one path. Anything else is a file of the
+			// build or nothing: never the page under another name (a script that is gone must not come back as
+			// HTML), and never a dotfile.
+			if strings.HasPrefix(name, ".") || strings.Contains(name, "/.") {
+				writeError(w, http.StatusNotFound, "not found")
+				return
+			}
 			if fi, err := fs.Stat(s.UI, name); err == nil && fi.Mode().IsRegular() { // never list a directory
 				// Only for the file itself: a non-canonical path is answered with a redirect, not the file.
 				if r.URL.Path == "/"+name {
@@ -39,10 +46,8 @@ func (s *Server) ui() http.Handler {
 				files.ServeHTTP(w, r)
 				return
 			}
-			if strings.HasPrefix(name, "assets/") { // a missing asset is an error, not an app route
-				writeError(w, http.StatusNotFound, "not found")
-				return
-			}
+			writeError(w, http.StatusNotFound, "not found")
+			return
 		}
 		index, err := fs.ReadFile(s.UI, "index.html")
 		if err != nil {

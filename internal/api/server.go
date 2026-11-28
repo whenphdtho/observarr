@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"observarr/internal/adapter"
+	"observarr/internal/alert"
 	"observarr/internal/auth"
 	"observarr/internal/config"
 	"observarr/internal/discovery"
@@ -35,8 +36,9 @@ type Server struct {
 	Box      *secret.Box // seals saved API keys
 	Hub      *state.Hub
 	Poller   *poller.Poller
-	HTTP     *http.Client // the one client every adapter call uses
-	System   Sampler      // host and container figures; nil leaves them empty
+	HTTP     *http.Client   // the one client every adapter call uses
+	System   Sampler        // host and container figures; nil leaves them empty
+	Alerts   *alert.Service // started; nil serves no alert endpoints
 	// Context lives as long as the server. Poller loops run under it, never under a request's context.
 	Context context.Context
 	// SetupToken must accompany first-start setup; SetupTokenFile holds it and is removed once setup is done.
@@ -58,17 +60,24 @@ type Server struct {
 	failMu   sync.Mutex
 	failures map[failKey]failCount // the failures each group's latest audit row counts
 
+	alertTests alertTests // the alert channel tests under way and sent lately
+
 	proxyMu     sync.Mutex
 	proxyLogins map[string]time.Time // when each proxy-asserted user's login was last audited
 
 	healthMu     sync.Mutex
 	healthAt     time.Time // time of the latest write probe
 	healthReason string    // why that probe failed; "" if it did not
+
+	importLimiter *auth.Limiter // slows down passphrase guessing on settings import, per user
+	fileKeySlot   chan struct{} // one settings file's key derivation at a time; see withFileKeySlot
 }
 
 // Handler returns the complete HTTP handler. Call it once, before serving.
 func (s *Server) Handler() http.Handler {
 	s.hashSlots = make(chan struct{}, runtime.NumCPU())
+	s.importLimiter = auth.NewLimiter(time.Now)
+	s.fileKeySlot = make(chan struct{}, 1)
 	if s.pingEvery == 0 {
 		s.pingEvery = 25 * time.Second
 	}
@@ -98,13 +107,27 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/system/history", s.requireSession(s.systemHistory))
 	mux.Handle("GET /api/network", s.requireSession(s.network))
 	mux.Handle("GET /api/security", s.requireSession(s.security))
-	mux.Handle("GET /api/security/lock", s.requireSession(s.securityLock))
 	mux.Handle("POST /api/security/sign-out-others", s.requireSession(s.signOutOthers))
 	mux.Handle("GET /api/discovery", s.requireSession(s.discoveryState))
 	mux.Handle("GET /api/discovery/local", s.requireSession(s.discoverLocal))
 	mux.Handle("POST /api/discovery/network", s.requireSession(s.discoverNetwork))
 	mux.Handle("POST /api/discovery/linked", s.requireSession(s.discoverLinked))
 	mux.Handle("POST /api/discovery/{id}/dismiss", s.requireSession(s.dismissSuggestion))
+	mux.Handle("POST /api/settings/export", s.requireSession(s.exportSettings))
+	mux.Handle("POST /api/settings/import", s.requireSession(s.importSettings))
+	if s.Alerts != nil {
+		mux.Handle("GET /api/alerts/channels", s.requireSession(s.alertChannels))
+		mux.Handle("POST /api/alerts/channels", s.requireSession(s.createAlertChannel))
+		mux.Handle("PUT /api/alerts/channels/{id}", s.requireSession(s.updateAlertChannel))
+		mux.Handle("DELETE /api/alerts/channels/{id}", s.requireSession(s.deleteAlertChannel))
+		mux.Handle("POST /api/alerts/channels/{id}/test", s.requireSession(s.testAlertChannel))
+		mux.Handle("GET /api/alerts/rules", s.requireSession(s.alertRules))
+		mux.Handle("PUT /api/alerts/rules", s.requireSession(s.setAlertRules))
+		mux.Handle("GET /api/alerts/log", s.requireSession(s.alertLog))
+		mux.Handle("GET /api/alerts/attention", s.requireSession(s.alertAttention))
+		mux.Handle("POST /api/alerts/mutes", s.requireSession(s.muteAlert))
+		mux.Handle("DELETE /api/alerts/mutes", s.requireSession(s.unmuteAlert))
+	}
 	// Any other API request, including a wrong method on a known path, is a 404: simpler than 405 with Allow.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "unknown API endpoint")

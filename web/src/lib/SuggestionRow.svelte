@@ -195,31 +195,26 @@
   .row { display: flex; align-items: center; gap: 12px; min-width: 0; }
   .row .tile-icon { width: 34px; height: 34px; }
   .info { display: grid; min-width: 0; flex: 1; line-height: 1.35; }
-  .name { font-weight: 600; font-size: var(--t-base); }
-  .meta { font-size: var(--t-sm); color: var(--muted); }
-  .key { flex: 0 1 auto; font-size: var(--t-sm); color: var(--muted); white-space: nowrap; }
+  .name { font-weight: 600; font-size: var(--t-body); }
+  .meta { font-size: var(--t-small); color: var(--muted); }
+  .key { flex: 0 1 auto; font-size: var(--t-small); color: var(--muted); white-space: nowrap; }
   .buttons { display: flex; gap: 8px; flex: none; }
   .buttons button { min-width: 74px; }
   .mini {
     display: grid; gap: 12px; margin: 12px 0 2px 46px; padding: 14px; border-radius: var(--r-lg);
     background: var(--surface2); border: 1px solid var(--border); grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
   }
-  .mini input:not([type='checkbox']) { background: var(--bg); }
-  label { display: grid; gap: 6px; font-size: var(--t-base); color: var(--text2); align-content: start; min-width: 0; }
+  .mini input:not([type='checkbox']) { background: var(--field); }
+  label { display: grid; gap: 6px; font-size: var(--t-body); color: var(--text2); align-content: start; min-width: 0; }
   label.check { grid-column: 1 / -1; display: flex; align-items: flex-start; gap: 8px; color: var(--text); }
   label.check input { flex: none; margin-top: 2px; }
   label.check span { overflow-wrap: anywhere; }
-  .hint { font-size: var(--t-sm); }
+  .hint { font-size: var(--t-small); }
   .wide { grid-column: 1 / -1; }
   .form-foot { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  .state { flex: 1 1 200px; display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--t-base); }
+  .state { flex: 1 1 200px; display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--t-body); }
   .form-foot button { margin-left: auto; }
-  .row-error { margin: 8px 0 0 46px; font-size: var(--t-base); }
-  .spinner {
-    width: 14px; height: 14px; border-radius: 50%; flex: none;
-    border: 2px solid var(--field-border); border-top-color: var(--accent); animation: spin 0.8s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
+  .row-error { margin: 8px 0 0 46px; font-size: var(--t-body); }
 
   @container (max-width: 560px) {
     .row { flex-wrap: wrap; }

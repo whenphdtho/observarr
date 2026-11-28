@@ -241,3 +241,24 @@ func TestAttemptIsRaceFree(t *testing.T) {
 		t.Fatalf("allowed %d of %d concurrent attempts, want exactly %d", allowed, goroutines, MaxAttempts)
 	}
 }
+
+func TestReleaseGivesTheAttemptBack(t *testing.T) {
+	clock := &fakeClock{t: time.Unix(1_800_000_000, 0)}
+	l := NewLimiter(clock.now)
+	for range 3 * MaxAttempts {
+		if ok, _ := l.Attempt("198.51.100.7"); !ok {
+			t.Fatal("a released attempt still counts")
+		}
+		l.Release("198.51.100.7")
+	}
+	if addrs, _ := l.Status(); len(addrs) != 0 || l.global != 0 {
+		t.Fatalf("after releasing every attempt: %+v, server-wide %d", addrs, l.global)
+	}
+	l.Release("203.0.113.9") // nothing reserved: nothing changes
+	for range MaxAttempts {
+		l.Attempt("198.51.100.7")
+	}
+	if ok, _ := l.Attempt("198.51.100.7"); ok {
+		t.Fatal("attempts that were not released must still lock out")
+	}
+}

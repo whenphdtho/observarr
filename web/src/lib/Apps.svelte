@@ -3,9 +3,11 @@
   import EditService from './EditService.svelte';
   import FoundList from './FoundList.svelte';
   import Icon from './icons/Icon.svelte';
-  import Mark from './Mark.svelte';
+  import BrandMark from './BrandMark.svelte';
   import { adapters, adaptersError, adapterFor, snapshot } from './data.js';
   import { lastEvent } from './live.js';
+  import { moveAll } from './motion.js';
+  import { tick } from 'svelte';
 
   // Apps lists every service as a card and holds the Edit dialog. services is the
   // (search-filtered) list; filtered says whether a search is narrowing it. onadd opens the Add
@@ -24,6 +26,34 @@
   let expanded = $state(loadExpanded());
   let onboarding = $state(false);
   let addButtonEl;
+  let gridEl = $state();
+
+  // An opened card takes a whole row; the card before it then widens to the row's end rather than leave a hole, and
+  // the cards keep the order they are read and tabbed in. columns is how many the grid fits now.
+  let columns = $state(1);
+  $effect(() => {
+    if (!gridEl) return;
+    const ro = new ResizeObserver(() => {
+      columns = getComputedStyle(gridEl).gridTemplateColumns.split(' ').length;
+    });
+    ro.observe(gridEl);
+    return () => ro.disconnect();
+  });
+  const spans = $derived.by(() => {
+    const out = {};
+    let col = 0;
+    let prev = null;
+    for (const s of services) {
+      if (expanded[s.id]) {
+        if (col > 0) out[prev] = columns - col + 1;
+        col = 0;
+      } else {
+        col = (col + 1) % columns;
+        prev = s.id;
+      }
+    }
+    return out;
+  });
 
   const allExpanded = $derived(services.length > 0 && services.every((s) => expanded[s.id]));
   const taken = $derived(services.map((s) => s.name));
@@ -54,14 +84,22 @@
     }
   }
 
+  // An opened card takes a whole row and a closed one gives it back: the cards travel to their new places.
+  function relayout(change) {
+    moveAll(gridEl?.children ?? [], () => {
+      change();
+      return tick();
+    });
+  }
+
   function toggle(id) {
-    expanded = { ...expanded, [id]: !expanded[id] };
+    relayout(() => { expanded = { ...expanded, [id]: !expanded[id] }; });
     saveExpanded();
   }
 
   function toggleAll() {
     const next = !allExpanded;
-    expanded = { ...expanded, ...Object.fromEntries(services.map((s) => [s.id, next])) };
+    relayout(() => { expanded = { ...expanded, ...Object.fromEntries(services.map((s) => [s.id, next])) }; });
     saveExpanded();
   }
 
@@ -81,9 +119,9 @@
   }
 </script>
 
-<section class="apps" aria-label="Services">
+<section class="apps" aria-label="Apps">
   <div class="toolbar">
-    <p class="count">{services.length} service{services.length === 1 ? '' : 's'}{filtered ? ' match' : ''}</p>
+    <p class="count">{services.length} app{services.length === 1 ? '' : 's'}{filtered ? ' match' : ''}</p>
     {#if services.length > 0}
       <button type="button" class="quiet" onclick={toggleAll}>
         {allExpanded ? 'Collapse all' : 'Expand all'}
@@ -101,7 +139,7 @@
   {#if onboarding && !filtered}
     <section class="card onboarding" aria-labelledby="onboarding-title">
       <div class="intro">
-        <span class="intro-mark"><Mark size={36} /></span>
+        <span class="intro-mark"><BrandMark size={36} /></span>
         <div class="intro-text">
           <h2 id="onboarding-title">{services.length === 0 ? 'Add your apps' : 'Add the rest of your apps'}</h2>
           <p class="muted">
@@ -124,14 +162,14 @@
     {#if filtered}
       <div class="empty">
         <Icon name="search" size={28} />
-        <b>No service matches the search</b>
+        <b>No app matches the search</b>
         <span>Try part of a name, an app or an address — or press Esc to clear it.</span>
       </div>
     {/if}
   {:else}
-    <div class="grid">
+    <div class="grid" bind:this={gridEl}>
       {#each services as service (service.id)}
-        <ServiceCard {service} adapter={adapterFor($adapters, service.type)} expanded={!!expanded[service.id]}
+        <ServiceCard {service} adapter={adapterFor($adapters, service.type)} expanded={!!expanded[service.id]} span={spans[service.id] ?? 1}
           ontoggle={toggle} onedit={openEdit} onremoved={focusAddButton} />
       {/each}
     </div>
@@ -143,19 +181,18 @@
 <style>
   .apps { display: grid; gap: 16px; }
   .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .count { margin-right: auto; font-size: var(--t-base); font-weight: 600; }
+  .count { margin-right: auto; font-size: var(--t-body); font-weight: 600; }
   /* Cards of one row share its height; an expanded card takes a whole row of its own. */
   .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
 
   .onboarding { display: grid; gap: 12px; padding: 22px 22px 16px; }
   .intro { display: flex; gap: 14px; align-items: flex-start; min-width: 0; }
   .intro-text { display: grid; gap: 4px; min-width: 0; flex: 1; }
-  .intro h2 { font-size: var(--t-lg); font-weight: 620; letter-spacing: -0.01em; }
-  .intro p { font-size: var(--t-base); max-width: 62ch; }
+  .intro p { font-size: var(--t-body); max-width: 62ch; }
   .done { flex: none; }
   .more { border-top: 1px solid var(--border); padding-top: 12px; }
   .link {
-    padding: 0; background: transparent; border: 0; color: var(--accent-text); font-weight: 550;
+    padding: 0; background: transparent; border: 0; color: var(--accent-text); font-weight: 500;
     white-space: normal; text-align: left;
   }
   .link:hover:not(:disabled) { background: transparent; border: 0; text-decoration: underline; }

@@ -19,6 +19,7 @@ import (
 
 	"observarr/internal/adapter"
 	"observarr/internal/adapters/catalog"
+	"observarr/internal/alert"
 	"observarr/internal/api"
 	"observarr/internal/auth"
 	"observarr/internal/collect/docker"
@@ -100,9 +101,10 @@ func run(cfg config.Config, log *slog.Logger) error {
 	catalog.Register(reg)
 	hub := state.NewHub()
 	httpc := adapter.NewHTTPClient()
-	// The full list of decisions an intrusion prevention system enforces can be long: once a minute is enough.
+	// The full list of decisions an intrusion prevention system enforces can be long, and media requests come in
+	// slowly: once a minute is enough for both.
 	pl := poller.New(poller.Config{Registry: reg, Hub: hub, HTTP: httpc, Log: log,
-		Intervals: map[shape.Kind]time.Duration{shape.KindSecurity: time.Minute}})
+		Intervals: map[shape.Kind]time.Duration{shape.KindSecurity: time.Minute, shape.KindRequests: time.Minute}})
 	defer pl.Close() // deferred after st.Close, so it runs first: no probe outlives the store
 	coll, err := collector(cfg, log)
 	if err != nil {
@@ -121,6 +123,13 @@ func run(cfg config.Config, log *slog.Logger) error {
 		}
 	}()
 
+	alerts := alert.New(alert.Config{Store: st, Box: box, Hub: hub, System: sampler.Snapshot,
+		Security: func() alert.SecurityState { return securityState(limiter) }, Deps: alert.DefaultDeps(), Log: log})
+	if err := alerts.Start(ctx); err != nil {
+		return fmt.Errorf("start alerts: %w", err)
+	}
+	defer func() { stop(); alerts.Wait() }() // runs before st.Close: no delivery outlives the store
+
 	server := &api.Server{
 		Log:            log,
 		Store:          st,
@@ -134,6 +143,7 @@ func run(cfg config.Config, log *slog.Logger) error {
 		Hub:            hub,
 		Poller:         pl,
 		System:         sampler,
+		Alerts:         alerts,
 		HTTP:           httpc,
 		Context:        ctx,
 		SetupToken:     setupToken,
@@ -194,7 +204,12 @@ func newHTTPServer(base context.Context, h http.Handler) *http.Server {
 // The returned function releases the lock.
 func prepareDataDir(dir string) (func(), error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil, fmt.Errorf("data directory: %w", err)
+		var pe *fs.PathError
+		if errors.As(err, &pe) {
+			err = pe.Err // the path is named below
+		}
+		return nil, fmt.Errorf("data directory %s cannot be created (%w) — create it as a folder writable by uid %d, "+
+			"or set OBSERVARR_DATA", dir, err, os.Getuid())
 	}
 	narrowOwnDir(dir)
 	if err := checkWritable(dir); err != nil {
@@ -282,8 +297,8 @@ func openBox(ctx context.Context, cfg config.Config, st *store.Store, log *slog.
 		if err != nil {
 			return nil, err
 		}
-		log.Warn("credential key missing: dropped the saved API keys; enter them again, then remove OBSERVARR_RESET_KEYS",
-			"services", n)
+		log.Warn("credential key missing: dropped the saved API keys and alert channel secrets; enter them again, "+
+			"then remove OBSERVARR_RESET_KEYS", "dropped", n)
 	case cfg.ResetKeys:
 		log.Warn("OBSERVARR_RESET_KEYS=1 is set, but no saved API key needed dropping; remove the setting")
 	}
@@ -335,8 +350,9 @@ func collector(cfg config.Config, log *slog.Logger) (*local.Local, error) {
 	return local.New(lc), nil
 }
 
-// upkeep removes expired sessions, old audit rows, login addresses older than auth.KnownFor and old daily
-// traffic totals, now and then hourly, until ctx ends.
+// upkeep removes expired sessions, old audit rows, login addresses older than auth.KnownFor, old daily
+// traffic totals, old history buckets, old alert log entries and ended mutes, now and then hourly, until ctx
+// ends.
 func upkeep(ctx context.Context, st *store.Store, log *slog.Logger) {
 	tick := time.NewTicker(time.Hour)
 	defer tick.Stop()
@@ -353,12 +369,35 @@ func upkeep(ctx context.Context, st *store.Store, log *slog.Logger) {
 		if err := st.PruneTraffic(ctx, now); err != nil && ctx.Err() == nil {
 			log.Warn("removing old traffic totals failed", "err", err)
 		}
+		if err := st.PruneHistory(ctx, now); err != nil && ctx.Err() == nil {
+			log.Warn("removing old history failed", "err", err)
+		}
+		if err := st.PruneAlertLog(ctx); err != nil && ctx.Err() == nil {
+			log.Warn("removing old alert log entries failed", "err", err)
+		}
+		if err := st.PruneAlertMutes(ctx, now); err != nil && ctx.Err() == nil {
+			log.Warn("removing ended mutes failed", "err", err)
+		}
 		select {
 		case <-ctx.Done():
 			return
 		case now = <-tick.C:
 		}
 	}
+}
+
+// securityState is what alerts read of the sign-in limiter: the addresses locked out, the failed attempts in the
+// lockout window and how long the server-wide limit still holds.
+func securityState(l *auth.Limiter) alert.SecurityState {
+	addrs, serverLocked := l.Status()
+	st := alert.SecurityState{ServerLocked: serverLocked}
+	for _, a := range addrs {
+		st.Failed += a.Attempts
+		if a.Locked > 0 {
+			st.LockedOut++
+		}
+	}
+	return st
 }
 
 // checkHealth asks the running server for /api/health and returns the process exit code.

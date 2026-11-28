@@ -338,8 +338,70 @@ func TestPanicRecoveredAndLoggedOnce(t *testing.T) {
 func fast(s *Sampler) {
 	s.watchedEvery, s.idleEvery, s.listEvery, s.settle = 10*time.Millisecond, 200*time.Millisecond, time.Hour,
 		20*time.Millisecond
-	s.minBackoff, s.maxBackoff, s.minList = 10*time.Millisecond, 40*time.Millisecond, 20*time.Millisecond
+	s.minBackoff, s.maxBackoff, s.minList, s.minGap = 10*time.Millisecond, 40*time.Millisecond, 20*time.Millisecond,
+		5*time.Millisecond
 	s.now = time.Now
+}
+
+// Samples, whether a tick or a container list asks for them, come at least minGap apart.
+func TestSamplesKeepMinGap(t *testing.T) {
+	f := &fake{host: collect.Host{CPUTotal: 1000, CPUIdle: 800, CPUs: 4}}
+	s, _, _ := newTest(f, 1)
+	fast(s)
+	s.listEvery, s.minList, s.minGap = 30*time.Millisecond, 30*time.Millisecond, 25*time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	sub, stop := s.Subscribe()
+	defer stop()
+	go func() { s.Run(ctx); close(done) }()
+	// Each sample says when it was taken, on the clock the sampler spaces them by: that time is compared, not the
+	// moment this test got to see it. A sample this loop misses only widens a gap it then does not check.
+	var at []time.Time
+	for len(at) < 8 {
+		select {
+		case snap := <-sub:
+			at = append(at, snap.At)
+		case <-time.After(10 * time.Second):
+			t.Fatalf("only %d samples in ten seconds", len(at))
+		}
+	}
+	cancel()
+	<-done
+	for i := 1; i < len(at); i++ {
+		if gap := at[i].Sub(at[i-1]); gap < s.minGap {
+			t.Fatalf("samples %d and %d taken %v apart, want at least minGap (%v)", i-1, i, gap, s.minGap)
+		}
+	}
+}
+
+// The first container list arrives as Run takes its first sample; the sample it asks for waits minGap, so the
+// host's rates are measured over a real interval instead of reading as idle.
+func TestSampleAfterListWaitsForCounters(t *testing.T) {
+	f := &fake{host: collect.Host{CPUTotal: 1000, CPUIdle: 800, CPUs: 4}}
+	s, _, _ := newTest(f, 0)
+	fast(s)
+	s.idleEvery, s.minGap = time.Hour, 150*time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	start := time.Now()
+	go func() { s.Run(ctx); close(done) }()
+	defer func() { cancel(); <-done }()
+	var second time.Duration
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(2 * time.Millisecond) {
+		f.mu.Lock()
+		n := f.hosts
+		f.mu.Unlock()
+		if n >= 2 {
+			second = time.Since(start)
+			break
+		}
+	}
+	if second == 0 {
+		t.Fatal("no second sample after the first list")
+	}
+	if second < 140*time.Millisecond {
+		t.Fatalf("second sample %v after start, want at least minGap (150ms) after the first", second)
+	}
 }
 
 func TestListRefreshesAreRateLimited(t *testing.T) {

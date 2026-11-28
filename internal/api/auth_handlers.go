@@ -57,6 +57,8 @@ type sessionInfo struct {
 	User  string `json:"user,omitempty"`
 	CSRF  string `json:"csrf,omitempty"`
 	Setup bool   `json:"setup,omitempty"` // no account exists yet: show the setup form
+	// StreamsFull: the session has every live stream it may have open (one per tab); another tab gets none.
+	StreamsFull bool `json:"streamsFull,omitempty"`
 }
 
 // session reports the current session. Behind a trusted login proxy it logs the asserted user in; on a fresh
@@ -71,7 +73,7 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request) {
 	sess, err := s.Sessions.Lookup(r)
 	switch {
 	case err == nil && (!viaProxy || strings.EqualFold(proxyName, sess.UserName)):
-		writeJSON(w, http.StatusOK, sessionInfo{User: sess.UserName, CSRF: sess.CSRF})
+		writeJSON(w, http.StatusOK, sessionInfo{User: sess.UserName, CSRF: sess.CSRF, StreamsFull: s.streamsFull(sess.CSRF)})
 		return
 	case err != nil && !errors.Is(err, store.ErrNotFound):
 		s.internal(w, r, err)
@@ -138,6 +140,10 @@ func (s *Server) setup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "password: at least 12 characters and at most 1024 bytes")
 		return
 	}
+	if auth.WeakPassword(in.Password) {
+		writeError(w, http.StatusBadRequest, "password: too easy to guess; not one character repeated, and not a common password")
+		return
+	}
 	// Refuse a finished setup before the costly hash. CreateFirstUser still decides a race atomically.
 	hasUsers, err := s.Store.HasUsers(r.Context())
 	if err != nil {
@@ -195,11 +201,14 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	if !s.attempt(w, key) {
 		return
 	}
+	// A request refused before a password was checked is no guess: it gives its attempt back.
 	var c credentials
 	if !readJSON(w, r, &c) {
+		s.Limiter.Release(key)
 		return
 	}
 	if len(c.Password) > maxPasswordLen {
+		s.Limiter.Release(key)
 		writeError(w, http.StatusBadRequest, "password: at most 1024 bytes")
 		return
 	}
@@ -269,13 +278,17 @@ func (s *Server) refuseInsecure(w http.ResponseWriter, r *http.Request) bool {
 // attempt reserves a login attempt for key, or answers 429 when it is locked out.
 func (s *Server) attempt(w http.ResponseWriter, key string) bool {
 	ok, wait := s.Limiter.Attempt(key)
-	if ok {
-		return true
+	if !ok {
+		tooMany(w, wait, "too many failed logins")
 	}
+	return ok
+}
+
+// tooMany answers 429: what happened, and to try again after wait.
+func tooMany(w http.ResponseWriter, wait time.Duration, what string) {
 	w.Header().Set("Retry-After", strconv.Itoa(max(1, int(math.Ceil(wait.Seconds())))))
 	minutes := max(1, int(math.Ceil(wait.Minutes())))
-	writeError(w, http.StatusTooManyRequests, "too many failed logins — try again in "+strconv.Itoa(minutes)+" min")
-	return false
+	writeError(w, http.StatusTooManyRequests, what+" — try again in "+strconv.Itoa(minutes)+" min")
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request, sess store.Session) {
@@ -368,12 +381,25 @@ func (s *Server) makeRoomForFailures(now time.Time) {
 // flood of logins. It reports false, without running fn, if the request ends while waiting; there is no one
 // left to answer then.
 func (s *Server) withHashSlot(ctx context.Context, fn func()) bool {
+	return withSlot(ctx, s.hashSlots, fn)
+}
+
+// withFileKeySlot runs fn, which derives a settings file's key (argon2 at 64 MiB and 4 lanes), once no other
+// settings file's key is being derived: one at a time, apart from the password hash slots. It reports false,
+// without running fn, if the request ends while waiting.
+func (s *Server) withFileKeySlot(ctx context.Context, fn func()) bool {
+	return withSlot(ctx, s.fileKeySlot, fn)
+}
+
+// withSlot runs fn once slots has room, holding one place in it meanwhile; false, without running fn, if ctx
+// ends first.
+func withSlot(ctx context.Context, slots chan struct{}, fn func()) bool {
 	select {
-	case s.hashSlots <- struct{}{}:
+	case slots <- struct{}{}:
 	case <-ctx.Done():
 		return false
 	}
-	defer func() { <-s.hashSlots }()
+	defer func() { <-slots }()
 	fn()
 	return true
 }

@@ -35,9 +35,9 @@ export function diskTotals(disks) {
 
 // mountProblem is what is wrong with a mount, worst first, or '' when nothing is: { text, tone }.
 export function mountProblem(m) {
-  if (m.state === 'unmounted') return { text: 'not mounted', tone: 'fail' };
-  if (m.outOfSpace) return { text: 'cache out of space', tone: 'fail' };
-  if (m.erroredFiles > 0) return { text: `${m.erroredFiles} errored`, tone: 'fail' };
+  if (m.state === 'unmounted') return { text: 'Not mounted', tone: 'fail' };
+  if (m.outOfSpace) return { text: 'Cache out of space', tone: 'fail' };
+  if (m.erroredFiles > 0) return { text: `${m.erroredFiles} not uploaded`, tone: 'fail' };
   return null;
 }
 
@@ -70,25 +70,5 @@ export function mountSummary(services) {
     }
   }
   if (out.unlimited) out.cacheMax = 0;
-  return out;
-}
-
-// mountAttention lists the mount problems of services for the Overview's "Needs attention", in the form
-// attention() uses. A problem the service already reports as a health warning about that mount (its source) is
-// left out, so it is not listed twice. A warning's source may name a whole remote without its trailing colon
-// ("media" for "media:"), so both are compared without it.
-export function mountAttention(services) {
-  const out = [];
-  const bare = (s) => s.replace(/:$/, '');
-  for (const svc of mountServices(services)) {
-    const data = svc.readings?.mounts?.data;
-    if (!data || svc.readings.mounts.error) continue;
-    const warned = new Set((svc.readings?.health?.data?.warnings ?? []).map((w) => w.source).filter(Boolean).map(bare));
-    for (const [i, m] of data.mounts.entries()) {
-      const p = mountProblem(m);
-      if (!p || warned.has(bare(m.remote))) continue;
-      out.push({ key: `mount-${svc.id}-${i}`, tone: p.tone, title: `${svc.name}: ${m.remote}`, detail: p.text, href: '#/storage' });
-    }
-  }
   return out;
 }

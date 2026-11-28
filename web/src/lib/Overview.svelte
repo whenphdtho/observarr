@@ -1,70 +1,122 @@
 <script>
-  import HostChart from './HostChart.svelte';
+  import { flip } from 'svelte/animate';
+  import { onDestroy, tick, untrack } from 'svelte';
+  import AppIcon from './AppIcon.svelte';
+  import Fold from './Fold.svelte';
   import Rail from './Rail.svelte';
-  import Kpi from './Kpi.svelte';
+  import Traffic from './Traffic.svelte';
   import Icon from './icons/Icon.svelte';
   import Skeleton from './Skeleton.svelte';
-  import { flip } from 'svelte/animate';
-  import { reveal, conceal, ms, EASE } from './motion.js';
-  import { onMount, untrack } from 'svelte';
-  import { api } from './api.js';
-  import { snapshot } from './data.js';
-  import { synced } from './live.js';
-  import { downloading, attention } from './status.js';
-  import { mountAttention } from './storage.js';
-  import { formatLeft } from './security.js';
-  import { formatBytes, formatPct } from './format.js';
+  import { arrive, leave, smoothHeight, FLIP } from './motion.js';
+  import { adapters, adapterFor } from './data.js';
+  import { synced, attention } from './live.js';
+  import { matches } from './status.js';
+  import { now } from './ticker.js';
+  import { api, OFFLINE } from './api.js';
+  import { issues, actions, downloads, playing, mutedText, menuPlace } from './overview.js';
 
-  // Overview is the landing view: what needs attention first (or one calm line when nothing does), then the
-  // host's throughput and four key figures.
-  // services is the (search-filtered) service list; onjump(id) shows a service's card.
-  let { services, onjump } = $props();
+  // Overview is the landing view. Its title, in the shell, states the situation; here follow what needs attention
+  // (each row opens in place to say what it means and where to go), the traffic over time, and what plays and
+  // downloads now. services is the (search-filtered) list, total how many apps there are in all, query the
+  // search; onjump(id) shows an app's card, onadd opens the Add apps page.
+  let { services, total, query = '', onjump, onadd } = $props();
+  const uid = $props.id();
 
-  const host = $derived($snapshot?.host ?? null);
-  const up = $derived(services.filter((s) => s.up).length);
-  const checked = $derived(services.filter((s) => s.readings?.health).length);
-  const active = $derived(services.reduce((n, s) => n + downloading(s), 0));
-  const queued = $derived(services.reduce((n, s) => n + (s.readings?.queue?.data?.total ?? 0), 0));
-  const memPct = $derived(host && host.memTotal > 0 ? Math.round((host.memUsed / host.memTotal) * 100) : 0);
-  const memParts = $derived(host ? formatBytes(host.memUsed).split(' ') : ['—', '']);
-  // The server-wide sign-in limit is the one security state worth a line here; it is read every minute while the
-  // Overview is open (a small answer from memory), and a failed read just leaves it out.
-  let lockedSec = $state(0);
-  async function loadLock() {
+  // A few rows are enough here; the rest are a click away.
+  const MAX_ROWS = 5;
+
+  // The rows are the server's list, the one the alerts and the bell count from, narrowed by the search. The clock
+  // only moves a row's "12 min" on, so it is read by the minute. now, in seconds, also ends a mute on time.
+  const minute = $derived(Math.floor($now / 60000) * 60000);
+  const found = $derived(issues(($attention ?? []).filter((it) => matches(query, it.title, it.message, it.name)), minute));
+  const rows = $derived(found.rows);
+  const fails = $derived(rows.filter((r) => r.tone === 'fail').length);
+  const byId = $derived(new Map(services.map((s) => [s.id, s])));
+  const queue = $derived(downloads(services));
+  const streams = $derived(playing(services));
+
+  // One row is open at a time.
+  let open = $state(null);
+
+  // Muting silences what a row stands for, for an hour or longer: it stays listed, dimmed, and is not counted.
+  // The server's list says what is muted; here is only the request, which row waits for it, and what went wrong.
+  let busy = $state(null);
+  let failed = $state(null);
+  let menuEl = $state();
+  // What the menu mutes: a row, and one item of it or (null) all of them; the row's own button covers the hour.
+  let menuRow = $state(null);
+  let menuItem = $state(null);
+  let menuFrom = null;
+
+  // each sends one request per item of list, then puts the keyboard on the row's own button: the control that
+  // was pressed may be gone (a menu, a button that changed its words), and the row may have moved.
+  async function each(row, list, call) {
+    busy = row.key;
+    failed = null;
     try {
-      lockedSec = (await api('GET', '/api/security/lock')).serverLockedSec;
-    } catch {
-      lockedSec = 0;
+      for (const it of list) await call(it);
+    } catch (err) {
+      failed = { key: row.key, text: err.message };
+    } finally {
+      busy = null;
     }
+    await tick();
+    document.getElementById(`${uid}-toggle-${rows.findIndex((r) => r.key === row.key)}`)?.focus();
   }
-  onMount(() => {
-    loadLock();
-    const id = setInterval(loadLock, 60 * 1000);
-    return () => clearInterval(id);
-  });
-  const lockIssue = $derived(lockedSec > 0 ? [{
-    key: 'server-lock', tone: 'warn', title: 'Sign-ins limited', href: '#/security',
-    detail: `Many addresses failed to sign in; for ${formatLeft(lockedSec)} only addresses that signed in before may try`,
-  }] : []);
-  const issues = $derived(
-    [...attention(services, $snapshot?.containers ?? []), ...mountAttention(services), ...lockIssue]
-      .sort((a, b) => (a.tone === 'fail' ? 0 : 1) - (b.tone === 'fail' ? 0 : 1)),
-  );
-  const fails = $derived(issues.filter((i) => i.tone === 'fail').length);
-  const warns = $derived(issues.length - fails);
-  const tally = $derived([
-    fails ? `${fails} error${fails === 1 ? '' : 's'}` : '',
-    warns ? `${warns} warning${warns === 1 ? '' : 's'}` : '',
-  ].filter(Boolean).join(' · '));
-  const VIEW_NAMES = { '#/apps': 'Apps', '#/storage': 'Storage', '#/security': 'Security', '#/system': 'System' };
 
-  // Rows that appear after the first reading are marked fresh for a moment, so a new problem is noticed; the
-  // rows already there when the view opens are not.
+  // mute silences row for minutes: one item of it, or all of them. Muting the whole row also moves the end of
+  // the mutes it has already, so the row has one end.
+  function mute(row, minutes, item = null) {
+    menuEl?.hidePopover();
+    return each(row, item ? [item] : row.items, (it) => api('POST', '/api/alerts/mutes', { key: it.key, minutes }));
+  }
+
+  // A key is free text (a path, a "#1"): it goes as a query value.
+  function unmute(row, list) {
+    return each(row, list.filter((i) => i.mutedUntil), (it) => api('DELETE', `/api/alerts/mutes?key=${encodeURIComponent(it.key)}`));
+  }
+
+  // The menu is one element in the top layer, so no panel clips it: it is put under the button that opened it.
+  // It is a plain group of buttons (Tab moves through them, Escape shuts it), not a menu with keys of its own.
+  // It shuts when the page scrolls under it, and when its row is gone.
+  $effect(() => {
+    if (menuRow && !rows.some((r) => r.key === menuRow.key)) menuEl?.hidePopover();
+  });
+  function onScroll() {
+    if (menuEl?.matches(':popover-open')) menuEl.hidePopover();
+  }
+
+  async function openMenu(event, row, item = null) {
+    const from = event.currentTarget;
+    if (menuEl.matches(':popover-open')) menuEl.hidePopover();
+    menuRow = row;
+    menuItem = item;
+    menuFrom = from;
+    // The button that opens it has the keyboard first, so that is where it returns when the menu shuts.
+    from.focus();
+    // Its buttons are drawn for this row and item before it is measured, placed and given the keyboard.
+    await tick();
+    menuEl.showPopover();
+    const spot = menuPlace(from.getBoundingClientRect(), menuEl.getBoundingClientRect(), window.innerWidth, window.innerHeight);
+    menuEl.style.left = `${spot.left}px`;
+    menuEl.style.top = `${spot.top}px`;
+    menuEl.querySelector('button')?.focus();
+  }
+
+  function menuToggled(event) {
+    if (event.newState !== 'closed') return;
+    if (menuFrom?.isConnected && (menuEl.contains(document.activeElement) || document.activeElement === document.body)) menuFrom.focus();
+    menuFrom = null;
+    menuRow = null;
+  }
+
+  // Rows that appear after the first reading are lit for a moment, so a new problem is noticed; the rows already
+  // there when the view opens are not.
   let known = null;
   let fresh = $state({});
   $effect(() => {
     if (!$synced) return;
-    const keys = issues.map((i) => i.key);
+    const keys = rows.map((r) => r.key);
     if (known === null) {
       known = new Set(keys);
       return;
@@ -73,83 +125,184 @@
     known = new Set(keys);
     if (added.length === 0) return;
     fresh = { ...untrack(() => fresh), ...Object.fromEntries(added.map((k) => [k, true])) };
-    setTimeout(() => {
+    const id = setTimeout(() => {
+      timers.delete(id);
       fresh = Object.fromEntries(Object.entries(fresh).filter(([k]) => !added.includes(k)));
     }, 1600);
+    timers.add(id);
   });
+  // A light still on when the view is left is not put out later.
+  const timers = new Set();
+  onDestroy(() => { for (const id of timers) clearTimeout(id); });
 
-  // openIssue takes an entry about one service straight to its card; the others follow their link.
-  function openIssue(event, item) {
-    if (item.service == null || item.href !== '#/apps') return;
-    event.preventDefault();
-    onjump(item.service);
-  }
-  const servicesTone = $derived(checked === 0 ? '' : up === services.length ? 'ok' : up === 0 ? 'fail' : 'warn');
+  // How long a mute may last, in minutes.
+  const MUTES = [[60, '1 hour'], [480, '8 hours'], [1440, '1 day']];
+
+  // The icon of a row about no app: the view it leads to.
+  const VIEW_ICONS = { '#/storage': 'hard-drive', '#/security': 'shield', '#/network': 'network', '#/system': 'server' };
 </script>
 
+{#snippet lines(list, more, what)}
+  <div use:smoothHeight>
+    <ul class="lines">
+      {#each list.slice(0, MAX_ROWS) as r (r.key)}
+        <li in:arrive out:leave animate:flip={FLIP}>
+          <span class="l-title ellipsis" title={r.raw}>{r.title}</span>
+          <span class="l-note {r.tone}" title={r.hint || null}>{r.note}</span>
+          <span class="bar" class:idle={r.idle} class:warn={r.tone === 'warn' && what === 'downloads'} role="progressbar"
+            aria-valuemin="0" aria-valuemax="100" aria-valuenow={parseInt(r.pct, 10)} aria-label={`${r.title}: ${r.pct}`}>
+            <i style:width={r.pct}></i>
+          </span>
+        </li>
+      {/each}
+    </ul>
+  </div>
+  {#if more > 0}<a class="go more" href="#/apps">{more} more in Apps<Icon name="chevron-right" size={14} /></a>{/if}
+{/snippet}
+
+<!-- What could not be done for want of the server is forgotten once it is back. -->
+<svelte:window onscrollcapture={onScroll} ononline={() => { if (failed?.text === OFFLINE) failed = null; }} />
+
 <div class="overview">
-  {#if !$synced}
-    <div class="calm"><Skeleton count={1} label="Waiting for the first reading…" /></div>
-  {:else if issues.length === 0}
-    <section class="calm" aria-labelledby="attention-title">
-      <h2 id="attention-title" class="visually-hidden">Needs attention</h2>
-      <p class="all-good">
-        <span class="dot ok" aria-hidden="true"></span>
-        <span><b>All good.</b> <span class="muted">No service down, no warnings, no stuck downloads.</span></span>
-      </p>
-    </section>
+  {#if !$synced || $attention === null}
+    <Skeleton count={2} label="Waiting for the first reading…" />
   {:else}
-    <section class="attention" class:has-fail={fails > 0} aria-labelledby="attention-title" in:reveal out:conceal>
-      <div class="att-head">
-        <h2 id="attention-title">Needs attention</h2>
-        <span class="tally num">{tally}</span>
-      </div>
-      <ul class="issues">
-        {#each issues as item (item.key)}
-          <li class={item.tone} class:fresh={fresh[item.key]} in:reveal out:conceal
-            animate:flip={{ duration: ms(200), easing: EASE }}>
-            <a href={item.href} class="issue row-link" onclick={(e) => openIssue(e, item)}>
-              <span class="dot {item.tone}" aria-hidden="true"></span>
-              <span class="what">
-                <span class="visually-hidden">{item.tone === 'fail' ? 'Error' : 'Warning'}: </span>
-                <span class="title ellipsis" title={item.title}>{item.title}</span>
-                {#if item.detail}<span class="detail">{item.detail}</span>{/if}
-              </span>
-              <span class="where">
-                <span class="where-name"><span class="visually-hidden">, open </span>{VIEW_NAMES[item.href] ?? ''}</span>
-                <span class="chev"><Icon name="chevron-right" size={16} /></span>
-              </span>
-            </a>
-          </li>
+    {#if total === 0}
+      <section class="section first settle" aria-labelledby="first-title">
+        <div>
+          <h2 id="first-title">No apps watched yet</h2>
+          <p>Observarr looks for your apps on this server; you pick the ones it should watch. Nothing is added without your click.</p>
+        </div>
+        <button type="button" onclick={onadd}><Icon name="plus" size={16} />Add your apps</button>
+      </section>
+    {/if}
+    {#if rows.length > 0}
+      <section class="attention" class:has-fail={fails > 0} aria-labelledby="attention-title">
+        <h2 id="attention-title" class="visually-hidden">Needs attention</h2>
+        <div use:smoothHeight>
+          <ul class="issues">
+            {#each rows as row, n (row.key)}
+              {@const svc = row.service === null ? null : byId.get(row.service) ?? null}
+              {@const isOpen = open === row.key}
+              {@const live = row.items.filter((i) => !i.mutedUntil)}
+              <li class:open={isOpen} class:fresh={fresh[row.key]} class:muted={row.muted} class={row.tone} in:arrive out:leave animate:flip={FLIP}>
+                <button type="button" class="issue" id={`${uid}-toggle-${n}`} aria-expanded={isOpen} aria-controls={`${uid}-more-${n}`}
+                  onclick={() => { open = isOpen ? null : row.key; }}>
+                  <span class="marker {row.tone}" aria-hidden="true"></span>
+                  <span class="tile-icon" aria-hidden="true">
+                    {#if svc}<AppIcon adapter={adapterFor($adapters, svc.type)} size={19} />{:else}<Icon name={VIEW_ICONS[row.view] ?? 'server'} size={19} />{/if}
+                  </span>
+                  <span class="what">
+                    <span class="visually-hidden">{row.muted ? 'Muted' : row.tone === 'fail' ? 'Error' : 'Warning'}: </span>
+                    <span class="title">{row.title}</span>
+                    <!-- The first thing in full, on two lines at most; the rest are counted, and listed when open. -->
+                    {#if (row.detail || row.more) && !isOpen}
+                      <span class="detail"><span class="line">{row.detail}</span>{#if row.more && !row.muted}<span class="rest">+{row.more} more</span>{/if}</span>
+                    {/if}
+                  </span>
+                  {#if row.value}<span class="value num {row.tone}">{row.value}</span>{/if}
+                  <span class="turn" class:up={isOpen} aria-hidden="true"><Icon name="chevron-down" size={16} /></span>
+                </button>
+                <div class="reveal-rows" class:open={isOpen} id={`${uid}-more-${n}`} inert={!isOpen}>
+                  <div>
+                    <div class="more-body">
+                      <ul class="items">
+                        {#each row.items as it (it.key)}
+                          <li class:off={!!it.mutedUntil}>
+                            <span class="dot {it.mutedUntil ? '' : it.tone}" aria-hidden="true"></span>
+                            <span class="said">
+                              <span class="visually-hidden">{it.tone === 'fail' ? 'Error' : 'Warning'}: </span>
+                              {#if row.items.length > 1}<b>{it.title}</b>{/if}
+                              <span class="text">{it.text}</span>
+                              {#if !it.mutedUntil && row.items.length > 1}
+                                <span class="quiet-note">
+                                  <button type="button" class="link" aria-haspopup="true" disabled={busy === row.key}
+                                    onclick={(e) => openMenu(e, row, it)}>
+                                    Mute<span class="visually-hidden"> {it.title}</span>
+                                  </button>
+                                </span>
+                              {:else if it.mutedUntil}
+                                <span class="quiet-note">
+                                  {mutedText(it.mutedUntil)} ·
+                                  <button type="button" class="link" disabled={busy === row.key} onclick={() => unmute(row, [it])}>
+                                    Unmute<span class="visually-hidden"> {it.title}</span>
+                                  </button>
+                                </span>
+                              {/if}
+                            </span>
+                          </li>
+                        {/each}
+                      </ul>
+                      <div class="acts">
+                        {#each actions(row, svc) as act, i (act.label)}
+                          {#if act.jump !== undefined}
+                            <button type="button" class:quiet={i > 0} onclick={() => onjump(act.jump)}>{act.label}</button>
+                          {:else}
+                            <a class="button" class:quiet={i > 0} href={act.href} target={act.external ? '_blank' : null}
+                              rel={act.external ? 'noopener noreferrer' : null}>
+                              {act.label}{#if act.external}<Icon name="external-link" size={14} />{/if}
+                            </a>
+                          {/if}
+                        {/each}
+                        {#if live.length > 0}
+                          <span class="split">
+                            <button type="button" class="quiet" disabled={busy === row.key} onclick={() => mute(row, 60)}>
+                              {row.items.length > 1 ? 'Mute all for 1 hour' : 'Mute for 1 hour'}
+                            </button>
+                            <button type="button" class="quiet caret" aria-label={live.length > 1 ? 'Mute all for longer' : 'Mute for longer'} aria-haspopup="true"
+                              disabled={busy === row.key} onclick={(e) => openMenu(e, row)}>
+                              <Icon name="chevron-down" size={15} />
+                            </button>
+                          </span>
+                        {:else}
+                          <button type="button" class="quiet" disabled={busy === row.key} onclick={() => unmute(row, row.items)}>Unmute</button>
+                        {/if}
+                      </div>
+                      {#if failed?.key === row.key}<p class="error" role="alert">{failed.text}</p>{/if}
+                    </div>
+                  </div>
+                </div>
+              </li>
+            {/each}
+          </ul>
+        </div>
+      </section>
+      <!-- The longer mutes: one small menu for the whole list, placed under the button that opened it. -->
+      <div class="mute-menu" popover role="group" aria-label={menuItem ? `Mute ${menuItem.title}` : 'Mute for longer'}
+        bind:this={menuEl} ontoggle={menuToggled}>
+        {#each menuItem ? MUTES : MUTES.slice(1) as [minutes, label] (minutes)}
+          <button type="button" onclick={() => mute(menuRow, minutes, menuItem)}>Mute for {label}</button>
         {/each}
-      </ul>
-    </section>
+      </div>
+    {/if}
+    {#if found.notes.length > 0}
+      <p class="notes settle">
+        <b>Good to know</b>
+        {#each found.notes as n (n.key)}<a href={n.view}>{n.text}</a>{/each}
+      </p>
+    {/if}
   {/if}
 
-  <HostChart />
+  <Traffic />
 
-  <div class="kpis">
-    {#if $synced}
-      <Kpi href="#/apps" tone={servicesTone} label="Services" value={up} unit={`of ${services.length} up`}
-        sub={services.length === 0 ? 'No services yet' : up === services.length ? 'All services up' : `${services.length - up} not up`} />
-      <Kpi href="#/apps" label="Downloads" value={active} unit="active"
-        sub={`${queued} in queue${queued === 1 ? '' : 's'}`} />
-    {:else}
-      <!-- Until the first snapshot an empty list means "not known yet": no counts, no all-clear. -->
-      <Kpi href="#/apps" label="Services" value="—" sub="Loading…" />
-      <Kpi href="#/apps" label="Downloads" value="—" sub="Loading…" />
-    {/if}
-    {#if host}
-      <Kpi href="#/system" label="CPU" value={formatPct(host.cpuPercent)} num={host.cpuPercent} format={formatPct}
-        sub={`${host.cpus} core${host.cpus === 1 ? '' : 's'} · load ${host.load[0].toFixed(2)}`}
-        bar={Math.min(100, host.cpuPercent)} barTone={host.cpuPercent >= 90 ? 'warn' : ''} />
-      <Kpi href="#/system" label="Memory" value={memParts[0]} unit={memParts[1]}
-        sub={`of ${formatBytes(host.memTotal)} · ${memPct}%`} bar={memPct} barTone={memPct >= 90 ? 'warn' : ''} />
-    {:else}
-      <Kpi href="#/system" label="CPU" value="—" sub="No host figures" />
-      <Kpi href="#/system" label="Memory" value="—" sub="No host figures" />
-    {/if}
-  </div>
+  {#if streams.total > 0 || queue.any}
+    <div class="pair" class:single={!(streams.total > 0 && queue.any)}>
+      {#if streams.total > 0}
+        <Fold id="playing" title="Now playing" summary={streams.summary}>
+          {@render lines(streams.rows, streams.total - Math.min(MAX_ROWS, streams.rows.length), 'streams')}
+        </Fold>
+      {/if}
+      {#if queue.any}
+        <Fold id="downloads" title="Downloads" summary={queue.summary}>
+          {#if queue.rows.length === 0}
+            <p class="waiting">Nothing is downloading.</p>
+          {:else}
+            {@render lines(queue.rows, queue.rows.length - MAX_ROWS, 'downloads')}
+          {/if}
+        </Fold>
+      {/if}
+    </div>
+  {/if}
 
   <div class="inline-rail">
     <Rail {services} {onjump} />
@@ -157,52 +310,119 @@
 </div>
 
 <style>
-  .overview { display: grid; gap: 32px; }
+  .overview { display: grid; gap: 20px; }
 
-  /* Nothing to look at: one quiet line leads the page. */
-  .calm { margin-bottom: -8px; }
-  .all-good { display: flex; align-items: center; gap: 10px; font-size: var(--t-base); }
-  .all-good b { font-weight: 600; }
+  /* The first start: one thing to do. */
+  .first { display: flex; align-items: center; justify-content: space-between; gap: 16px 24px; flex-wrap: wrap; padding: 22px 24px; }
+  .first div { flex: 1 1 320px; display: grid; gap: 4px; }
+  .first p { color: var(--text2); max-width: 62ch; }
+  .first button { padding: 8px 16px; }
 
-  /* Something to look at: the one boxed panel of the page, edged in the worst state's colour. */
+  /* What needs attention: the one panel whose outline leans towards its worst state. Its rows carry the state
+     on a marker and on their figure, nowhere else. */
   .attention {
     background: var(--surface); border: 1px solid var(--warn-edge); border-radius: var(--r-lg);
-    padding: 14px 8px 8px; min-width: 0; box-shadow: var(--lift);
+    padding: 8px; min-width: 0; box-shadow: var(--lift);
   }
   .attention.has-fail { border-color: var(--fail-edge); }
-  .att-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0 10px 8px; min-width: 0; }
-  .att-head h2 { font-size: var(--t-lg); font-weight: 650; letter-spacing: -0.015em; }
-  .tally { font-size: var(--t-sm); color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .issues { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  .issues li { border-radius: var(--r-md); transition: background-color var(--dur-base) var(--ease-out); min-width: 0; }
+  .issues li.open { background: var(--hover); }
+  /* A problem that just appeared: its row lights once and settles. */
+  .fresh { animation: fresh var(--dur-glow) var(--ease-out); }
+  .fresh.fail { animation-name: fresh-fail; }
+  @keyframes fresh { from { background: var(--warn-flash); } }
+  @keyframes fresh-fail { from { background: var(--fail-flash); } }
   .issue {
-    display: flex; align-items: flex-start; gap: 11px; padding: 9px 10px; border-radius: var(--r);
-    min-width: 0; color: var(--text); text-decoration: none; transition: background 140ms var(--ease);
+    width: 100%; display: grid; grid-template-columns: 4px 36px minmax(0, 1fr) auto 16px; gap: 14px; align-items: center;
+    padding: 10px 12px 10px 8px; border: 0; border-radius: var(--r-md); background: transparent;
+    color: var(--text); font-weight: 400; text-align: left; white-space: normal;
   }
-  .fail .issue { background: var(--fail-wash); }
-  /* A problem that just appeared: its row lights once and settles to its usual wash. */
-  .fresh .issue { animation: fresh 1.4s var(--ease); }
-  .fresh.fail .issue { animation-name: fresh-fail; }
-  @keyframes fresh { from { background: rgba(227, 166, 80, 0.2); } }
-  @keyframes fresh-fail { from { background: rgba(236, 108, 125, 0.26); } }
-  .fail .issue:hover { background: rgba(236, 108, 125, 0.14); }
-  .issue:hover .title { text-decoration: underline; text-underline-offset: 3px; }
-  .issue:focus-visible { outline-offset: 0; }
-  .issue .dot { margin-top: 7px; width: 8px; height: 8px; }
-  .what { display: grid; gap: 1px; min-width: 0; flex: 1; }
-  .title { font-weight: 550; font-size: var(--t-base); }
-  .detail { font-size: var(--t-sm); color: var(--text2); overflow-wrap: anywhere; }
-  .where {
-    display: flex; align-items: center; gap: 4px; flex: none; align-self: center;
-    font-size: var(--t-sm); color: var(--muted); white-space: nowrap;
+  .issue:hover:not(:disabled) { background: var(--hover); border: 0; }
+  .issue:active:not(:disabled) { transform: none; }
+  .issue:focus-visible { outline-offset: -2px; }
+  .what { display: grid; gap: 1px; min-width: 0; }
+  .title { font-size: var(--t-h3); font-weight: 600; overflow-wrap: anywhere; }
+  .detail {
+    display: grid; grid-template-columns: minmax(0, auto) auto; justify-content: start; align-items: end; column-gap: 10px;
+    font-size: var(--t-small); color: var(--text2);
   }
-  .issue:hover .where { color: var(--text2); }
+  .line {
+    overflow: hidden; overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+  }
+  .rest { color: var(--muted); font-size: var(--t-micro); white-space: nowrap; }
+  /* A muted row steps back: it is still there, and says until when. */
+  .muted .title, .muted .tile-icon { opacity: 0.6; }
+  .muted .line { color: var(--muted); }
+  .value { font-family: var(--font-display); font-weight: 600; white-space: nowrap; }
+  .value.fail { color: var(--fail-ink); }
+  .value.warn { color: var(--warn-ink); }
+  /* The chevron keeps the last column, with or without a figure before it. */
+  .issue .turn { grid-column: 5; }
+  .turn.up { transform: rotate(180deg); }
+  .more-body { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px 20px; padding: 2px 16px 16px 76px; }
+  .items { flex: 1 1 320px; list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; max-width: 66ch; }
+  .items li { display: flex; gap: 10px; min-width: 0; }
+  .items .dot { margin-top: 7px; }
+  .said { display: grid; gap: 1px; min-width: 0; color: var(--text2); overflow-wrap: anywhere; }
+  .said b { font-weight: 600; color: var(--text); }
+  .off .text, .off b { opacity: 0.6; }
+  .quiet-note { font-size: var(--t-small); color: var(--muted); }
+  .link {
+    display: inline; min-height: 0; padding: 0; border: 0; border-radius: 4px; background: transparent;
+    color: var(--accent-text); font: inherit; font-weight: 500;
+  }
+  .link:hover:not(:disabled) { background: transparent; border: 0; color: var(--accent-text-hi); text-decoration: underline; }
+  .acts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .more-body .error { flex-basis: 100%; font-size: var(--t-small); }
+  /* Mute for an hour, and a caret for longer: two halves of one button. */
+  .split { display: inline-flex; }
+  .split button:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  .split .caret { padding: 5px 8px; margin-left: -1px; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+  .mute-menu {
+    position: fixed; inset: auto; margin: 0; padding: 6px; min-width: 184px; border: 1px solid var(--border2);
+    border-radius: var(--r-md); background: var(--surface); color: var(--text); box-shadow: var(--float);
+  }
+  .mute-menu:popover-open { display: grid; gap: 2px; animation: menu-in var(--dur-fast) var(--ease-out); }
+  @keyframes menu-in { from { opacity: 0; transform: translateY(-4px); } }
+  .mute-menu button {
+    justify-content: flex-start; border: 0; background: transparent; color: var(--text); font-weight: 400; padding: 7px 10px;
+  }
+  .mute-menu button:hover:not(:disabled) { background: var(--hover); border: 0; }
 
-  .inline-rail { display: none; }
+  /* What is only good to know: one quiet line. */
+  .notes { display: flex; flex-wrap: wrap; gap: 2px 14px; padding: 0 12px; margin-top: -8px; font-size: var(--t-small); color: var(--muted); }
+  .notes b { font-weight: 500; color: var(--text2); }
+  .notes a { color: inherit; text-decoration: none; }
+  .notes a:hover { color: var(--text); text-decoration: underline; }
+
+  .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+  .pair.single { grid-template-columns: minmax(0, 1fr); }
+  .lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+  .lines li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; align-items: baseline; min-width: 0; }
+  .l-title { font-weight: 500; }
+  .l-note { font-size: var(--t-small); color: var(--muted); white-space: nowrap; }
+  .l-note.warn { color: var(--warn-ink); }
+  .lines .bar { grid-column: 1 / -1; }
+  .more { margin-top: 14px; }
+
+  .inline-rail { display: none; --dot-ground: var(--bg); }
   @media (max-width: 1199px) {
-    .inline-rail { display: block; padding-top: 18px; border-top: 1px solid var(--border); }
+    .inline-rail { display: block; padding-top: 20px; border-top: 1px solid var(--border); }
+  }
+  @container (max-width: 760px) {
+    .pair { grid-template-columns: minmax(0, 1fr); }
+  }
+  /* On a phone the line is never cut: it wraps in full, and the count of the others goes below it. */
+  @media (max-width: 720px) {
+    .detail { grid-template-columns: minmax(0, 1fr); }
+    .line { display: block; -webkit-line-clamp: none; line-clamp: none; }
   }
   @container (max-width: 520px) {
-    .where-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-    .attention { padding: 12px 4px 4px; }
+    .attention { padding: 4px; }
+    .issue { grid-template-columns: 4px 36px minmax(0, 1fr) auto 16px; gap: 10px; padding: 10px 8px 10px 6px; }
+    .more-body { padding: 2px 12px 14px 20px; }
+
   }
 </style>

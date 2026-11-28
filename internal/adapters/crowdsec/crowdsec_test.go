@@ -167,7 +167,7 @@ func TestProbeSecurity(t *testing.T) {
 	}
 	wantCounts := map[string][]shape.SecurityCount{
 		"byType":   {sc("ban", 7), sc("captcha", 1)},
-		"byOrigin": {sc("crowdsec", 4), sc("CAPI", 2), sc("cscli", 1), sc("lists", 1)},
+		"byOrigin": {sc("Detected here", 4), sc("Community blocklist", 2), sc("Added by hand", 1), sc("Subscribed lists", 1)},
 		"byScope":  {sc("Ip", 7), sc("Range", 1)},
 		"scenarios": {sc("crowdsecurity/ssh-bf", 2), sc("crowdsecurity/http-bad-user-agent", 1),
 			sc("crowdsecurity/http-crawl-non_statics", 1), sc("manual 'ban' from 'observarr-docs'", 1)},
@@ -187,10 +187,10 @@ func TestProbeSecurity(t *testing.T) {
 	}
 	first, range4 := s.Recent[0], s.Recent[3]
 	if !first.Until.Equal(time.Date(2026, 11, 23, 13, 0, 0, 0, time.UTC)) || first.Type != "ban" ||
-		first.Scenario != "crowdsecurity/http-bad-user-agent" || first.Origin != "crowdsec" {
+		first.Scenario != "crowdsecurity/http-bad-user-agent" || first.Origin != "Detected here" {
 		t.Errorf("newest = %+v", first)
 	}
-	if !range4.Until.Equal(testNow.Add(71*time.Hour+2*time.Minute)) || range4.Scope != "Range" || range4.Origin != "cscli" {
+	if !range4.Until.Equal(testNow.Add(71*time.Hour+2*time.Minute)) || range4.Scope != "Range" || range4.Origin != "Added by hand" {
 		t.Errorf("range decision = %+v", range4)
 	}
 }

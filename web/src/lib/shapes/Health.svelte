@@ -32,10 +32,10 @@
   {:else}
     <p class="row">
       <span class="facts">
-        <span class="state-word" class:fail-text={!up}><span class="dot {up ? 'ok' : 'fail'}" aria-hidden="true"></span>{up ? 'Up' : 'Down'}</span>
+        <span class="state-word" class:fail-text={!up}><span class="dot {up ? 'ok' : 'fail'}" aria-hidden="true"></span>{up ? 'Running' : 'Not reachable'}</span>
         {#if data}
           {#if data.version}<span title={`version ${data.version}`}>v{data.version}</span>{/if}
-          <span title="Response time">{data.latencyMs} ms</span>
+          <span title="How long its answer took">{data.latencyMs} ms</span>
         {/if}
       </span>
       <span class="muted age" title={reading.at}>{age}</span>
@@ -49,7 +49,8 @@
           <li>
             <span class="dot {levelTone(w.level)}" aria-hidden="true"></span>
             <span class="visually-hidden">{levelLabel(w.level)}: </span>
-            <span class="msg">{w.source ? `${w.source}: ${w.message}` : w.message}</span>
+            <!-- The app's name for its check means nothing to a reader: it stays in the title. -->
+            <span class="msg" title={w.source ? `${w.source}: ${w.message}` : null}>{w.message}</span>
           </li>
         {/each}
       </ul>
@@ -62,12 +63,12 @@
   .row { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
   .row .facts { flex: 1; color: var(--text2); }
   .row .state-word { flex: none; }
-  .age { margin-left: auto; padding-left: 6px; font-size: var(--t-sm); white-space: nowrap; }
-  .error { font-size: var(--t-base); }
+  .age { margin-left: auto; padding-left: 6px; font-size: var(--t-small); white-space: nowrap; }
+  .error { font-size: var(--t-body); }
   .warnings { list-style: none; margin: 0; padding: 0; display: grid; }
   .warnings li {
     display: flex; align-items: baseline; gap: 10px; min-width: 0; padding: 8px 0; border-top: 1px solid var(--border);
-    font-size: var(--t-sm); color: var(--text2);
+    font-size: var(--t-small); color: var(--text2);
   }
   .warnings .dot { transform: translateY(-1px); }
   .msg { overflow-wrap: anywhere; min-width: 0; }

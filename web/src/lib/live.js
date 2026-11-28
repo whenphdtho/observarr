@@ -10,6 +10,11 @@ const servicesById = writable({});
 // keeps it open for as long as someone is signed in.
 const systemSnapshot = writable(null);
 
+// attention holds what needs attention now, worst first, as the server works it out for the alerts: every rule's
+// conditions, each { key, rule, severity, service, name, title, message, view, firing, since }. null until the
+// first "attention" event.
+const attention = writable(null);
+
 // reconnecting is true once the stream has been without an open connection for a few seconds.
 const reconnecting = writable(false);
 
@@ -27,10 +32,24 @@ const RECONNECT_HINT_DELAY = 3000;
 // gives up for good. RETRY_BASE/RETRY_MAX govern the retry loop we then run ourselves.
 const RETRY_BASE = 5000;
 const RETRY_MAX = 60000;
+// The server sends a ping event every 25 s. A stream silent for longer than this has stalled (a laptop woke
+// up, the network changed, a proxy dropped the connection without closing it), even though the browser still
+// counts it open: it is replaced.
+const STALL_AFTER = 70000;
+
+// crowded is true while this tab has no live stream because the session already has one in every tab it may:
+// the page then asks for its data now and then (see poll) and says why it is not live.
+const crowded = writable(false);
+// Without a stream the page asks this often, and looks whether a stream has come free.
+const POLL_MS = 30000;
+
+// offline is true while the browser reports no network at all.
+const offline = writable(typeof navigator !== 'undefined' && navigator.onLine === false);
 
 let source = null;
 let reconnectTimer = null;
 let retryTimer = null;
+let stallTimer = null;
 let retryDelay = RETRY_BASE;
 let signedOutHandler = null;
 // gen counts close() calls. retry() captures it before its await (the session check) and bails
@@ -49,9 +68,25 @@ function disarmReconnectHint() {
   reconnecting.set(false);
 }
 
-function received() {
+// alive notes that the stream still delivers, and restarts the stall watch.
+function alive() {
   disarmReconnectHint();
+  clearTimeout(stallTimer);
+  stallTimer = setTimeout(stalled, STALL_AFTER);
+}
+
+function received() {
+  alive();
   lastEvent.set(Date.now());
+}
+
+function stalled() {
+  stallTimer = null;
+  if (!source) return;
+  source.close();
+  source = null;
+  armReconnectHint();
+  scheduleRetry();
 }
 
 function applySnapshot(list) {
@@ -75,7 +110,8 @@ function applyRemoved(id) {
 }
 
 function handleOpen() {
-  disarmReconnectHint();
+  alive();
+  crowded.set(false);
   retryDelay = RETRY_BASE;
 }
 
@@ -91,10 +127,26 @@ function handleError() {
   }
 }
 
+// scheduleRetry retries after the current delay, spread by up to a fifth either way so that tabs do not all
+// return to a restarted server at once, and doubles the delay for the next time.
 function scheduleRetry() {
   if (retryTimer) return;
-  retryTimer = setTimeout(retry, retryDelay);
+  clearTimeout(stallTimer);
+  stallTimer = null;
+  retryTimer = setTimeout(retry, retryDelay * (0.8 + Math.random() * 0.4));
   retryDelay = Math.min(retryDelay * 2, RETRY_MAX);
+}
+
+// Back online, a waiting retry runs at once; going offline shows as such instead of a retry that cannot work.
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    offline.set(false);
+    if (!retryTimer) return;
+    clearTimeout(retryTimer);
+    retryDelay = RETRY_BASE;
+    retry();
+  });
+  window.addEventListener('offline', () => offline.set(true));
 }
 
 // retry checks whether the session is still good before reopening: a stream closed because the
@@ -103,8 +155,9 @@ async function retry() {
   retryTimer = null;
   const g = gen;
   let unauthorized = false;
+  let full = false;
   try {
-    await api('GET', '/api/session');
+    full = (await api('GET', '/api/session')).streamsFull === true;
   } catch (err) {
     unauthorized = err.status === 401;
     // Any other error (server unreachable, ...) is still worth retrying open() below.
@@ -114,7 +167,30 @@ async function retry() {
     signedOutHandler?.();
     return;
   }
+  // Every stream the session may have is open in other tabs: opening one more would only be refused again. The
+  // page asks for what a stream would have sent, and looks again in a while.
+  if (full) {
+    crowded.set(true);
+    disarmReconnectHint();
+    retryDelay = RETRY_BASE;
+    retryTimer = setTimeout(retry, POLL_MS);
+    await poll(g);
+    return;
+  }
+  crowded.set(false);
   open();
+}
+
+// poll asks once for what the stream would have sent: the services, the system and what needs attention. What
+// cannot be had this time is left as it was.
+async function poll(g) {
+  const [list, system, needs] = await Promise.all(
+    ['/api/services', '/api/system', '/api/alerts/attention'].map((path) => api('GET', path).catch(() => null)));
+  if (g !== gen) return;
+  if (Array.isArray(list)) applySnapshot(list);
+  if (system) systemSnapshot.set(system);
+  if (Array.isArray(needs)) attention.set(needs);
+  if (list || system) lastEvent.set(Date.now());
 }
 
 // open starts the single EventSource for the whole app. Calling it again while already open does
@@ -140,6 +216,11 @@ function open() {
     received();
     systemSnapshot.set(JSON.parse(e.data));
   });
+  source.addEventListener('attention', (e) => {
+    received();
+    attention.set(JSON.parse(e.data));
+  });
+  source.addEventListener('ping', alive);
   source.addEventListener('error', handleError);
 }
 
@@ -153,12 +234,16 @@ function close() {
   }
   clearTimeout(retryTimer);
   retryTimer = null;
+  clearTimeout(stallTimer);
+  stallTimer = null;
   retryDelay = RETRY_BASE;
   disarmReconnectHint();
+  crowded.set(false);
   lastEvent.set(0);
   synced.set(false);
   servicesById.set({});
   systemSnapshot.set(null);
+  attention.set(null);
 }
 
 // setOnSignedOut registers the callback run when a retry discovers the session is gone (a stream
@@ -173,6 +258,6 @@ export const serviceList = derived(servicesById, (byId) =>
   Object.values(byId).sort((a, b) => a.name.localeCompare(b.name)),
 );
 
-export { reconnecting, lastEvent, synced, systemSnapshot };
+export { reconnecting, offline, crowded, lastEvent, synced, systemSnapshot, attention };
 
 export const live = { open, close, setOnSignedOut };

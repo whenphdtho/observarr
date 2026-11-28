@@ -416,8 +416,8 @@ func TestProbeHealthWarnsOfCacheProblems(t *testing.T) {
 		t.Errorf("Version = %q", h.Version)
 	}
 	want := []shape.Warning{ // in vfs/list's order; a whole remote loses its colon so "source: message" reads well
-		{Level: shape.LevelWarning, Source: "media-crypt", Message: "1 cached file could not be uploaded"},
-		{Level: shape.LevelError, Source: "cloud:backup", Message: "the cache disk is out of space"},
+		{Level: shape.LevelWarning, Source: "media-crypt", Message: "1 cached file could not be uploaded", Title: "1 file not uploaded"},
+		{Level: shape.LevelError, Source: "cloud:backup", Message: "the cache disk is out of space", Title: "cache is full"},
 	}
 	if !slices.Equal(h.Warnings, want) {
 		t.Errorf("warnings\n got %+v\nwant %+v", h.Warnings, want)

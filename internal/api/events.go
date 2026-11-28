@@ -5,7 +5,9 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"time"
 
@@ -17,16 +19,26 @@ import (
 const (
 	// maxStreams bounds open live event streams server-wide; each holds a connection and a hub subscription.
 	maxStreams = 32
-	// maxSessionStreams bounds one session's open streams, so a single session cannot take every slot.
-	maxSessionStreams = 4
+	// maxSessionStreams bounds one session's open streams (one per open tab), so a single session cannot take
+	// every slot. It stays below six on purpose: over plain HTTP/1.1 a browser opens at most six connections to
+	// one server for all its tabs together, and each stream holds one. Six streams would leave none for any
+	// other request, and no tab could load anything; five leave one, on which a tab without a stream is told so
+	// and asks for its data instead.
+	maxSessionStreams = 5
 	// streamWriteTimeout ends a stream whose client stops reading, instead of blocking on it forever.
 	streamWriteTimeout = 10 * time.Second
+	// retryBase is the least delay the browser waits before reconnecting a stream that broke; each stream asks for
+	// up to twice that.
+	retryBase = 2 * time.Second
 )
 
 // events streams live state as Server-Sent Events: first a "snapshot" of every service and a "system" event with the
 // host and container figures, then a "service" or "removed" event per change, a "system" event per new sample (at
-// most one per systemEvery; a newer sample replaces one not sent yet), and a ping comment now and then so proxies
-// keep the connection open. The stream ends when the client leaves, when the server shuts down (the request context
+// most one per systemEvery; a newer sample replaces one not sent yet), an "attention" event with what needs
+// attention whenever that list changes (the first right after the snapshot), and a "ping" event now and then, so
+// proxies keep the connection open and the browser can tell a stalled stream from a quiet one. The first message also sets
+// the browser's reconnection delay, spread at random so that tabs do not all return at once after a restart. The
+// stream ends when the client leaves, when the server shuts down (the request context
 // ends), when its session is ended by another one's "sign out others", when the session is found gone at a ping
 // (logged out or expired), or when the hub drops the subscription because the client fell behind; the browser then
 // reconnects and gets a fresh snapshot.
@@ -40,7 +52,11 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, sess store.Sessi
 	slot, ok := s.openStream(sess.CSRF, cancel)
 	if !ok {
 		w.Header().Set("Retry-After", "5")
-		writeError(w, http.StatusServiceUnavailable, "too many live connections; try again shortly")
+		msg := "too many live connections; try again shortly"
+		if s.streamsFull(sess.CSRF) {
+			msg = "too many open tabs: close one to get live updates here"
+		}
+		writeError(w, http.StatusServiceUnavailable, msg)
 		return
 	}
 	defer s.closeStream(sess.CSRF, slot)
@@ -92,8 +108,19 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, sess store.Sessi
 		samples, stop = s.System.Subscribe()
 		defer stop()
 	}
+	var attention <-chan struct{} // nil without alerts: never ready
+	if s.Alerts != nil {
+		var stop func()
+		attention, stop = s.Alerts.WatchAttention()
+		defer stop()
+	}
 	var buf bytes.Buffer // holds one encoded event at a time, reused so that events cost no new buffer
-	if !send(s.event(&buf, "snapshot", s.Hub.Snapshot())) || !send(s.event(&buf, "system", s.systemSnapshot())) {
+	retry := fmt.Appendf(nil, "retry: %d\n\n", retryBase.Milliseconds()+rand.Int64N(retryBase.Milliseconds()))
+	if !send(retry) || !send(s.event(&buf, "snapshot", s.Hub.Snapshot())) ||
+		!send(s.event(&buf, "system", s.systemSnapshot())) {
+		return
+	}
+	if s.Alerts != nil && !send(s.event(&buf, "attention", s.Alerts.Attention())) {
 		return
 	}
 	lastSample = time.Now()
@@ -122,11 +149,13 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, sess store.Sessi
 		case <-flush:
 			msg, lastSample = s.event(&buf, "system", *pending), time.Now()
 			pending, flush = nil, nil
+		case <-attention:
+			msg = s.event(&buf, "attention", s.Alerts.Attention())
 		case <-ping.C:
 			if _, err := s.Sessions.Lookup(r); err != nil {
 				return
 			}
-			msg = []byte(": ping\n\n")
+			msg = []byte("event: ping\ndata: {}\n\n") // a comment would never reach the page
 		}
 		if !send(msg) {
 			return
@@ -155,6 +184,14 @@ func (s *Server) openStream(key string, end context.CancelFunc) (*streamSlot, bo
 	s.sessionStreams[key][slot] = true
 	s.streams.Add(1)
 	return slot, true
+}
+
+// streamsFull reports whether the session whose CSRF token is key has every stream it may have open: one more
+// tab gets none, and is told why (GET /api/session says so too, as a page cannot read a refused stream's answer).
+func (s *Server) streamsFull(key string) bool {
+	s.streamsMu.Lock()
+	defer s.streamsMu.Unlock()
+	return len(s.sessionStreams[key]) >= maxSessionStreams
 }
 
 // closeStream gives back a slot openStream took.

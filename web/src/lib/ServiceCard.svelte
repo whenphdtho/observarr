@@ -1,10 +1,11 @@
 <script>
   import AppIcon from './AppIcon.svelte';
-  import { reveal, conceal } from './motion.js';
+  import { reveal, conceal, flash } from './motion.js';
   import { api } from './api.js';
   import { widgets } from './shapes/index.js';
-  import { formatPct, formatBytes, formatPercent, containerStatusClass } from './format.js';
+  import { formatPct, formatSize, formatPercent, containerStatusClass, prettyRelease, plural } from './format.js';
   import { serviceStatus, cardSummary } from './status.js';
+  import { attention } from './live.js';
   import { hostOf } from './urls.js';
   import Icon from './icons/Icon.svelte';
 
@@ -14,7 +15,8 @@
   // type — `adapter` is just the matching entry from GET /api/adapters, looked up by the caller.
   // `onremoved` is called once the service is actually gone, so the caller can move focus somewhere
   // that outlives this card.
-  let { service, adapter, expanded = false, ontoggle, onedit, onremoved } = $props();
+  // `span` is how many grid columns the card takes, so it can fill its row up to an opened card after it.
+  let { service, adapter, expanded = false, span = 1, ontoggle, onedit, onremoved } = $props();
 
   let dialogEl;
   let opener = null;
@@ -23,10 +25,10 @@
   let removing = $state(false);
 
   const host = $derived(hostOf(service.url));
-  const status = $derived(serviceStatus(service));
+  const status = $derived(serviceStatus(service, $attention));
   const health = $derived(service.readings?.health ?? null);
   const version = $derived(health?.data?.version ?? '');
-  const card = $derived(cardSummary(service));
+  const card = $derived(cardSummary(service, $attention));
   const lead = $derived(card.lead);
   const detailsId = $derived(`service-details-${service.id}`);
   const container = $derived(service.container);
@@ -36,11 +38,8 @@
       container.state === '' ? `${container.name}: container not found` :
       `${container.name}: ${container.state}${container.health ? ` (${container.health})` : ''}`,
   );
-  const pill = $derived(!health ? { text: 'Checking', tone: '' } : service.up ? { text: 'Up', tone: 'ok' } : { text: 'Down', tone: 'fail' });
-
-  function warningText(w) {
-    return w.source ? `${w.source}: ${w.message}` : w.message;
-  }
+  const pill = $derived(!health ? { text: 'Checking…', tone: '' } : service.up ? { text: 'Running', tone: 'ok' } : { text: 'Not reachable', tone: 'fail' });
+  const paused = $derived(!!service.readings?.queue?.data?.paused);
 
   function openRemove() {
     removeError = '';
@@ -79,8 +78,9 @@
   }
 </script>
 
-<article class="card service {status === 'fail' || status === 'warn' ? status : ''}" class:open={expanded} id={`service-${service.id}`} tabindex="-1"
-  aria-labelledby={`service-name-${service.id}`}>
+<article class="card service" class:open={expanded} id={`service-${service.id}`} tabindex="-1"
+  style:grid-column-end={span > 1 ? `span ${span}` : null}
+  aria-labelledby={`service-name-${service.id}`} use:flash={status}>
   <header>
     <span class="tile-icon" aria-hidden="true"><AppIcon {adapter} size={20} /></span>
     <div class="ident">
@@ -101,19 +101,20 @@
     <div class="lead">
       {#if lead.kind === 'item'}
         <div class="lead-head">
-          <span class="ellipsis lead-title" title={lead.item.title}>{lead.item.title}</span>
+          <span class="ellipsis lead-title" title={lead.item.title}>{prettyRelease(lead.item.title)}</span>
           <span class="num pct">{formatPercent(lead.item.progress)}</span>
         </div>
-        <div class="bar" class:warn={!!lead.item.problem} role="progressbar" aria-valuemin="0" aria-valuemax="100"
+        <div class="bar" class:warn={!!lead.item.problem} class:idle={paused || lead.item.paused} role="progressbar" aria-valuemin="0" aria-valuemax="100"
           aria-valuenow={Math.round(lead.item.progress * 100)}
           aria-label={`${lead.item.title}: ${formatPercent(lead.item.progress)} done`}>
           <i style:width={formatPercent(lead.item.progress)}></i>
         </div>
       {:else if lead.kind === 'warning'}
-        <p class="lead-warning level-{lead.warning.level}" title={warningText(lead.warning)}>
+        <p class="lead-warning level-{lead.warning.level}"
+          title={lead.warning.source ? `${lead.warning.source}: ${lead.warning.message}` : lead.warning.message}>
           <Icon name="triangle-alert" size={14} />
           <span class="visually-hidden">{lead.warning.level === 'error' ? 'Error' : 'Warning'}: </span>
-          <span class="ellipsis">{warningText(lead.warning)}</span>
+          <span class="ellipsis">{lead.warning.message}</span>
         </p>
       {:else}
         <p class="lead-note" class:ellipsis={lead.tone !== 'fail'} class:fail={lead.tone === 'fail'} title={lead.text}>{lead.text}</p>
@@ -132,8 +133,8 @@
             <span class="dot {containerDot}" aria-hidden="true"></span>
             <span class="ellipsis state">{container.name} · {container.state}{container.health ? ` (${container.health})` : ''}</span>
             <span class="num">{container.state === 'running' ? formatPct(container.cpuPercent) : '—'}</span>
-            <span class="num">{container.state === 'running' ? formatBytes(container.memBytes) : '—'}</span>
-            <span class="num">{container.restarts} restart{container.restarts === 1 ? '' : 's'}</span>
+            <span class="num">{container.state === 'running' ? formatSize(container.memBytes) : '—'}</span>
+            <span class="num">{plural(container.restarts, 'restart')}</span>
           {/if}
         </p>
       {/if}
@@ -182,39 +183,37 @@
 <style>
   .service {
     display: grid; grid-template-rows: auto auto 1fr auto; gap: 10px; scroll-margin-top: 16px; padding: 14px 16px 12px;
+    transition: border-color var(--dur-base) var(--ease-out);
   }
   .service.open { grid-column: 1 / -1; grid-template-rows: none; }
   .service:focus { outline: none; }
   .service:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  /* A card with a problem is edged in its state's colour; a healthy one keeps the quiet edge. */
-  .service.fail { border-color: var(--fail-edge); }
-  .service.warn { border-color: var(--warn-edge); }
   header { display: flex; align-items: center; gap: 12px; min-width: 0; }
   .ident { display: grid; min-width: 0; flex: 1; line-height: 1.35; }
-  h2 { font-size: var(--t-md); font-weight: 600; }
-  .ident p { font-size: var(--t-sm); }
+  h2 { font-size: var(--t-h3); letter-spacing: 0; }
+  .ident p { font-size: var(--t-small); }
   /* State and version sit on the name's line. */
   .badges {
     display: flex; align-items: baseline; gap: 10px; min-width: 0; flex: 0 1 auto; align-self: flex-start;
-    padding-top: 2px; font-size: var(--t-sm);
+    padding-top: 2px; font-size: var(--t-small);
   }
   .badges .state-word { flex: none; color: var(--text2); }
-  .badges .state-word.fail-text { color: var(--fail); }
+  .badges .state-word.fail-text { color: var(--fail-ink); }
   .badges .version { flex: 0 1 auto; max-width: 110px; }
 
-  .summary { font-size: var(--t-base); color: var(--text2); }
-  .summary.warn { color: var(--warn); }
-  .summary.fail { color: var(--fail); }
+  .summary { font-size: var(--t-body); color: var(--text2); }
+  .summary.warn { color: var(--warn-ink); }
+  .summary.fail { color: var(--fail-ink); }
 
   /* The lead row has one fixed height, whatever it holds, so collapsed cards line up. */
   .lead { height: 40px; display: grid; align-content: center; gap: 7px; min-width: 0; }
   .lead-head { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
-  .lead-title { flex: 1; font-size: var(--t-base); }
-  .pct { flex: none; font-size: var(--t-sm); color: var(--text2); }
-  .lead-warning { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--t-sm); color: var(--text2); }
+  .lead-title { flex: 1; font-size: var(--t-body); }
+  .pct { flex: none; font-size: var(--t-small); color: var(--text2); }
+  .lead-warning { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--t-small); color: var(--text2); }
   .lead-warning :global(.icon) { color: var(--warn); }
   .lead-warning.level-error :global(.icon) { color: var(--fail); }
-  .lead-note { font-size: var(--t-sm); color: var(--muted); }
+  .lead-note { font-size: var(--t-small); color: var(--muted); }
   /* An error keeps up to two lines of the fixed-height row; its full text is in the title. */
   .lead-note.fail {
     color: var(--fail); overflow-wrap: anywhere; overflow: hidden;
@@ -224,7 +223,7 @@
   .details { display: grid; gap: 12px; min-width: 0; }
   .widgets { display: grid; gap: 4px 32px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); align-items: start; }
   .widget { min-width: 0; }
-  .container-line { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--t-sm); color: var(--text2); }
+  .container-line { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--t-small); color: var(--text2); }
   .container-line :global(.icon) { color: var(--muted); }
   .container-line .state { flex: 1 1 auto; }
   .container-line .num { flex: none; color: var(--muted); }
@@ -234,7 +233,7 @@
     padding-top: 10px; border-top: 1px solid var(--border);
   }
   .toggle { padding: 5px 11px 5px 7px; gap: 4px; }
-  .toggle :global(.icon) { color: var(--text2); transition: transform 160ms var(--ease); }
+  .toggle :global(.icon) { color: var(--text2); transition: transform var(--dur-base) var(--ease-out); }
   .toggle[aria-expanded='true'] :global(.icon) { transform: rotate(90deg); }
   .manage { display: flex; gap: 8px; margin-left: auto; }
   .manage button { padding: 5px 11px; }

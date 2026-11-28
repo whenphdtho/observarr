@@ -1,0 +1,44 @@
+[
+  {
+    "PlayState": {"PositionTicks": 3540000000, "CanSeek": true, "IsPaused": false, "IsMuted": false, "VolumeLevel": 100,
+      "AudioStreamIndex": 1, "SubtitleStreamIndex": -1, "MediaSourceId": "a1", "PlayMethod": "DirectPlay", "RepeatMode": "RepeatNone", "PlaybackOrder": "Default"},
+    "AdditionalUsers": [], "Capabilities": {"PlayableMediaTypes": ["Video"], "SupportedCommands": []},
+    "RemoteEndPoint": "198.51.100.23", "PlayableMediaTypes": ["Video"], "Id": "s1", "UserId": "u1", "UserName": "alex",
+    "Client": "Jellyfin Web", "LastActivityDate": "2026-11-25T10:00:00Z", "LastPlaybackCheckIn": "2026-11-25T10:00:00Z",
+    "DeviceName": "Firefox", "DeviceId": "d1", "ApplicationVersion": "10.11.3",
+    "NowPlayingItem": {"Name": "Big Buck Bunny", "Id": "i1", "Type": "Movie", "ProductionYear": 2008, "RunTimeTicks": 5960000000,
+      "MediaStreams": [
+        {"Codec": "h264", "Type": "Video", "Index": 0, "BitRate": 8000000, "Width": 1920, "Height": 1080},
+        {"Codec": "aac", "Type": "Audio", "Index": 1, "BitRate": 160000, "Language": "eng"},
+        {"Codec": "subrip", "Type": "Subtitle", "Index": 2}
+      ]},
+    "IsActive": true, "SupportsMediaControl": true, "SupportsRemoteControl": true, "HasCustomDeviceName": false,
+    "ServerId": "6f1e5b0a9c6d4c3f8e1b2a3c4d5e6f70", "SupportedCommands": []
+  },
+  {
+    "PlayState": {"PositionTicks": 2652000000, "CanSeek": true, "IsPaused": false, "AudioStreamIndex": 2, "PlayMethod": "Transcode"},
+    "RemoteEndPoint": "203.0.113.7", "Id": "s2", "UserName": "sam", "Client": "Jellyfin Android TV", "DeviceName": "Living room TV",
+    "NowPlayingItem": {"Name": "Sintel", "Type": "Movie", "ProductionYear": 2010, "RunTimeTicks": 8880000000,
+      "MediaStreams": [
+        {"Codec": "hevc", "Type": "Video", "Index": 0, "BitRate": 24000000},
+        {"Codec": "aac", "Type": "Audio", "Index": 1, "BitRate": 128000},
+        {"Codec": "truehd", "Type": "Audio", "Index": 2, "BitRate": 4000000}
+      ]},
+    "TranscodingInfo": {"AudioCodec": "aac", "VideoCodec": "h264", "Container": "ts", "IsVideoDirect": false, "IsAudioDirect": false,
+      "Bitrate": 10000000, "Framerate": 24, "CompletionPercentage": 31.5, "Width": 1920, "Height": 1080, "AudioChannels": 2,
+      "HardwareAccelerationType": "vaapi", "TranscodeReasons": ["VideoCodecNotSupported", "AudioCodecNotSupported", "ContainerBitrateExceedsLimit"]}
+  },
+  {
+    "PlayState": {"PositionTicks": 600000000, "IsPaused": true, "PlayMethod": "Transcode"},
+    "RemoteEndPoint": "192.0.2.44", "Id": "s3", "UserName": "robin", "Client": "Jellyfin iOS", "DeviceName": "iPhone",
+    "NowPlayingItem": {"Name": "Gran Dillama", "Type": "Episode", "SeriesName": "Caminandes", "ParentIndexNumber": 1, "IndexNumber": 2,
+      "RunTimeTicks": 1500000000,
+      "MediaStreams": [{"Codec": "h264", "Type": "Video", "Index": 0}, {"Codec": "flac", "Type": "Audio", "Index": 1}]},
+    "TranscodingInfo": {"AudioCodec": "aac", "VideoCodec": "h264", "IsVideoDirect": true, "IsAudioDirect": false,
+      "Bitrate": 3200000, "TranscodeReasons": ["AudioCodecNotSupported"]}
+  },
+  {
+    "PlayState": {"CanSeek": false, "IsPaused": false, "RepeatMode": "RepeatNone"},
+    "RemoteEndPoint": "192.0.2.50", "Id": "s4", "UserName": "alex", "Client": "Jellyfin Web", "DeviceName": "Chrome"
+  }
+]
