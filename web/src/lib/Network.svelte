@@ -85,6 +85,8 @@
   const nowRx = $derived(host ? sum(host.net, 'rx') : (view?.host.rx ?? 0));
   const nowTx = $derived(host ? sum(host.net, 'tx') : (view?.host.tx ?? 0));
   const summary = $derived($snapshot?.traffic ?? view);
+  // Until the first reading or answer, the figures show a placeholder rather than zeros that read as no traffic.
+  const ready = $derived(!!host || !!view);
   const today = $derived({ rx: summary?.todayRx ?? 0, tx: summary?.todayTx ?? 0 });
   // A budget without a limit is none: nothing can be a share of it.
   const budget = $derived(summary?.budget?.limitBytes > 0 ? summary.budget : null);
@@ -159,19 +161,19 @@
     </div>
   {:else}
     <div class="kpis">
-      <Kpi label="Coming in" value={rateParts(nowRx)[0]} num={nowRx} format={(v) => rateParts(v)[0]} unit={rateParts(nowRx)[1]}
-        sub={`Peak today ${formatRate(Math.max(summary?.peakRx ?? 0, nowRx))}`}
+      <Kpi label="Coming in" value={ready ? rateParts(nowRx)[0] : '—'} num={nowRx} format={(v) => rateParts(v)[0]} unit={rateParts(nowRx)[1]}
+        sub={ready ? `Peak today ${formatRate(Math.max(summary?.peakRx ?? 0, nowRx))}` : 'Loading…'}
         spark={mbitLine(day?.host.series?.rx)} sparkColor="var(--down)"
         change={day?.previous && dayKnown ? { ratio: change(dayIn, day.previous.in), against: 'the 24 hours before' } : null} />
-      <Kpi label="Going out" value={rateParts(nowTx)[0]} num={nowTx} format={(v) => rateParts(v)[0]} unit={rateParts(nowTx)[1]}
-        sub={`Peak today ${formatRate(Math.max(summary?.peakTx ?? 0, nowTx))}`}
+      <Kpi label="Going out" value={ready ? rateParts(nowTx)[0] : '—'} num={nowTx} format={(v) => rateParts(v)[0]} unit={rateParts(nowTx)[1]}
+        sub={ready ? `Peak today ${formatRate(Math.max(summary?.peakTx ?? 0, nowTx))}` : 'Loading…'}
         spark={mbitLine(day?.host.series?.tx)} sparkColor="var(--up)"
         change={day?.previous && dayKnown ? { ratio: change(dayOut, day.previous.out), against: 'the 24 hours before' } : null} />
-      <Kpi label="Today" value={sizeParts(todayTotal)[0]} unit={sizeParts(todayTotal)[1]}
-        sub={`${formatSize(today.rx)} in · ${formatSize(today.tx)} out`}
+      <Kpi label="Today" value={summary ? sizeParts(todayTotal)[0] : '—'} unit={sizeParts(todayTotal)[1]}
+        sub={summary ? `${formatSize(today.rx)} in · ${formatSize(today.tx)} out` : 'Loading…'}
         spark={hasDaily ? daily.slice(-14).map((d) => (d.in || 0) + (d.out || 0)) : null} />
       <Kpi label="Busiest app now" value={top ? rateParts(top.rx + top.tx)[0] : '—'} unit={top ? rateParts(top.rx + top.tx)[1] : ''}
-        sub={top ? top.label : 'No app moves traffic now'} />
+        sub={top ? top.label : view ? 'No app moves traffic now' : 'Loading…'} />
     </div>
 
     <section class="section" aria-labelledby="flow-title">
@@ -256,7 +258,9 @@
           <h2 id="apps-title">By app, now and today</h2>
           <span class="meta">Mbit/s now · totals since midnight</span>
         </div>
-        {#if rows.length === 0}
+        {#if !view}
+          <Skeleton count={3} />
+        {:else if rows.length === 0}
           <p class="waiting">No app traffic yet. Containers with a network of their own are counted.</p>
         {:else}
           <div class="table-wrap">
@@ -301,7 +305,9 @@
           <h2 id="budget-title">{budget ? `${period === 'daily' ? 'Daily' : 'Monthly'} budget` : 'Today'}</h2>
           {#if budget}<span class="meta">{budget.period === 'day' ? 'since midnight' : 'this month'}</span>{/if}
         </div>
-        {#if budget}
+        {#if !summary}
+          <Skeleton count={3} />
+        {:else if budget}
           <p class="pct num {usedTone ? `${usedTone}-text` : ''}">
             {Math.round((budget.usedBytes / budget.limitBytes) * 100)}%<small>of {period} budget</small>
           </p>
