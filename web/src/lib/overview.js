@@ -198,7 +198,8 @@ export function downloads(services) {
     pausedOnly && !active ? 'Paused' : '',
     active ? `${active} active` : '',
     count(2) ? `${count(2)} queued` : '',
-    speed > 0 ? formatRate(speed) : '',
+    // The speed the apps report, not measured traffic: the Traffic panel's figure may differ.
+    speed > 0 ? `${formatRate(speed)} reported` : '',
   ].filter(Boolean).join(' · ') || (rows.length ? plural(rows.length, 'download') : 'Nothing in the queue');
   return { any, rows, summary };
 }

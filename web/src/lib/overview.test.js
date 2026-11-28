@@ -157,7 +157,7 @@ test('downloads are listed once, what moves first', () => {
     ['Sintel (2010) · 1080p', 'Queued', ''],
   ]);
   assert.equal(d.rows[0].raw, 'Tears.of.Steel.2012.2160p.WEB');
-  assert.equal(d.summary, '1 active · 1 queued · 319 Mbit/s');
+  assert.equal(d.summary, '1 active · 1 queued · 319 Mbit/s reported');
   assert.equal(downloads([{ id: 3, kinds: ['health'], readings: {} }]).any, false);
 });
 
